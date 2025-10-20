@@ -16,6 +16,7 @@ logs/
 systemd/
 cron/
 scripts/_new.yaml  # Auto-generated file for new scripts when using directory mode
+groups/_new.yaml   # Auto-generated file for new groups when using directory mode
 
 # Old exported files (deprecated - now in systemd/ and cron/ directories)
 *.service

@@ -1,21 +1,8 @@
 # Configuration File Structure
 
-This document explains the configuration system for signalbox with support for both single-file and multi-file script organization.
+This document explains the directory-based configuration system for signalbox.
 
 ## File Structure Overview
-
-### Single File (Simple Projects)
-
-```
-signalbox/
-├── scripts.yaml    # Script definitions (what to run)
-├── groups.yaml     # Groups and scheduling (when to run)
-├── config.yaml     # Global configuration
-├── main.py         # CLI application
-└── logs/           # Execution logs
-```
-
-### Multi-File Directory (Organized Projects)
 
 ```
 signalbox/
@@ -23,49 +10,38 @@ signalbox/
 │   ├── basic.yaml     # Basic utility scripts
 │   ├── system.yaml    # System monitoring scripts
 │   └── test.yaml      # Test scripts
-├── groups.yaml        # Groups and scheduling (when to run)
+├── groups/            # Group definitions directory
+│   ├── basic.yaml     # Basic groups (no schedule)
+│   ├── scheduled.yaml # Scheduled groups
+│   └── test.yaml      # Test groups
 ├── config.yaml        # Global configuration
 ├── main.py            # CLI application
 └── logs/              # Execution logs
 ```
 
-## Scripts Configuration
+## Configuration System
 
-You can organize your scripts in **two ways**:
+signalbox uses **directory-based configuration** for easy organization:
 
-### Option 1: Single File (scripts.yaml)
+### **Scripts Directory** (`scripts/`)
+Contains YAML files defining scripts to execute. All `.yaml` and `.yml` files in this directory are automatically loaded.
 
-Best for smaller projects with few scripts.
+### **Groups Directory** (`groups/`)
+Contains YAML files defining groups of scripts and scheduling. All `.yaml` and `.yml` files in this directory are automatically loaded.
+
+### **Global Config** (`config.yaml`)
+Single file containing global settings like timeouts, log limits, and paths.
+└── logs/              # Execution logs
+```
+
+## Scripts Directory Configuration
+
+All scripts are defined in the `scripts/` directory. Each `.yaml` or `.yml` file in this directory defines scripts.
 
 **config.yaml:**
 ```yaml
 paths:
-  scripts_file: scripts.yaml
-```
-
-**scripts.yaml:**
-```yaml
-scripts:
-  - name: hello
-    description: Simple greeting
-    command: echo "Hello"
-  
-  - name: backup
-    description: Database backup
-    command: /usr/local/bin/backup.sh
-    log_limit:
-      type: count
-      value: 10
-```
-
-### Option 2: Directory (scripts/)
-
-Best for larger projects that benefit from logical organization.
-
-**config.yaml:**
-```yaml
-paths:
-  scripts_file: scripts  # Directory instead of file
+  scripts_file: scripts  # Directory containing script YAML files
 ```
 
 **scripts/basic.yaml:**
@@ -100,7 +76,7 @@ scripts:
     command: exit 1
 ```
 
-### How Directory Mode Works
+### How It Works
 
 1. **Loading**: All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically)
 2. **Merging**: Scripts from all files are combined into a single list
@@ -113,13 +89,7 @@ scripts:
    - `local_pc.yaml` - Local machine scripts
    - `deployments.yaml` - Deployment workflows
 
-### Benefits of Directory Organization
-
-1. **Logical Grouping**: Separate scripts by function, environment, or team
-2. **Easier Navigation**: Find scripts faster in organized files
-3. **Better Git History**: Changes isolated to specific script categories
-4. **Team Collaboration**: Different teams can own different files
-5. **Scalability**: Easily add new categories without cluttering a single file
+### Script Format
 
 Defines **what** scripts exist and **how** they run:
 
@@ -162,7 +132,63 @@ scripts:
 4. Optional fields (`log_limit`)
 5. Auto-populated fields (`last_run`, `last_status`)
 
-### groups.yaml
+## Groups Directory Configuration
+
+All groups are defined in the `groups/` directory. Each `.yaml` or `.yml` file in this directory defines groups.
+
+**config.yaml:**
+```yaml
+paths:
+  groups_file: groups  # Directory containing group YAML files
+```
+
+**groups/basic.yaml:**
+```yaml
+groups:
+  - name: development
+    description: Development utilities
+    execution: parallel
+    scripts:
+      - hello
+      - cleanup
+```
+
+**groups/scheduled.yaml:**
+```yaml
+groups:
+  - name: monitoring
+    description: System monitoring
+    schedule: "*/5 * * * *"  # Every 5 minutes
+    execution: parallel
+    scripts:
+      - cpu_check
+      - disk_check
+      - memory_check
+  
+  - name: daily
+    description: Daily maintenance
+    schedule: "0 2 * * *"  # 2 AM daily
+    execution: serial
+    stop_on_error: true
+    scripts:
+      - backup
+      - cleanup
+```
+
+### How It Works
+
+1. **Loading**: All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically)
+2. **Merging**: Groups from all files are combined into a single list
+3. **Saving**: Each group is saved back to its **original file**
+   - Group configuration updates go back to their source file
+   - New groups created via CLI are saved to `_new.yaml`
+4. **Organization**: Use filenames to logically group:
+   - `scheduled.yaml` - Groups with cron schedules
+   - `manual.yaml` - On-demand execution groups
+   - `production.yaml` - Production workflows
+   - `development.yaml` - Dev/test groups
+
+### Group Format
 
 Defines **when** and **which** scripts to run:
 

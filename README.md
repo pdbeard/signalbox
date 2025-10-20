@@ -2,32 +2,17 @@
 
 **Script execution control and monitoring**
 
-signalbox is a CLI tool for managing, executing, and monitoring scripts with detailed logging, scheduling, and group execution capabilities. Like a railway signal box controls trains with signals and switches, signalbox controls your scripts with precision and reliability.
+signalbox is a CLI tool for managing, executing, and monitoring scripts with detailed logging, scheduling, and group execution capabilities. 
 
-## Features
+## Main Features
 
-- 📋 List scripts and their last run status
-- ▶️ Run individual scripts, groups, or all scripts
-- 📊 View logs and execution history
-- 🗂️ Organize scripts into logical groups
-- ⚡ Parallel or serial execution modes
-- 🛑 Stop-on-error for critical workflows
-- ⏰ Schedule groups with cron expressions
-- 🔄 Automatic log rotation (by count or age)
-- 🔧 Generate systemd/cron configurations
-- ✅ Configuration validation
-- ⚙️ Customizable global settings
-- 🌍 Language agnostic - works with any executable
+-  List scripts and their last run status
+-  Run individual scripts or script groups
+-  Logs and execution history
+-  Parallel or serial execution modes
+-  Automatic log rotation (by count or age)
+-  Generate systemd/cron configurations 
 
-## Why "signalbox"? 🚦
-
-A railway signal box is a control center that:
-- **Controls switches** to route trains (like routing scripts to execution)
-- **Manages signals** to start/stop trains safely (like monitoring script success/failure)
-- **Prevents conflicts** through interlocking (like handling dependencies)
-- **Monitors all activity** from a central location (like centralized logging)
-
-signalbox brings this same organized, safe, monitored approach to script execution.
 
 ## Installation
 1. Install Python 3.8+
@@ -61,8 +46,8 @@ python main.py show-config
 
 **Configuration Files:**
 - `config.yaml` - Global settings and defaults (see [documentation/CONFIG_GUIDE.md](documentation/CONFIG_GUIDE.md))
-- `scripts.yaml` or `scripts/` - Script definitions (what to run) - supports single file or directory
-- `groups.yaml` - Groups and scheduling (when to run)
+- `scripts/` - Directory with script definitions (what to run) - all .yaml/.yml files loaded
+- `groups/` - Directory with group definitions and scheduling (when to run) - all .yaml/.yml files loaded
 - See [documentation/FILE_STRUCTURE.md](documentation/FILE_STRUCTURE.md) for detailed examples
 
 ## Commands
@@ -96,40 +81,63 @@ python main.py show-config
 
 ### File Structure
 
-Configuration is split into three separate files for better organization:
+Configuration uses a directory-based approach for better organization:
 
 - **`config.yaml`** - Global settings and defaults (see [documentation/CONFIG_GUIDE.md](documentation/CONFIG_GUIDE.md))
-- **`scripts.yaml`** - Defines all available scripts
-- **`groups.yaml`** - Defines script groups and scheduling
+- **`scripts/`** - Directory containing script definitions (all .yaml/.yml files loaded)
+- **`groups/`** - Directory containing group definitions and scheduling (all .yaml/.yml files loaded)
 
 **Benefits:**
 - Clear separation of concerns
-- Global config for timeouts, logging, and display preferences
-- Scripts file contains execution details
-- Groups file contains organization and scheduling
+- Organize scripts and groups logically across multiple files
+- Split by functionality, environment, team, or schedule frequency
 - Easier to maintain and version control
+- Flexible organization patterns
 
-### Scripts File (`scripts.yaml`)
+### Scripts Directory (`scripts/`)
 
+Example `scripts/basic.yaml`:
 ```yaml
 scripts:
   - name: hello
     command: echo "Hello World"
     description: Simple echo script
-    log_limit:
-      type: count
-      value: 5
   
-  - name: backup
-    command: /usr/local/bin/backup.sh
-    description: Backup database
+  - name: show_date
+    command: date
+    description: Show current date and time
+```
+
+Example `scripts/system.yaml`:
+```yaml
+scripts:
+  - name: system_uptime
+    command: uptime
+    description: Show system uptime
     log_limit:
       type: age
       value: 7
 ```
 
-### Groups File (`groups.yaml`)
+**Organization tips:**
+- Split by functionality: `basic.yaml`, `system.yaml`, `backup.yaml`
+- Split by environment: `production.yaml`, `staging.yaml`
+- Split by team: `devops.yaml`, `database.yaml`
 
+### Groups Directory (`groups/`)
+
+Example `groups/basic.yaml`:
+```yaml
+groups:
+  - name: basic
+    description: Basic system info
+    execution: parallel
+    scripts:
+      - hello
+      - show_date
+```
+
+Example `groups/scheduled.yaml`:
 ```yaml
 groups:
   - name: daily
@@ -147,32 +155,10 @@ groups:
       - disk_check
 ```
 
-### Legacy Support
-
-For backwards compatibility, a single `config.yaml` file is still supported. If `scripts.yaml` and `groups.yaml` don't exist, the app will fall back to `config.yaml`.
-
-### Migrating from Single Config
-
-If you have an existing `config.yaml`, you can split it into separate files:
-
-```bash
-# 1. Create scripts.yaml with just the scripts section
-cat config.yaml | grep -A 1000 "^scripts:" | grep -B 1000 "^groups:" | head -n -1 > scripts.yaml
-
-# 2. Create groups.yaml with just the groups section  
-cat config.yaml | grep -A 1000 "^groups:" > groups.yaml
-
-# 3. Validate the new files
-python main.py validate
-
-# 4. Optional: Backup and remove old config.yaml
-mv config.yaml config.yaml.backup
-```
-
-Or manually split the file:
-1. Copy the `scripts:` section to `scripts.yaml`
-2. Copy the `groups:` section to `groups.yaml`
-3. Run `python main.py validate` to verify
+**Organization tips:**
+- Split by schedule: `daily.yaml`, `hourly.yaml`, `manual.yaml`
+- Split by purpose: `monitoring.yaml`, `maintenance.yaml`
+- Split by environment: `prod-groups.yaml`, `dev-groups.yaml`
 
 ### Scripts Configuration
 

@@ -44,14 +44,12 @@ def get_config_value(path, default=None):
     return value
 
 def load_config():
-    """Load configuration from scripts file(s) and groups file."""
-    config = {'scripts': [], 'groups': [], '_script_sources': {}}
+    """Load configuration from scripts and groups directories."""
+    config = {'scripts': [], 'groups': [], '_script_sources': {}, '_group_sources': {}}
     
-    # Load scripts - supports both single file and directory
+    # Load scripts from directory
     scripts_path = get_config_value('paths.scripts_file', SCRIPTS_FILE)
-    
     if os.path.isdir(scripts_path):
-        # Load from directory - read all .yaml/.yml files
         for filename in sorted(os.listdir(scripts_path)):
             if filename.endswith(('.yaml', '.yml')) and not filename.startswith('.'):
                 filepath = os.path.join(scripts_path, filename)
@@ -67,25 +65,25 @@ def load_config():
                             config['scripts'].extend(scripts_data['scripts'])
                 except Exception as e:
                     click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
-    elif os.path.exists(scripts_path):
-        # Load from single file (backwards compatible)
-        with open(scripts_path, 'r') as f:
-            scripts_data = yaml.safe_load(f)
-            if scripts_data and 'scripts' in scripts_data:
-                config['scripts'] = scripts_data['scripts']
-                # Track single file source
-                for script in config['scripts']:
-                    script_name = script.get('name')
-                    if script_name:
-                        config['_script_sources'][script_name] = scripts_path
     
-    # Load groups
-    groups_file = get_config_value('paths.groups_file', GROUPS_FILE)
-    if os.path.exists(groups_file):
-        with open(groups_file, 'r') as f:
-            groups_data = yaml.safe_load(f)
-            if groups_data and 'groups' in groups_data:
-                config['groups'] = groups_data['groups']
+    # Load groups from directory
+    groups_path = get_config_value('paths.groups_file', GROUPS_FILE)
+    if os.path.isdir(groups_path):
+        for filename in sorted(os.listdir(groups_path)):
+            if filename.endswith(('.yaml', '.yml')) and not filename.startswith('.'):
+                filepath = os.path.join(groups_path, filename)
+                try:
+                    with open(filepath, 'r') as f:
+                        groups_data = yaml.safe_load(f)
+                        if groups_data and 'groups' in groups_data:
+                            # Track which file each group came from
+                            for group in groups_data['groups']:
+                                group_name = group.get('name')
+                                if group_name:
+                                    config['_group_sources'][group_name] = filepath
+                            config['groups'].extend(groups_data['groups'])
+                except Exception as e:
+                    click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
     
     return config
 
@@ -94,48 +92,59 @@ def save_config(config):
     scripts_path = get_config_value('paths.scripts_file', SCRIPTS_FILE)
     script_sources = config.get('_script_sources', {})
     
-    # Save scripts
-    if 'scripts' in config:
-        if os.path.isdir(scripts_path):
-            # Save scripts back to their original files
+    # Save scripts back to their original files
+    if 'scripts' in config and os.path.isdir(scripts_path):
+        files_to_save = {}
+        
+        # Group scripts by source file
+        for script in config['scripts']:
+            script_name = script.get('name')
+            source_file = script_sources.get(script_name)
+            
+            if source_file and os.path.exists(source_file):
+                if source_file not in files_to_save:
+                    files_to_save[source_file] = []
+                files_to_save[source_file].append(script)
+            else:
+                # New script or unknown source - save to _new.yaml
+                new_file = os.path.join(scripts_path, '_new.yaml')
+                if new_file not in files_to_save:
+                    files_to_save[new_file] = []
+                files_to_save[new_file].append(script)
+        
+        # Write each file
+        for filepath, scripts in files_to_save.items():
+            with open(filepath, 'w') as f:
+                yaml.dump({'scripts': scripts}, f, default_flow_style=False, sort_keys=False)
+    
+    # Save groups back to their original files
+    if 'groups' in config:
+        groups_path = get_config_value('paths.groups_file', GROUPS_FILE)
+        group_sources = config.get('_group_sources', {})
+        
+        if os.path.isdir(groups_path):
             files_to_save = {}
             
-            # Group scripts by source file
-            for script in config['scripts']:
-                script_name = script.get('name')
-                source_file = script_sources.get(script_name)
+            # Group groups by source file
+            for group in config['groups']:
+                group_name = group.get('name')
+                source_file = group_sources.get(group_name)
                 
                 if source_file and os.path.exists(source_file):
                     if source_file not in files_to_save:
                         files_to_save[source_file] = []
-                    files_to_save[source_file].append(script)
+                    files_to_save[source_file].append(group)
                 else:
-                    # New script or unknown source - save to _new.yaml
-                    new_file = os.path.join(scripts_path, '_new.yaml')
+                    # New group or unknown source - save to _new.yaml
+                    new_file = os.path.join(groups_path, '_new.yaml')
                     if new_file not in files_to_save:
                         files_to_save[new_file] = []
-                    files_to_save[new_file].append(script)
+                    files_to_save[new_file].append(group)
             
             # Write each file
-            for filepath, scripts in files_to_save.items():
+            for filepath, groups in files_to_save.items():
                 with open(filepath, 'w') as f:
-                    yaml.dump({'scripts': scripts}, f, default_flow_style=False, sort_keys=False)
-        else:
-            # Save to single file (backwards compatible)
-            with open(scripts_path, 'w') as f:
-                yaml.dump({'scripts': config['scripts']}, f, default_flow_style=False, sort_keys=False)
-    
-    # Save groups (if modified)
-    if 'groups' in config:
-        groups_file = get_config_value('paths.groups_file', GROUPS_FILE)
-        # Only save if groups file exists (don't auto-create it)
-        if os.path.exists(groups_file):
-            with open(groups_file, 'r') as f:
-                existing_groups = yaml.safe_load(f)
-            # Only save if groups have changed (to avoid updating groups when running scripts)
-            if existing_groups.get('groups') != config['groups']:
-                with open(groups_file, 'w') as f:
-                    yaml.dump({'groups': config['groups']}, f, default_flow_style=False, sort_keys=False)
+                    yaml.dump({'groups': groups}, f, default_flow_style=False, sort_keys=False)
 
 def ensure_log_dir(script_name):
     log_dir = get_config_value('paths.log_dir', LOG_DIR)

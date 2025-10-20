@@ -9,8 +9,8 @@ default_log_limit:
 # Global paths
 paths:
   log_dir: logs
-  scripts_file: scripts        # Can be a file (scripts.yaml) or directory (scripts/)
-  groups_file: groups.yaml
+  scripts_file: scripts        # Directory containing script YAML files
+  groups_file: groups           # Directory containing group YAML files
   systemd_export_dir: systemd  # Directory for exported systemd files
   cron_export_dir: cron        # Directory for exported cron files
   
@@ -18,7 +18,7 @@ paths:
   # - Organize scripts into logical files (web_servers.yaml, databases.yaml, etc.)
   # - All .yaml/.yml files in directory are automatically loaded
   # - Updates save back to original source file
-  # - New scripts save to _new.yaml
+  # - New scripts/groups save to _new.yaml
 
 # Execution settings
 execution:
