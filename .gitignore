@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Logs
+logs/
+*.log
+
+# Configuration exports
+systemd/
+cron/
+scripts/_new.yaml  # Auto-generated file for new scripts when using directory mode
+
+# Old exported files (deprecated - now in systemd/ and cron/ directories)
+*.service
+*.timer
+*.cron
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

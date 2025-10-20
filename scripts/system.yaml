@@ -1,0 +1,17 @@
+scripts:
+- name: system_uptime
+  description: Show system uptime
+  command: uptime
+  log_limit:
+    type: count
+    value: 5
+  last_run: '20251020_144209_046563'
+  last_status: success
+- name: disk_usage
+  description: Show disk usage
+  command: df -h
+  log_limit:
+    type: count
+    value: 5
+  last_run: '20251020_144209_046756'
+  last_status: success

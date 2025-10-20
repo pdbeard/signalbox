@@ -1,0 +1,40 @@
+groups:
+- description: Basic system info
+  name: basic
+  execution: parallel  # Run scripts in parallel
+  scripts:
+  - hello
+  - show_date
+  - current_dir
+- description: System monitoring
+  name: system
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  execution: parallel  # Run in parallel for faster monitoring
+  scripts:
+  - system_uptime
+  - disk_usage
+  - list_files
+- description: Daily maintenance tasks
+  name: daily
+  schedule: "0 2 * * *"  # 2 AM daily
+  execution: serial  # Run sequentially
+  stop_on_error: true  # Stop if any script fails (only applies to serial execution)
+  scripts:
+  - hello
+  - current_dir
+- description: Test serial with failure
+  name: test_serial_fail
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - hello
+  - fail_test
+  - show_date  # This should not run if fail_test fails
+- description: Test serial continue on error
+  name: test_serial_continue
+  execution: serial
+  stop_on_error: false  # Continue even if scripts fail
+  scripts:
+  - hello
+  - fail_test
+  - show_date  # This should still run even if fail_test fails

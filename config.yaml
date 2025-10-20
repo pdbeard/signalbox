@@ -1,0 +1,92 @@
+# Global Configuration for signalbox
+# This file contains default settings and global options for script execution monitoring
+
+# Default log rotation settings (applied to scripts without specific log_limit)
+default_log_limit:
+  type: count
+  value: 10
+
+# Global paths
+paths:
+  log_dir: logs
+  scripts_file: scripts        # Can be a file (scripts.yaml) or directory (scripts/)
+  groups_file: groups.yaml
+  systemd_export_dir: systemd  # Directory for exported systemd files
+  cron_export_dir: cron        # Directory for exported cron files
+  
+  # Directory mode benefits:
+  # - Organize scripts into logical files (web_servers.yaml, databases.yaml, etc.)
+  # - All .yaml/.yml files in directory are automatically loaded
+  # - Updates save back to original source file
+  # - New scripts save to _new.yaml
+
+# Execution settings
+execution:
+  # Default timeout for scripts (in seconds, 0 = no timeout)
+  default_timeout: 300
+  
+  # Capture output settings
+  capture_stdout: true
+  capture_stderr: true
+  
+  # Continue on error when running groups (deprecated - use group-level stop_on_error)
+  continue_on_error: true
+  
+  # Maximum number of parallel workers for parallel group execution
+  max_parallel_workers: 5
+
+# Notification settings (future feature)
+notifications:
+  enabled: false
+  # on_failure: email
+  # on_success: none
+  # email: admin@example.com
+
+# Scheduling defaults
+scheduling:
+  # Default timezone for cron schedules
+  timezone: UTC
+  
+  # Enable/disable all scheduled tasks
+  enabled: true
+
+# Logging settings
+logging:
+  # Timestamp format for log files
+  timestamp_format: "%Y%m%d_%H%M%S_%f"
+  
+  # Include command in log output
+  include_command: true
+  
+  # Include return code in log output
+  include_return_code: true
+
+# Validation settings
+validation:
+  # Strict mode: fail on warnings
+  strict: false
+  
+  # Check for unused scripts (defined but not in any group)
+  warn_unused_scripts: true
+  
+  # Check for empty groups
+  warn_empty_groups: true
+
+# Display settings
+display:
+  # Use colors in terminal output
+  use_colors: true
+  
+  # Show full paths in output
+  show_full_paths: false
+  
+## Date format for display 
+#   ∙ Alternative formats:
+#   ∙   "%y-%m-%d"                  →  25-10-20
+#   ∙   "%Y-%m-%d"                  →  2025-10-20
+#   ∙   "%m/%d/%y"                  →  10/20/25
+#   ∙   "%b %d, %Y"                 →  Oct 20, 2025
+#   ∙   "%Y-%m-%d %H:%M"            →  2025-10-20 13:59
+#   ∙   "%m/%d/%y %I:%M %p"         →  10/20/25 01:59 PM
+#   ∙   "%d %b %H:%M"               →  20 Oct 13:59
+  date_format: "%d %b %H:%M"

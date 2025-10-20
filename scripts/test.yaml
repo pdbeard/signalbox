@@ -1,0 +1,9 @@
+scripts:
+- name: fail_test
+  description: Test failure
+  command: exit 1
+  log_limit:
+    type: count
+    value: 3
+  last_run: '20251020_144518_113139'
+  last_status: failed
