@@ -1,9 +1,9 @@
 groups:
-  - name: daily
-    description: Daily maintenance tasks
-    schedule: "0 2 * * *"
-    execution: serial
-    stop_on_error: true
-    scripts:
-      - hello
-      - current_dir
+- name: daily
+  description: Daily maintenance tasks
+  schedule: 0 2 * * *
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - hello
+  - current_dir

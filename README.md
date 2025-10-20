@@ -1,7 +1,4 @@
 # signalbox 🚦
-
-**Script execution control and monitoring**
-
 signalbox is a CLI tool for managing, executing, and monitoring scripts with detailed logging, scheduling, and group execution capabilities. 
 
 ## Main Features
@@ -19,36 +16,7 @@ signalbox is a CLI tool for managing, executing, and monitoring scripts with det
 2. `pip install -r requirements.txt`
 3. Run `python main.py --help`
 
-## Quick Start
-
-```bash
-# List all scripts
-python main.py list
-
-# Run a single script
-python main.py run hello
-
-# Run a group of scripts
-python main.py run-group system
-
-# View latest log
-python main.py logs hello
-
-# List scheduled groups
-python main.py list-schedules
-
-# Validate configuration
-python main.py validate
-
-# View global settings
-python main.py show-config
-```
-
-**Configuration Files:**
-- `config.yaml` - Global settings and defaults (see [documentation/CONFIG_GUIDE.md](documentation/CONFIG_GUIDE.md))
-- `scripts/` - Directory with script definitions (what to run) - all .yaml/.yml files loaded
-- `groups/` - Directory with group definitions and scheduling (when to run) - all .yaml/.yml files loaded
-- See [documentation/FILE_STRUCTURE.md](documentation/FILE_STRUCTURE.md) for detailed examples
+## DEMO VID? 
 
 ## Commands
 
@@ -81,18 +49,11 @@ python main.py show-config
 
 ### File Structure
 
-Configuration uses a directory-based approach for better organization:
-
 - **`config.yaml`** - Global settings and defaults (see [documentation/CONFIG_GUIDE.md](documentation/CONFIG_GUIDE.md))
-- **`scripts/`** - Directory containing script definitions (all .yaml/.yml files loaded)
-- **`groups/`** - Directory containing group definitions and scheduling (all .yaml/.yml files loaded)
+- **`scripts/`** - Script definitions (all .yaml files loaded)
+- **`groups/`** - Group definitions and scheduling (all .yaml files loaded)
 
-**Benefits:**
-- Clear separation of concerns
-- Organize scripts and groups logically across multiple files
-- Split by functionality, environment, team, or schedule frequency
-- Easier to maintain and version control
-- Flexible organization patterns
+- See [documentation/FILE_STRUCTURE.md](documentation/FILE_STRUCTURE.md) for detailed examples
 
 ### Scripts Directory (`scripts/`)
 
@@ -172,6 +133,19 @@ Optional fields:
   - `type: count` - Keep N most recent logs
   - `type: age` - Keep logs for N days
 
+#### Log Examples 
+```yaml
+log_limit:
+  type: count
+  value: 5  # Keep 5 most recent logs
+```
+
+```yaml
+log_limit:
+  type: age
+  value: 7  # Keep logs for 7 days
+```
+
 ### Groups Configuration
 
 Groups organize scripts into logical collections:
@@ -180,57 +154,8 @@ Groups organize scripts into logical collections:
 - `scripts` - List of script names
 - `schedule` - (Optional) Cron expression for automation
 
-## Scheduling Architecture
+* Only groups can be scheduled, individual scripts needing unique schedules can be added as a single script to a group.  
 
-### Design Philosophy: Group-Only Scheduling
-
-This tool uses a **group-only scheduling** approach, which means:
-
-1. **Schedules are defined at the group level, not individual scripts**
-2. **All automation happens through groups**
-3. **Single scripts that need scheduling get their own group**
-
-### Why Group-Only?
-
-**Benefits:**
-- ✅ **Single source of truth** - All schedules in one place
-- ✅ **Clear organization** - Groups represent scheduling cadence ("daily", "hourly")
-- ✅ **Less redundancy** - One schedule for multiple related scripts
-- ✅ **Easier maintenance** - Update one schedule affects all group scripts
-- ✅ **Simpler mental model** - Schedules are organizational units
-
-**Alternatives considered:**
-- ❌ Individual script scheduling - Leads to config bloat
-- ❌ Hybrid approach - Confusing priority/override rules
-
-### Singleton Groups Pattern
-
-For individual scripts needing unique schedules, use **singleton groups**:
-
-```yaml
-groups:
-  # Regular multi-script group
-  - name: system-monitoring
-    description: System health checks
-    schedule: "*/5 * * * *"  # Every 5 minutes
-    scripts:
-      - cpu_check
-      - disk_check
-      - memory_check
-
-  # Singleton group for one critical script
-  - name: critical-backup-schedule
-    description: Critical backup every 15 minutes
-    schedule: "*/15 * * * *"
-    scripts:
-      - critical_backup  # Just one script
-```
-
-**Singleton groups are:**
-- Named descriptively to indicate their purpose
-- Used for scripts requiring special timing
-- Still groups architecturally (consistent with design)
-- Easy to understand and maintain
 
 ### Scheduling Examples
 
@@ -256,16 +181,16 @@ groups:
     schedule: "0 3 * * 0"
     scripts: [full_backup, audit]
   
-  # Every 15 minutes (singleton pattern)
+  # Every 15 minutes (single script)
   - name: critical-sync
     schedule: "*/15 * * * *"
     scripts: [sync_critical_data]
 ```
 
 ## Automation Setup
+Currently, signalbox simply generates the config files for you to add at your discretion
 
-### Option 1: systemd (Linux - Recommended)
-
+### Option 1: systemd 
 Generate systemd files for a scheduled group:
 
 ```bash
@@ -282,14 +207,14 @@ sudo systemctl start signalbox-daily.timer
 sudo systemctl status signalbox-daily.timer
 ```
 
-**Note:** Files are exported to `systemd/<group_name>/` directory for better organization.
+**Note:** Generated files are exported to `systemd/<group_name>/` directory for better organization.
 
 For user-level (no root):
 ```bash
 python main.py export-systemd daily --user
 ```
 
-### Option 2: cron (Universal)
+### Option 2: cron 
 
 Generate crontab entry:
 
@@ -302,9 +227,6 @@ crontab -e
 # Paste the generated line
 ```
 
-### Option 3: launchd (macOS)
-
-For macOS, convert the systemd approach to launchd plist format, or use cron.
 
 ## Validation
 
@@ -321,23 +243,6 @@ This checks for:
 - Invalid cron syntax
 - Configuration errors
 
-## Log Rotation
-
-Logs are automatically rotated based on `log_limit` configuration:
-
-### By Count
-```yaml
-log_limit:
-  type: count
-  value: 5  # Keep 5 most recent logs
-```
-
-### By Age
-```yaml
-log_limit:
-  type: age
-  value: 7  # Keep logs for 7 days
-```
 
 ## Documentation
 
@@ -351,49 +256,6 @@ Comprehensive guides are available in the `documentation/` directory:
 - **[Execution Modes](documentation/EXECUTION_MODES.md)** - Parallel vs serial execution explained
 - **[Scheduling Examples](documentation/SCHEDULING_EXAMPLES.md)** - Real-world scheduling patterns and examples
 
-## Architecture Decisions
-
-### Why Not Individual Script Scheduling?
-
-We evaluated three approaches:
-
-1. **Groups-Only** ✅ (Chosen)
-   - Clean, organized, easy to understand
-   - Natural fit for scheduling cadences
-   - Uses singleton pattern for edge cases
-
-2. **Individual Scripts** ❌ (Rejected)
-   - Config becomes bloated with redundant schedules
-   - Harder to maintain and understand
-   - Many similar schedules across scripts
-
-3. **Hybrid** ❌ (Rejected)
-   - Confusing priority rules (script vs group schedule)
-   - Two places to define schedules
-   - Inconsistent mental model
-
-### Singleton Groups Best Practices
-
-When a script needs a unique schedule:
-1. Create a dedicated group
-2. Name it descriptively: `<purpose>-schedule` or `<script>-every-<interval>`
-3. Document why it needs special timing
-4. Keep it in the groups section (architectural consistency)
-
-Example:
-```yaml
-# DON'T: Inline schedule on script
-scripts:
-  - name: critical_backup
-    schedule: "*/15 * * * *"  # Don't do this
-
-# DO: Singleton group
-groups:
-  - name: critical-backup-every-15min
-    description: Critical backup needs frequent execution
-    schedule: "*/15 * * * *"
-    scripts: [critical_backup]
-```
 
 ## Troubleshooting
 
@@ -427,13 +289,12 @@ See `config.yaml` for a complete example with:
 Contributions welcome! Please feel free to submit a Pull Request.
 
 When adding features:
-1. Maintain group-only scheduling architecture
-2. Document any new patterns in README
-3. Update `validate` command for new fields
-4. Add tests for configuration validation
+1. Document any new patterns in README
+2. Update `validate` command for new fields
+3. Other stuff I'm sure will be needed if anyone actually contributes 0.o
 
 ## License
 
 MIT License - See [LICENSE](LICENSE) file for details
 
-Copyright (c) 2025 Patrick Beard
+Copyright (c) 2025 pdbeard

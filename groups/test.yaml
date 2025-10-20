@@ -1,18 +1,17 @@
 groups:
-  - name: test_serial_fail
-    description: Test serial with failure
-    execution: serial
-    stop_on_error: true
-    scripts:
-      - hello
-      - fail_test
-      - show_date  # This should not run if fail_test fails
-  
-  - name: test_serial_continue
-    description: Test serial continue on error
-    execution: serial
-    stop_on_error: false
-    scripts:
-      - hello
-      - fail_test
-      - show_date  # This should still run even if fail_test fails
+- name: test_serial_fail
+  description: Test serial with failure
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - hello
+  - fail_test
+  - show_date
+- name: test_serial_continue
+  description: Test serial continue on error
+  execution: serial
+  stop_on_error: false
+  scripts:
+  - hello
+  - fail_test
+  - show_date

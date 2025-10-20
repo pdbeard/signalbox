@@ -1,17 +1,16 @@
 groups:
-  - name: basic
-    description: Basic system info
-    execution: parallel
-    scripts:
-      - hello
-      - show_date
-      - current_dir
-  
-  - name: system
-    description: System monitoring
-    schedule: "*/5 * * * *"
-    execution: parallel
-    scripts:
-      - system_uptime
-      - disk_usage
-      - list_files
+- name: basic
+  description: Basic system info
+  execution: parallel
+  scripts:
+  - hello
+  - show_date
+  - current_dir
+- name: system
+  description: System monitoring
+  schedule: '*/5 * * * *'
+  execution: parallel
+  scripts:
+  - system_uptime
+  - disk_usage
+  - list_files
