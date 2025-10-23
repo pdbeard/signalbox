@@ -1,8 +1,5 @@
-# Global Configuration for signalbox
-# This file contains default settings and global options for script execution monitoring
-
 # ============================================================================
-# CURRENTLY SUPPORTED OPTIONS
+# Global Configuration for signalbox
 # ============================================================================
 
 # Default log rotation settings (applied to scripts without specific log_limit)
@@ -46,6 +43,10 @@ display:
   #   ∙   "%m/%d/%y %I:%M %p"         →  10/20/25 01:59 PM
   #   ∙   "%d %b %H:%M"               →  20 Oct 13:59
   date_format: "%d %b %H:%M"
+
+
+
+
 
 # ============================================================================
 # PLANNED FEATURES (NOT YET IMPLEMENTED)
