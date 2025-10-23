@@ -1,23 +1,11 @@
 # Deployment Pipeline Groups Examples
 #
-# ⚠️  IMPORTANT: These are EXAMPLE CI/CD pipelines for learning purposes.
-# Replace with your actual build tools, tests, and deployment commands!
+# ⚠️  IMPORTANT: These are EXAMPLE groups for learning and getting started.
+# These scripts are NOT meant for production use - they are educational tools!
 #
 # This file demonstrates CI/CD pipelines using serial execution with stop-on-error.
-# All groups use 'execution: serial' and 'stop_on_error: true' because:
-# - Order matters (can't deploy before tests pass)
-# - Dependencies exist (build requires successful tests)
-# - Safety is critical (stop immediately if any step fails)
-# - Each step validates the previous step succeeded
-#
-# Pipeline progression examples:
-# - ci_pipeline: Basic continuous integration (lint → scan → test → build)
-# - staging_deployment: Includes deployment and verification
-# - production_deployment: Full production pipeline with backups
-# - release_pipeline: Complete end-to-end release process
-#
-# IMPORTANT: These pipelines will STOP at the first failure, preventing
-# unsafe deployments or builds from proceeding.
+
+# IMPORTANT: These groups demonstrate the STOP at the first failure.
 
 groups:
 - name: ci_pipeline

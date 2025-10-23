@@ -1,13 +1,8 @@
 # Basic Example Scripts
 #
 # ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
-# These demonstrate basic signalbox functionality and are safe to run anywhere!
+# These scripts are NOT meant for production use - they are educational tools!
 #
-# This file contains simple scripts for getting started with signalbox:
-# - Uses common shell commands that work on most systems
-# - Perfect for initial testing and learning
-# - These scripts are used in demo groups and error handling examples
-# - All commands are safe and non-destructive (echo, date, pwd, ls)
 
 scripts:
 - name: hello

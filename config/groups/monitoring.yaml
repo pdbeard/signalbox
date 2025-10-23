@@ -1,7 +1,7 @@
 # Monitoring Groups Examples
 #
-# ⚠️  IMPORTANT: These are EXAMPLE monitoring groups for learning purposes.
-# Adjust schedules, scripts, and monitoring targets for your environment!
+# ⚠️  IMPORTANT: These are EXAMPLE groups for learning and getting started.
+# These scripts are NOT meant for production use - they are educational tools!
 #
 # This file demonstrates different monitoring strategies using parallel execution.
 # All groups use 'execution: parallel' to run multiple checks simultaneously,

@@ -1,7 +1,7 @@
 # System Administration Example Scripts
 #
-# ⚠️  IMPORTANT: These are EXAMPLE scripts with real system commands.
-# Review and adjust thresholds, services, and commands for your environment!
+# ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
+# These scripts are NOT meant for production use - they are educational tools!
 #
 # This file demonstrates system monitoring and maintenance scripts.
 # These scripts show real system administration tasks:

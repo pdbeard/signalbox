@@ -1,8 +1,8 @@
 # Web Monitoring Example Scripts
 #
-# ⚠️  IMPORTANT: These are EXAMPLE scripts for learning web monitoring patterns.
-# Replace httpbin.org URLs with your actual services!
-# 
+# ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
+# These scripts are NOT meant for production use - they are educational tools!
+#
 # This file demonstrates web service monitoring capabilities using signalbox.
 # These scripts show how to:
 # - Check website availability and health

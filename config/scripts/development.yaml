@@ -1,7 +1,7 @@
 # Development Workflow Example Scripts
 #
-# ⚠️  IMPORTANT: These are EXAMPLE scripts simulating CI/CD workflows.
-# Replace the 'echo' commands with your actual development tools!
+# ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
+# These scripts are NOT meant for production use - they are educational tools!
 #
 # This file demonstrates CI/CD pipeline scripts for software development.
 # These scripts simulate common development workflow tasks:

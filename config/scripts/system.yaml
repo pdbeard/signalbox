@@ -1,9 +1,8 @@
 # Simple System Scripts
 #
-# This file contains basic system information scripts.
-# These are simple, single-command scripts that provide system information.
-# For more advanced system monitoring with thresholds and alerts,
-# see system_admin.yaml instead.
+# ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
+# These scripts are NOT meant for production use - they are educational tools!
+#
 
 scripts:
 - name: system_uptime
