@@ -1,0 +1,10 @@
+# Runtime state for basic.yaml - auto-generated, do not edit manually
+groups:
+  basic:
+    last_run: '20251023_104209_380799'
+    last_status: success
+    execution_time_seconds: 0.007937
+    execution_count: 2
+    scripts_total: 3
+    scripts_successful: 3
+    success_rate: 100.0

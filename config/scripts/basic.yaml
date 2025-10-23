@@ -1,3 +1,14 @@
+# Basic Example Scripts
+#
+# ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
+# These demonstrate basic signalbox functionality and are safe to run anywhere!
+#
+# This file contains simple scripts for getting started with signalbox:
+# - Uses common shell commands that work on most systems
+# - Perfect for initial testing and learning
+# - These scripts are used in demo groups and error handling examples
+# - All commands are safe and non-destructive (echo, date, pwd, ls)
+
 scripts:
 - name: hello
   description: Simple echo
@@ -5,29 +16,21 @@ scripts:
   log_limit:
     type: count
     value: 3
-  last_run: '20251020_144200_455009'
-  last_status: success
 - name: show_date
   description: Show current date and time
   command: date
   log_limit:
     type: count
     value: 5
-  last_run: '20251020_144200_455521'
-  last_status: success
 - name: current_dir
   description: Print current working directory
   command: pwd
   log_limit:
     type: count
     value: 5
-  last_run: '20251020_144200_455575'
-  last_status: success
 - name: list_files
   description: List files in current directory
   command: ls -la
   log_limit:
     type: count
     value: 5
-  last_run: '20251020_232400_120247'
-  last_status: success

@@ -1,0 +1,5 @@
+# Runtime state for test.yaml - auto-generated, do not edit manually
+scripts:
+  fail_test:
+    last_run: '20251023_104232_407649'
+    last_status: failed

@@ -1,0 +1,20 @@
+# Simple System Scripts
+#
+# This file contains basic system information scripts.
+# These are simple, single-command scripts that provide system information.
+# For more advanced system monitoring with thresholds and alerts,
+# see system_admin.yaml instead.
+
+scripts:
+- name: system_uptime
+  description: Show system uptime
+  command: uptime
+  log_limit:
+    type: count
+    value: 5
+- name: disk_usage
+  description: Show disk usage
+  command: df -h
+  log_limit:
+    type: count
+    value: 5

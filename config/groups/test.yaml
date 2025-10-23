@@ -1,0 +1,35 @@
+# Error Handling Test Groups
+#
+# ⚠️  IMPORTANT: These are EXAMPLE groups for learning error handling behavior.
+# These groups are specifically for educational purposes!
+#
+# This file demonstrates error handling behavior using the fail_test script.
+# These groups are specifically for learning and testing purposes:
+#
+# - test_serial_fail: Uses stop_on_error=true
+#   Result: When fail_test fails, show_date will NOT run (execution stops)
+#
+# - test_serial_continue: Uses stop_on_error=false  
+#   Result: When fail_test fails, show_date will STILL run (execution continues)
+#
+# Run these groups to see the difference in behavior!
+# The fail_test script is INTENTIONALLY designed to fail for demonstration.
+
+groups:
+- name: test_serial_fail
+  description: Test serial with failure (DEMO - execution stops on error)
+  execution: serial
+  stop_on_error: true  # STOPS when fail_test fails
+  scripts:
+  - hello       # (check) Runs and succeeds
+  - fail_test   # (X) FAILS intentionally and STOPS execution here
+  - show_date   # (pause) Will NOT run (execution stopped)
+
+- name: test_serial_continue
+  description: Test serial continue on error (DEMO - execution continues despite errors)
+  execution: serial
+  stop_on_error: false  # CONTINUES even when fail_test fails
+  scripts:
+  - hello       # (check) Runs and succeeds
+  - fail_test   # (X) FAILS intentionally but execution continues
+  - show_date   # (check) Still runs despite previous failure

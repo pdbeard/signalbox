@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="signalbox",
     version="0.1.0",
-    author="Patrick Beard",
+    author="pdbeard",
     description="Script execution control and monitoring",
     long_description=long_description,
     long_description_content_type="text/markdown",

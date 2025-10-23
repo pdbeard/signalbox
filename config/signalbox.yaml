@@ -9,8 +9,8 @@ default_log_limit:
 # Global paths
 paths:
   log_dir: logs
-  scripts_file: scripts        # Directory containing script YAML files
-  groups_file: groups           # Directory containing group YAML files
+  scripts_file: config/scripts  # Directory containing script YAML files
+  groups_file: config/groups    # Directory containing group YAML files
   systemd_export_dir: systemd  # Directory for exported systemd files
   cron_export_dir: cron        # Directory for exported cron files
   

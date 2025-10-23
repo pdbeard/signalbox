@@ -1,0 +1,63 @@
+# Web Monitoring Example Scripts
+#
+# ⚠️  IMPORTANT: These are EXAMPLE scripts for learning web monitoring patterns.
+# Replace httpbin.org URLs with your actual services!
+# 
+# This file demonstrates web service monitoring capabilities using signalbox.
+# These scripts show how to:
+# - Check website availability and health
+# - Monitor API response times and functionality
+# - Validate SSL certificates and security
+# - Test DNS resolution and network connectivity
+#
+# All scripts use httpbin.org as a test service (safe for examples)
+# Modify the URLs and endpoints for your actual services.
+
+scripts:
+- name: check_website_health
+  description: Check if main website is responding
+  command: "curl -f -s -o /dev/null https://httpbin.org/status/200 && echo \"\u2713\
+    \ Website OK\" || echo \"\u2717 Website DOWN\""
+  log_limit:
+    type: count
+    value: 5
+- name: check_api_response_time
+  description: Measure API response time
+  command: echo "Testing API response time..." && time (curl -s https://httpbin.org/delay/1
+    > /dev/null) 2>&1 | grep real | awk '{print "API Response time:", $2}'
+  log_limit:
+    type: count
+    value: 5
+- name: check_ssl_certificate
+  description: Check SSL certificate expiration
+  command: echo "Checking SSL certificate..." && echo | timeout 10 openssl s_client
+    -servername httpbin.org -connect httpbin.org:443 2>/dev/null | openssl x509 -noout
+    -dates 2>/dev/null || echo "SSL check failed"
+  log_limit:
+    type: count
+    value: 5
+- name: check_dns_resolution
+  description: Test DNS resolution time
+  command: echo "Testing DNS resolution..." && time (dig +short httpbin.org > /dev/null)
+    2>&1 | grep real | awk '{print "DNS Resolution time:", $2}' && echo "Resolved
+    IPs:" && dig +short httpbin.org
+  log_limit:
+    type: count
+    value: 5
+- name: check_api_json_response
+  description: Test API JSON response and parsing
+  command: "echo \"Testing JSON API...\" && curl -s https://httpbin.org/json | jq\
+    \ -r '.slideshow.title' 2>/dev/null && echo \"\u2713 JSON API working\" || echo\
+    \ \"Testing without jq...\" && curl -s https://httpbin.org/json | grep -o '\"\
+    title\"[^,]*' | head -1"
+  log_limit:
+    type: count
+    value: 5
+- name: check_http_headers
+  description: Check important HTTP headers
+  command: echo "Checking HTTP headers..." && curl -s -I https://httpbin.org/get |
+    grep -E "(Server|Content-Type|Cache-Control)" | head -3 || echo "Header check
+    completed"
+  log_limit:
+    type: count
+    value: 5

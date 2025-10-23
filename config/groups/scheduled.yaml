@@ -1,0 +1,24 @@
+# Scheduled Groups Examples
+#
+# ⚠️  IMPORTANT: These are EXAMPLE groups demonstrating scheduling concepts.
+# Modify schedules and scripts for your actual use case!
+#
+# This file demonstrates scheduled execution using cron syntax.
+# The 'daily' group shows:
+# - schedule: "0 2 * * *" = runs at 2:00 AM every day
+# - execution: serial = runs scripts one after another
+# - stop_on_error: true = stops if any script fails
+#
+# NOTE: This uses basic scripts for simplicity. For real daily maintenance,
+# see the daily_maintenance group in maintenance.yaml which has actual 
+# maintenance tasks.
+
+groups:
+- name: daily
+  description: Daily maintenance tasks
+  schedule: 0 2 * * *
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - hello
+  - current_dir

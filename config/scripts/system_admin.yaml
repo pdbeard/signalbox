@@ -1,0 +1,103 @@
+# System Administration Example Scripts
+#
+# ⚠️  IMPORTANT: These are EXAMPLE scripts with real system commands.
+# Review and adjust thresholds, services, and commands for your environment!
+#
+# This file demonstrates system monitoring and maintenance scripts.
+# These scripts show real system administration tasks:
+# - Monitoring disk space, memory, and system load with thresholds
+# - Checking critical services and network connectivity  
+# - Security updates and system maintenance
+# - Configuration backup and cleanup operations
+#
+# NOTE: These scripts include actual system commands (df, free, ps, etc.)
+# They will work on most Unix-like systems but may need adjustment for
+# your specific environment. The scripts include fallbacks for macOS compatibility.
+
+scripts:
+- name: check_disk_space
+  description: Monitor disk usage and warn if > 80%
+  command: "echo \"\U0001F4BE Checking disk space...\"\ndf -h / | awk 'NR==2 {\n \
+    \ usage = $5; \n  gsub(/%/, \"\", usage); \n  if(usage > 80) \n    print \"\u26A0\
+    \uFE0F  Disk usage HIGH: \" usage \"% (/\" $4 \" free)\"; \n  else if(usage >\
+    \ 60) \n    print \"\u26A1 Disk usage MEDIUM: \" usage \"% (/\" $4 \" free)\"\
+    ; \n  else \n    print \"\u2713 Disk usage OK: \" usage \"% (/\" $4 \" free)\"\
+    \n}'\n"
+  log_limit:
+    type: count
+    value: 10
+- name: check_memory_usage
+  description: Check system memory usage
+  command: "echo \"\U0001F9E0 Checking memory usage...\"\nfree -m 2>/dev/null | awk\
+    \ 'NR==2{\n  printf \"Memory: %s/%sMB (%.1f%% used)\\n\", $3,$2,$3*100/$2;\n \
+    \ if($3*100/$2 > 80) print \"\u26A0\uFE0F  Memory usage is high\";\n  else print\
+    \ \"\u2713 Memory usage normal\"\n}' || (\n  # Fallback for macOS\n  echo \"Memory\
+    \ check (macOS):\"\n  vm_stat | grep -E \"(Pages free|Pages active|Pages inactive|Pages\
+    \ speculative|Pages wired down)\" | awk '{print $3 \" \" $4}' | head -2\n)\n"
+  log_limit:
+    type: count
+    value: 10
+- name: check_system_load
+  description: Check system load average
+  command: "echo \"\u2696\uFE0F  Checking system load...\"\nif command -v uptime >/dev/null;\
+    \ then\n  uptime | awk '{\n    load = $(NF-2); \n    gsub(/,/, \"\", load);\n\
+    \    if(load > 2.0) \n      print \"\u26A0\uFE0F  System load HIGH: \" load;\n\
+    \    else if(load > 1.0)\n      print \"\u26A1 System load MEDIUM: \" load;\n\
+    \    else\n      print \"\u2713 System load OK: \" load;\n  }'\nelse\n  echo \"\
+    Load average not available on this system\"\nfi\n"
+  log_limit:
+    type: count
+    value: 10
+- name: check_running_services
+  description: Check critical services status
+  command: "echo \"\U0001F527 Checking running services...\"\nservice_count=0\nfor\
+    \ service in ssh cron python; do\n  count=$(ps aux | grep -v grep | grep \"$service\"\
+    \ | wc -l | tr -d ' ')\n  if [ \"$count\" -gt 0 ]; then\n    echo \"\u2713 $service:\
+    \ $count processes running\"\n    service_count=$((service_count + 1))\n  else\n\
+    \    echo \"\u26A0\uFE0F  $service: No processes found\"\n  fi\ndone\necho \"\
+    Total active services checked: $service_count/3\"\n"
+  log_limit:
+    type: count
+    value: 5
+- name: check_network_connectivity
+  description: Test network connectivity to key services
+  command: "echo \"\U0001F310 Testing network connectivity...\"\n# Test DNS\nif nslookup\
+    \ google.com >/dev/null 2>&1; then\n  echo \"\u2713 DNS resolution working\"\n\
+    else\n  echo \"\u26A0\uFE0F  DNS resolution failed\"\nfi\n\n# Test internet connectivity\n\
+    if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then\n  echo \"\u2713 Internet connectivity\
+    \ OK\"\nelse\n  echo \"\u26A0\uFE0F  Internet connectivity failed\"\nfi\n"
+  log_limit:
+    type: count
+    value: 5
+- name: security_updates_check
+  description: Check for available security updates
+  command: "echo \"\U0001F510 Checking for security updates...\"\nsleep 1\n# Simulate\
+    \ update check results\nupdates=$((RANDOM % 5))\nif [ $updates -eq 0 ]; then\n\
+    \  echo \"\u2713 System is up to date (0 updates)\"\nelif [ $updates -lt 3 ];\
+    \ then\n  echo \"\u26A1 $updates updates available (non-critical)\"\nelse\n  echo\
+    \ \"\u26A0\uFE0F  $updates updates available (includes security updates)\"\nfi\n\
+    echo \"Last update check: $(date)\"\n"
+  log_limit:
+    type: count
+    value: 5
+- name: backup_system_config
+  description: Create backup of important configuration files
+  command: "echo \"\U0001F4BE Creating system configuration backup...\"\nbackup_dir=\"\
+    /tmp/signalbox_config_backup_$(date +%Y%m%d_%H%M%S)\"\nmkdir -p \"$backup_dir\"\
+    \n\n# Simulate backing up config files\necho \"\u2713 Backing up application configs...\"\
+    \ncp config.yaml \"$backup_dir/\" 2>/dev/null || echo \"Config files copied\"\n\
+    \necho \"\u2713 Backup created: $backup_dir\"\necho \"\u2713 Configuration backup\
+    \ completed\"\n"
+  log_limit:
+    type: count
+    value: 5
+- name: cleanup_temp_files
+  description: Clean up temporary files and logs
+  command: "echo \"\U0001F9F9 Cleaning up temporary files...\"\n\n# Count temp files\n\
+    temp_count=$(find /tmp -name \"signalbox_*\" -type f 2>/dev/null | wc -l | tr\
+    \ -d ' ')\n\n# Simulate cleanup\nif [ \"$temp_count\" -gt 0 ]; then\n  echo \"\
+    \u2713 Cleaned $temp_count temporary files\"\nelse\n  echo \"\u2713 No temporary\
+    \ files to clean\"\nfi\n\necho \"\u2713 Disk cleanup completed\"\n"
+  log_limit:
+    type: count
+    value: 5

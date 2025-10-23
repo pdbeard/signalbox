@@ -1,0 +1,27 @@
+# Basic Groups Examples
+#
+# ⚠️  IMPORTANT: These are EXAMPLE groups for getting started and learning.
+# These are safe to run and perfect for understanding signalbox basics!
+#
+# This file contains simple groups for getting started with signalbox.
+# These groups use basic scripts and demonstrate fundamental concepts:
+# - parallel execution for independent tasks
+# - scheduled execution (system group runs every 5 minutes)
+# - grouping related scripts together
+
+groups:
+- name: basic
+  description: Basic system info
+  execution: parallel
+  scripts:
+  - hello
+  - show_date
+  - current_dir
+- name: system
+  description: System monitoring
+  schedule: '*/5 * * * *'
+  execution: parallel
+  scripts:
+  - system_uptime
+  - disk_usage
+  - list_files

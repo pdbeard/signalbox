@@ -1,0 +1,79 @@
+# Deployment Pipeline Groups Examples
+#
+# ⚠️  IMPORTANT: These are EXAMPLE CI/CD pipelines for learning purposes.
+# Replace with your actual build tools, tests, and deployment commands!
+#
+# This file demonstrates CI/CD pipelines using serial execution with stop-on-error.
+# All groups use 'execution: serial' and 'stop_on_error: true' because:
+# - Order matters (can't deploy before tests pass)
+# - Dependencies exist (build requires successful tests)
+# - Safety is critical (stop immediately if any step fails)
+# - Each step validates the previous step succeeded
+#
+# Pipeline progression examples:
+# - ci_pipeline: Basic continuous integration (lint → scan → test → build)
+# - staging_deployment: Includes deployment and verification
+# - production_deployment: Full production pipeline with backups
+# - release_pipeline: Complete end-to-end release process
+#
+# IMPORTANT: These pipelines will STOP at the first failure, preventing
+# unsafe deployments or builds from proceeding.
+
+groups:
+- name: ci_pipeline
+  description: Continuous integration pipeline (stops on first failure)
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - lint_code
+  - security_scan
+  - run_tests
+  - build_project
+- name: full_ci_pipeline
+  description: Complete CI pipeline with performance tests
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - lint_code
+  - security_scan
+  - run_tests
+  - run_performance_tests
+  - build_project
+  - generate_documentation
+- name: staging_deployment
+  description: Deploy to staging environment with verification
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - run_tests
+  - security_scan
+  - build_project
+  - deploy_staging
+  - check_website_health
+- name: production_deployment
+  description: Critical production deployment pipeline
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - run_tests
+  - run_performance_tests
+  - security_scan
+  - backup_system_config
+  - build_project
+  - deploy_production
+  - check_website_health
+  - check_api_response_time
+- name: release_pipeline
+  description: Complete release pipeline (development to production)
+  execution: serial
+  stop_on_error: true
+  scripts:
+  - lint_code
+  - security_scan
+  - run_tests
+  - run_performance_tests
+  - build_project
+  - generate_documentation
+  - deploy_staging
+  - check_website_health
+  - deploy_production

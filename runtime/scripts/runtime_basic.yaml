@@ -1,0 +1,11 @@
+# Runtime state for basic.yaml - auto-generated, do not edit manually
+scripts:
+  hello:
+    last_run: '20251023_110219_413978'
+    last_status: success
+  current_dir:
+    last_run: '20251023_104209_383104'
+    last_status: success
+  show_date:
+    last_run: '20251023_104209_382369'
+    last_status: success

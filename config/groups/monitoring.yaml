@@ -1,0 +1,59 @@
+# Monitoring Groups Examples
+#
+# ⚠️  IMPORTANT: These are EXAMPLE monitoring groups for learning purposes.
+# Adjust schedules, scripts, and monitoring targets for your environment!
+#
+# This file demonstrates different monitoring strategies using parallel execution.
+# All groups use 'execution: parallel' to run multiple checks simultaneously,
+# which is ideal for monitoring because:
+# - Faster execution (all checks run at the same time)
+# - Scripts are independent (don't depend on each other)
+# - Better for frequent monitoring (every 2-15 minutes)
+#
+# Compare the schedule frequencies to see different monitoring patterns:
+# - health_check_fast: Every 2 minutes (critical services)
+# - system_health_parallel: Every 5 minutes (system resources) 
+# - comprehensive_web_monitoring: Every 10 minutes (detailed web checks)
+# - infrastructure_monitoring: Every 15 minutes (complete overview)
+
+groups:
+- name: health_check_fast
+  description: Quick parallel health checks for web services
+  execution: parallel
+  schedule: '*/2 * * * *'
+  scripts:
+  - check_website_health
+  - check_api_response_time
+  - check_dns_resolution
+- name: comprehensive_web_monitoring
+  description: Detailed web service monitoring with all checks
+  execution: parallel
+  schedule: '*/10 * * * *'
+  scripts:
+  - check_website_health
+  - check_api_response_time
+  - check_ssl_certificate
+  - check_dns_resolution
+  - check_api_json_response
+  - check_http_headers
+- name: system_health_parallel
+  description: Fast parallel system monitoring
+  execution: parallel
+  schedule: '*/5 * * * *'
+  scripts:
+  - check_disk_space
+  - check_memory_usage
+  - check_system_load
+  - check_running_services
+- name: infrastructure_monitoring
+  description: Complete infrastructure health check
+  execution: parallel
+  schedule: '*/15 * * * *'
+  scripts:
+  - check_disk_space
+  - check_memory_usage
+  - check_system_load
+  - check_running_services
+  - check_network_connectivity
+  - check_website_health
+  - check_api_response_time

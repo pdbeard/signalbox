@@ -14,14 +14,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 SCRIPTS_FILE = 'scripts.yaml'
 GROUPS_FILE = 'groups.yaml'
-CONFIG_FILE = 'config.yaml'  # Global settings
+CONFIG_FILE = 'config/signalbox.yaml'  # Global settings
 LOG_DIR = 'logs'
 
 # Global config cache
 _global_config = None
 
 def load_global_config():
-    """Load global configuration settings from config.yaml."""
+    """Load global configuration settings from config/signalbox.yaml."""
     global _global_config
     if _global_config is None:
         if os.path.exists(CONFIG_FILE):
@@ -85,6 +85,10 @@ def load_config():
                 except Exception as e:
                     click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
     
+    # Load runtime state and merge with config
+    runtime_state = load_runtime_state()
+    config = merge_config_with_runtime_state(config, runtime_state)
+    
     return config
 
 def save_config(config):
@@ -145,6 +149,139 @@ def save_config(config):
             for filepath, groups in files_to_save.items():
                 with open(filepath, 'w') as f:
                     yaml.dump({'groups': groups}, f, default_flow_style=False, sort_keys=False)
+
+def load_runtime_state():
+    """Load runtime state (last_run, last_status) from runtime directory."""
+    runtime_state = {'scripts': {}, 'groups': {}}
+    
+    # Load script runtime state
+    runtime_scripts_dir = 'runtime/scripts'
+    if os.path.exists(runtime_scripts_dir):
+        for filename in os.listdir(runtime_scripts_dir):
+            if filename.startswith('runtime_') and filename.endswith('.yaml'):
+                filepath = os.path.join(runtime_scripts_dir, filename)
+                try:
+                    with open(filepath, 'r') as f:
+                        data = yaml.safe_load(f)
+                        if data and 'scripts' in data:
+                            runtime_state['scripts'].update(data['scripts'])
+                except Exception as e:
+                    click.echo(f"Warning: Failed to load runtime state {filepath}: {e}", err=True)
+    
+    # Load group runtime state  
+    runtime_groups_dir = 'runtime/groups'
+    if os.path.exists(runtime_groups_dir):
+        for filename in os.listdir(runtime_groups_dir):
+            if filename.startswith('runtime_') and filename.endswith('.yaml'):
+                filepath = os.path.join(runtime_groups_dir, filename)
+                try:
+                    with open(filepath, 'r') as f:
+                        data = yaml.safe_load(f)
+                        if data and 'groups' in data:
+                            runtime_state['groups'].update(data['groups'])
+                except Exception as e:
+                    click.echo(f"Warning: Failed to load runtime state {filepath}: {e}", err=True)
+    
+    return runtime_state
+
+def save_script_runtime_state(script_name, source_file, last_run, last_status):
+    """Save runtime state for a script to the appropriate runtime file."""
+    # Determine runtime file based on source file
+    config_filename = os.path.basename(source_file)
+    config_basename = os.path.splitext(config_filename)[0]  # Remove .yaml extension
+    runtime_filename = f"runtime_{config_basename}.yaml"   # Add runtime_ prefix
+    runtime_filepath = os.path.join('runtime/scripts', runtime_filename)
+    
+    # Load existing runtime state for this file
+    runtime_data = {'scripts': {}}
+    if os.path.exists(runtime_filepath):
+        try:
+            with open(runtime_filepath, 'r') as f:
+                runtime_data = yaml.safe_load(f) or {'scripts': {}}
+        except Exception:
+            runtime_data = {'scripts': {}}
+    
+    # Update the specific script's runtime state
+    if 'scripts' not in runtime_data:
+        runtime_data['scripts'] = {}
+    
+    runtime_data['scripts'][script_name] = {
+        'last_run': last_run,
+        'last_status': last_status
+    }
+    
+    # Ensure runtime directory exists
+    os.makedirs(os.path.dirname(runtime_filepath), exist_ok=True)
+    
+    # Save runtime state with header comment
+    with open(runtime_filepath, 'w') as f:
+        f.write(f"# Runtime state for {config_filename} - auto-generated, do not edit manually\n")
+        yaml.dump(runtime_data, f, default_flow_style=False, sort_keys=False)
+
+def save_group_runtime_state(group_name, source_file, last_run, last_status, execution_time, scripts_total, scripts_successful):
+    """Save runtime state for a group to the appropriate runtime file."""
+    # Determine runtime file based on source file
+    config_filename = os.path.basename(source_file)
+    config_basename = os.path.splitext(config_filename)[0]  # Remove .yaml extension
+    runtime_filename = f"runtime_{config_basename}.yaml"   # Add runtime_ prefix
+    runtime_filepath = os.path.join('runtime/groups', runtime_filename)
+    
+    # Load existing runtime state for this file
+    runtime_data = {'groups': {}}
+    if os.path.exists(runtime_filepath):
+        try:
+            with open(runtime_filepath, 'r') as f:
+                runtime_data = yaml.safe_load(f) or {'groups': {}}
+        except Exception:
+            runtime_data = {'groups': {}}
+    
+    # Update the specific group's runtime state
+    if 'groups' not in runtime_data:
+        runtime_data['groups'] = {}
+    
+    # Get previous execution count or start at 0
+    prev_state = runtime_data['groups'].get(group_name, {})
+    execution_count = prev_state.get('execution_count', 0) + 1
+    
+    runtime_data['groups'][group_name] = {
+        'last_run': last_run,
+        'last_status': last_status,
+        'execution_time_seconds': execution_time,
+        'execution_count': execution_count,
+        'scripts_total': scripts_total,
+        'scripts_successful': scripts_successful,
+        'success_rate': round((scripts_successful / scripts_total * 100), 1) if scripts_total > 0 else 0.0
+    }
+    
+    # Ensure runtime directory exists
+    os.makedirs(os.path.dirname(runtime_filepath), exist_ok=True)
+    
+    # Save runtime state with header comment
+    with open(runtime_filepath, 'w') as f:
+        f.write(f"# Runtime state for {config_filename} - auto-generated, do not edit manually\n")
+        yaml.dump(runtime_data, f, default_flow_style=False, sort_keys=False)
+
+def merge_config_with_runtime_state(config, runtime_state):
+    """Merge user configuration with runtime state."""
+    # Add runtime state to scripts
+    for script in config['scripts']:
+        script_name = script['name']
+        if script_name in runtime_state['scripts']:
+            runtime_info = runtime_state['scripts'][script_name]
+            script['last_run'] = runtime_info.get('last_run', '')
+            script['last_status'] = runtime_info.get('last_status', 'not run')
+        else:
+            script['last_run'] = ''
+            script['last_status'] = 'not run'
+    
+    # Add runtime state to groups (if needed for future features)
+    for group in config['groups']:
+        group_name = group['name']
+        if group_name in runtime_state['groups']:
+            runtime_info = runtime_state['groups'][group_name]
+            # Add any group-level runtime state here in the future
+    
+    return config
 
 def ensure_log_dir(script_name):
     log_dir = get_config_value('paths.log_dir', LOG_DIR)
@@ -219,10 +356,15 @@ def run_script(name, config):
         rotate_logs(script)
         status = 'success' if result.returncode == 0 else 'failed'
         click.echo(f"Script {name} {status}. Log: {log_file}")
-        # Update last status
+        # Update runtime state only (don't touch user config files)
+        script_source_file = config['_script_sources'].get(name)
+        if script_source_file:
+            save_script_runtime_state(name, script_source_file, timestamp, status)
+        
+        # Update in-memory state for immediate display
         script['last_status'] = status
         script['last_run'] = timestamp
-        save_config(config)
+        
         return result.returncode == 0
     except subprocess.TimeoutExpired:
         click.echo(f"Script {name} timed out after {timeout} seconds")
@@ -302,12 +444,37 @@ def run_group(name):
     
     script_names = group['scripts']
     
+    # Track group execution timing and results
+    from datetime import datetime
+    start_time = datetime.now()
+    timestamp_format = get_config_value('logging.timestamp_format', '%Y%m%d_%H%M%S_%f')
+    timestamp = start_time.strftime(timestamp_format)
+    
     if execution_mode == 'parallel':
         # Parallel execution
-        run_group_parallel(script_names, config)
+        scripts_successful = run_group_parallel(script_names, config)
     else:
         # Serial execution
-        run_group_serial(script_names, config, stop_on_error)
+        scripts_successful = run_group_serial(script_names, config, stop_on_error)
+    
+    # Calculate execution time and save group runtime state
+    end_time = datetime.now()
+    execution_time = (end_time - start_time).total_seconds()
+    scripts_total = len(script_names)
+    
+    # Determine group status
+    if scripts_successful == scripts_total:
+        group_status = 'success'
+    elif scripts_successful > 0:
+        group_status = 'partial'  # Some scripts succeeded
+    else:
+        group_status = 'failed'   # All scripts failed
+    
+    # Save group runtime state
+    group_source_file = config['_group_sources'].get(name)
+    if group_source_file:
+        save_group_runtime_state(name, group_source_file, timestamp, group_status, 
+                                execution_time, scripts_total, scripts_successful)
     
     click.echo(f"Group {name} executed.")
 
@@ -343,23 +510,31 @@ def run_group_parallel(script_names, config):
     if success_count < len(results):
         failed = [name for name, success in results if not success]
         click.echo(f"  Failed: {', '.join(failed)}")
+    
+    return success_count
 
 def run_group_serial(script_names, config, stop_on_error):
     """Run scripts serially, optionally stopping on first error."""
+    success_count = 0
+    
     for script_name in script_names:
         script = next((s for s in config['scripts'] if s['name'] == script_name), None)
         if script:
             click.echo(f"Running {script_name}...")
             success = run_script(script_name, config)
             
-            if not success and stop_on_error:
+            if success:
+                success_count += 1
+            elif stop_on_error:
                 click.echo(f"⚠️  Script {script_name} failed. Stopping group execution (stop_on_error=true)")
-                return
+                return success_count
         else:
             click.echo(f"Script {script_name} not found in config")
             if stop_on_error:
                 click.echo(f"⚠️  Script {script_name} not found. Stopping group execution (stop_on_error=true)")
-                return
+                return success_count
+    
+    return success_count
 
 @cli.command()
 @click.argument('name')
@@ -514,10 +689,10 @@ def show_config():
     global_config = load_global_config()
     
     if not global_config:
-        click.echo("No global configuration found (config.yaml)")
+        click.echo("No global configuration found (config/signalbox.yaml)")
         return
     
-    click.echo("Global Configuration (config.yaml):\n")
+    click.echo("Global Configuration (config/signalbox.yaml):\n")
     click.echo(yaml.dump(global_config, default_flow_style=False, sort_keys=False))
 
 @cli.command()
