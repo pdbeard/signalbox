@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 signalbox - Script execution control and monitoring
-Control your scripts like a railway signal box controls trains
+https://github.com/pdbeard/signalbox/
 """
 
 import click

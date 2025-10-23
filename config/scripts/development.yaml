@@ -3,12 +3,6 @@
 # ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
 # These scripts are NOT meant for production use - they are educational tools!
 #
-# This file demonstrates CI/CD pipeline scripts for software development.
-# These scripts simulate common development workflow tasks:
-# - Running automated tests and quality checks  
-# - Building and packaging applications
-# - Deploying to staging and production environments
-# - Generating documentation and performance testing
 #
 # NOTE: All commands use 'echo' and 'sleep' for demonstration purposes.
 # In real usage, replace these with actual build tools, test runners, 

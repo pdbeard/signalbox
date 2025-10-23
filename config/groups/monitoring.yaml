@@ -4,17 +4,6 @@
 # These scripts are NOT meant for production use - they are educational tools!
 #
 # This file demonstrates different monitoring strategies using parallel execution.
-# All groups use 'execution: parallel' to run multiple checks simultaneously,
-# which is ideal for monitoring because:
-# - Faster execution (all checks run at the same time)
-# - Scripts are independent (don't depend on each other)
-# - Better for frequent monitoring (every 2-15 minutes)
-#
-# Compare the schedule frequencies to see different monitoring patterns:
-# - health_check_fast: Every 2 minutes (critical services)
-# - system_health_parallel: Every 5 minutes (system resources) 
-# - comprehensive_web_monitoring: Every 10 minutes (detailed web checks)
-# - infrastructure_monitoring: Every 15 minutes (complete overview)
 
 groups:
 - name: health_check_fast

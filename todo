@@ -1,1 +1,6 @@
 Make timeout an overridable config within the scripts config
+
+Log support - Count (number of runs), age (by days), and size (mb)?
+
+make better deployment section for scheduling documentation
+

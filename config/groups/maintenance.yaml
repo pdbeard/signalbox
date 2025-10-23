@@ -5,21 +5,6 @@
 #
 # This file shows various execution patterns and error handling strategies:
 #
-# SCHEDULED MAINTENANCE (stop_on_error: false):
-# - daily_maintenance & weekly_maintenance: Continue even if some tasks fail
-#   because partial maintenance is better than no maintenance
-#
-# DEMONSTRATION GROUPS (for learning signalbox behavior):
-# - error_handling_demo_stop: Shows how stop_on_error=true behaves
-#   → fail_test script will STOP execution, remaining scripts won't run
-# - error_handling_demo_continue: Shows how stop_on_error=false behaves  
-#   → fail_test script will FAIL but remaining scripts still run
-# - mixed_workload_demo: Shows parallel execution benefits with mixed timing
-#   → Fast and slow scripts run simultaneously instead of sequentially
-#
-# EMERGENCY SCENARIOS:
-# - emergency_response: Parallel execution for speed during incidents
-# - development_environment_setup: Serial with stop-on-error for reliability
 #
 # NOTE: The 'fail_test' script is INTENTIONALLY designed to fail (exit 1)
 # to demonstrate error handling - this is not a bug!
