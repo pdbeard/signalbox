@@ -5,60 +5,60 @@ echo "=== signalbox Test Suite ==="
 echo ""
 
 echo "1. Testing configuration display..."
-python main.py show-config | head -5
+python signalbox.py show-config | head -5
 echo "✓ show-config works"
 echo ""
 
 echo "2. Testing get-setting..."
-python main.py get-setting execution.default_timeout
-python main.py get-setting display.use_colors
+python signalbox.py get-setting execution.default_timeout
+python signalbox.py get-setting display.use_colors
 echo "✓ get-setting works"
 echo ""
 
 echo "3. Testing validation..."
-python main.py validate
+python signalbox.py validate
 echo "✓ validate works"
 echo ""
 
 echo "4. Testing list commands..."
-python main.py list | head -3
+python signalbox.py list | head -3
 echo "✓ list works"
 echo ""
 
-python main.py list-groups | head -5
+python signalbox.py list-groups | head -5
 echo "✓ list-groups works"
 echo ""
 
-python main.py list-schedules
+python signalbox.py list-schedules
 echo "✓ list-schedules works"
 echo ""
 
 echo "5. Testing script execution..."
-python main.py run hello
+python signalbox.py run hello
 echo "✓ run works"
 echo ""
 
 echo "6. Testing group execution..."
-python main.py run-group basic | head -3
+python signalbox.py run-group basic | head -3
 echo "✓ run-group works"
 echo ""
 
 echo "7. Testing log viewing..."
-python main.py logs hello | head -5
+python signalbox.py logs hello | head -5
 echo "✓ logs works"
 echo ""
 
 echo "8. Testing history..."
-python main.py history hello | head -3
+python signalbox.py history hello | head -3
 echo "✓ history works"
 echo ""
 
 echo "9. Testing export commands..."
-python main.py export-cron system | head -3
+python signalbox.py export-cron system | head -3
 echo "✓ export-cron works"
 echo ""
 
-python main.py export-systemd daily | head -5
+python signalbox.py export-systemd daily | head -5
 echo "✓ export-systemd works"
 echo ""
 

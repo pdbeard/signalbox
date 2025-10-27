@@ -14,7 +14,7 @@ signalbox is a CLI tool for managing, executing, and monitoring scripts with det
 ## Installation
 1. Install Python 3.8+
 2. `pip install -r requirements.txt`
-3. Run `python main.py --help`
+3. Run `python signalbox.py --help`
 
 ## DEMO VID? 
 
@@ -195,7 +195,7 @@ Generate systemd files for a scheduled group:
 
 ```bash
 # Generate files (creates systemd/<group>/ directory)
-python main.py export-systemd daily
+python signalbox.py export-systemd daily
 
 # Install (requires root)
 sudo cp systemd/daily/signalbox-daily.service systemd/daily/signalbox-daily.timer /etc/systemd/system/
@@ -211,7 +211,7 @@ sudo systemctl status signalbox-daily.timer
 
 For user-level (no root):
 ```bash
-python main.py export-systemd daily --user
+python signalbox.py export-systemd daily --user
 ```
 
 ### Option 2: cron 
@@ -220,7 +220,7 @@ Generate crontab entry:
 
 ```bash
 # Generate entry (creates cron/<group>/ directory)
-python main.py export-cron daily
+python signalbox.py export-cron daily
 
 # Add to crontab
 crontab -e
@@ -233,7 +233,7 @@ crontab -e
 Before deploying schedules, validate your configuration:
 
 ```bash
-python main.py validate
+python signalbox.py validate
 ```
 
 This checks for:
@@ -266,7 +266,7 @@ Comprehensive guides are available in the `documentation/` directory:
 - Check crontab: `crontab -l`
 
 ### Configuration errors
-- Run `python main.py validate` to check for issues
+- Run `python signalbox.py validate` to check for issues
 - Verify YAML syntax
 - Ensure script names match between scripts and groups
 

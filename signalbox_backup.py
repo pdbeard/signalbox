@@ -765,7 +765,7 @@ After=network.target
 [Service]
 Type=oneshot
 WorkingDirectory={script_dir}
-ExecStart={python_exec} {os.path.join(script_dir, 'main.py')} run-group {group_name}
+ExecStart={python_exec} {os.path.join(script_dir, 'signalbox.py')} run-group {group_name}
 StandardOutput=journal
 StandardError=journal
 
@@ -851,7 +851,7 @@ def export_cron(group_name):
     if not os.path.exists(python_exec):
         python_exec = 'python3'
     
-    cron_line = f"{group['schedule']} cd {script_dir} && {python_exec} main.py run-group {group_name}"
+    cron_line = f"{group['schedule']} cd {script_dir} && {python_exec} signalbox.py run-group {group_name}"
     cron_file = os.path.join(export_dir, f"{group_name}.cron")
     
     # Write to file

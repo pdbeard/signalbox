@@ -93,7 +93,7 @@ See [FILE_STRUCTURE.md](FILE_STRUCTURE.md) for directory organization examples.
 ### Validate Configuration
 
 ```bash
-python main.py validate
+python signalbox.py validate
 ```
 
 Shows configuration summary and validates all YAML files.
