@@ -26,6 +26,6 @@
     signalbox<tspan fill="#38BDF8">_</tspan>
   </text>
   <text x="420" y="330" font-family="monospace" font-weight="bold" font-size="30" fill="#94A3B8">
-    //CLI_TOOL
+    //RUN + &amp; MONITOR + SCHEDULE SCRIPTS
   </text>
 </svg>
