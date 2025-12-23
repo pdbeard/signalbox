@@ -2,6 +2,26 @@
 
 The `config/signalbox.yaml` file contains global settings that affect how signalbox operates. This file is separate from your scripts and groups configuration.
 
+## Configuration Location
+
+Signalbox searches for configuration in this order:
+1. **`$SIGNALBOX_HOME`** - Environment variable pointing to config directory
+2. **`~/.config/signalbox/`** - User configuration directory (recommended for system-wide installations)
+3. **Current working directory** - For development or project-specific setups
+
+Example setup for system-wide use:
+```bash
+# Create config directory
+mkdir -p ~/.config/signalbox
+
+# Copy your configuration
+cp -r config ~/.config/signalbox/
+cp -r scripts ~/.config/signalbox/  # if applicable
+
+# Or set custom location
+export SIGNALBOX_HOME=/path/to/your/config
+```
+
 ## Configuration Structure
 
 ```yaml
@@ -10,9 +30,9 @@ default_log_limit:
   value: 10        # Number of logs or days to keep
 
 paths:
-  log_dir: logs                  # Where to store log files
-  scripts_file: config/scripts   # Path to scripts directory
-  groups_file: config/groups     # Path to groups directory
+  log_dir: logs                  # Where to store log files (relative to config home)
+  scripts_file: config/scripts   # Path to scripts directory (relative to config home)
+  groups_file: config/groups     # Path to groups directory (relative to config home)
 
 execution:
   default_timeout: 300           # Script timeout in seconds (0 = no timeout)
@@ -26,6 +46,8 @@ logging:
 display:
   date_format: '%Y-%m-%d %H:%M:%S'  # Format for displaying dates
 ```
+
+**Note:** All paths in the configuration are resolved relative to the configuration home directory (where `config/signalbox.yaml` is located), unless specified as absolute paths.
 
 ## Key Settings
 
@@ -93,7 +115,7 @@ See [FILE_STRUCTURE.md](FILE_STRUCTURE.md) for directory organization examples.
 ### Validate Configuration
 
 ```bash
-python main.py validate
+python signalbox.py validate
 ```
 
 Shows configuration summary and validates all YAML files.

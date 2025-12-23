@@ -97,18 +97,18 @@ After defining schedules in config.yaml:
 
 ```bash
 # Validate configuration
-python main.py validate
+python signalbox.py validate
 
 # List all schedules
-python main.py list-schedules
+python signalbox.py list-schedules
 
 # Generate systemd files for each scheduled group
-python main.py export-systemd monitoring
-python main.py export-systemd daily-maintenance
-python main.py export-systemd critical-backup-15min
+python signalbox.py export-systemd monitoring
+python signalbox.py export-systemd daily-maintenance
+python signalbox.py export-systemd critical-backup-15min
 
 # Or generate crontab entries
-python main.py export-cron monitoring >> my-crontab
-python main.py export-cron daily-maintenance >> my-crontab
+python signalbox.py export-cron monitoring >> my-crontab
+python signalbox.py export-cron daily-maintenance >> my-crontab
 crontab my-crontab
 ```

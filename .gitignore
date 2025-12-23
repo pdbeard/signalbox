@@ -8,6 +8,14 @@ venv/
 env/
 ENV/
 
+# Packaging/build
+build/
+dist/
+*.egg-info
+
+# Environment files
+.env
+
 # Logs
 logs/
 *.log
@@ -38,3 +46,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Project documentation (ignore AGENTS.md)
+AGENTS.md

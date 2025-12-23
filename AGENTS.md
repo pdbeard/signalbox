@@ -1,39 +1,27 @@
-# Agent Guide for signalbox
+# AGENTS.md
 
-## Build/Test Commands
-- **Run CLI**: `python signalbox.py <command>` (entry point wraps `core/cli_commands.py`)
-- **Test all commands**: `./test_all.sh` (comprehensive test of all CLI commands)
-- **Validate config**: `python signalbox.py validate`
-- **No formal test suite**: No pytest/unittest currently - use manual testing via CLI
+## Build, Lint, and Test Commands
+- Install for users: `pip install . --user`
+- Install for development: `pip install -e ".[dev]"`
+- Initialize config: `signalbox init`
+- Run all tests: `bash test_all.sh`
+- Run a single script: `signalbox run <script_name>`
+- Run a group: `signalbox run-group <group_name>`
+- Validate config: `signalbox validate`
+- Lint (recommended): `flake8 .` or `black .`
 
 ## Code Style Guidelines
+- **Imports:** Standard library first, then third-party, then local modules
+- **Formatting:** Follow PEP8, prefer `black` formatting (4 spaces, max line length 88/120)
+- **Types:** No type hints required, but use clear variable names and docstrings
+- **Naming:** Use snake_case for variables/functions, UPPER_CASE for constants
+- **Error Handling:** Use try/except, print errors with `click.echo`, fail gracefully
+- **Configuration:** Use YAML for config, scripts, and groups; validate with CLI
+- **Logging:** Store logs in `logs/`, rotate by count or age
+- **CLI:** Expose commands via `click` decorators
+- **Contributing:** Document new features, update validation logic, keep README up to date
 
-### Structure
-- Main entry: `signalbox.py` imports from `core/` module
-- Core modules: `cli_commands.py`, `config.py`, `executor.py`, `runtime.py`, `notification.py`
-- Config files: `config/signalbox.yaml` (settings), `config/scripts/*.yaml`, `config/groups/*.yaml`
-
-### Imports
-- Standard library first, third-party (click, yaml) second, local imports last
-- Use relative imports for core modules: `from .config import load_config`
-
-### Formatting
-- Tabs for indentation (not spaces - check existing files)
-- Simple, functional style - no complex OOP
-- Click decorators for CLI commands: `@cli.command()`, `@click.argument('name')`
-
-### Error Handling
-- Use click.echo() for user messages (not print)
-- Warnings to stderr: `click.echo(msg, err=True)`
-- Graceful failures: return False/None on errors, don't crash
-
-### Naming
-- Functions: snake_case (`run_script`, `load_config`)
-- Files: snake_case (`cli_commands.py`)
-- YAML keys: snake_case (`default_timeout`, `stop_on_error`)
-
-## Project Specific
-- Python 3.8+ required
-- Dependencies: click>=8.0.0, PyYAML>=5.4.0
-- Configuration uses dot notation: `get_config_value('execution.default_timeout', 300)`
-- All script/group definitions loaded from directories (not single files)
+## Agent/Copilot Rules
+- Communicate concisely and systematically
+- Work through checklist items methodically
+- Follow development best practices

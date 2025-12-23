@@ -11,7 +11,7 @@ signalbox/
 ├── groups/            # Group definitions directory
 │   ├── *.yaml         # Any and all group definition files
 ├── signalbox.yaml     # Global configuration
-├── main.py            # CLI application
+├── signalbox.py            # CLI application
 └── logs/              # Execution logs
 ```
 

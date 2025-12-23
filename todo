@@ -4,3 +4,10 @@ Log support - Count (number of runs), age (by days), and size (mb)?
 
 make better deployment section for scheduling documentation
 
+automate cron and systemd configs
+    - workflow = Generates configs, user can review them and choose not to install them or install them 
+    -Function to generate configs and save them 
+        - prompts user to look at them or to just install them (possible dry-run mode sort of implementation?)
+    -Function to automatically install cron or systemd (give a choice or preference?)
+        - can be called directly from the script if a user selects y, or can be called directly from a script --argument 
+    

@@ -1,4 +1,5 @@
-# signalbox 🚦
+![signalbox logo](logo_ideas/event-portal-blocks.svg)
+# signalbox 
 signalbox is a CLI tool for managing, executing, and monitoring scripts with detailed logging, scheduling, and group execution capabilities. 
 
 ## Main Features
@@ -12,13 +13,66 @@ signalbox is a CLI tool for managing, executing, and monitoring scripts with det
 
 
 ## Installation
-1. Install Python 3.8+
-2. `pip install -r requirements.txt`
-3. Run `python main.py --help`
+
+### Quick Install (Recommended)
+For user-level installation (no root required):
+```bash
+pip install . --user
+```
+
+This installs signalbox and all dependencies, making the `signalbox` command available in your PATH.
+
+**Note:** If you get "command not found" after installation, ensure `~/.local/bin` is in your PATH:
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+Add this to your `~/.bashrc` or `~/.zshrc` to make it permanent.
+
+### Initialize Configuration
+After installation, set up your configuration directory:
+```bash
+signalbox init
+```
+
+This creates `~/.config/signalbox/` with:
+- Default configuration file (`config/signalbox.yaml`)
+- Example scripts directory (`config/scripts/`)
+- Example groups directory (`config/groups/`)
+- Log directory (`logs/`)
+- Runtime state directory (`runtime/`)
+
+**You can now run `signalbox` from any directory on your system!**
+
+### Configuration Location
+Signalbox looks for configuration in the following order:
+1. **`$SIGNALBOX_HOME`** - Custom location via environment variable
+2. **`~/.config/signalbox/`** - User configuration directory (created by `signalbox init`)
+3. **Current directory** - For development or project-specific configurations
+
+**Custom location example:**
+```bash
+export SIGNALBOX_HOME=/path/to/your/config
+signalbox list  # Uses config from custom location
+```
+
+### Development Install
+For development with editable install and dev tools:
+```bash
+pip install -e ".[dev]"
+```
+
+When developing, you can run directly from the project directory without `signalbox init`:
+```bash
+cd /path/to/signalbox
+python signalbox.py list  # Uses config/ in current directory
+```
 
 ## DEMO VID? 
 
 ## Commands
+
+### Setup
+- `init` - Initialize configuration in ~/.config/signalbox/ (run once after installation)
 
 ### Script Management
 - `list` - Show all scripts with status and last run time
@@ -195,7 +249,7 @@ Generate systemd files for a scheduled group:
 
 ```bash
 # Generate files (creates systemd/<group>/ directory)
-python main.py export-systemd daily
+python signalbox.py export-systemd daily
 
 # Install (requires root)
 sudo cp systemd/daily/signalbox-daily.service systemd/daily/signalbox-daily.timer /etc/systemd/system/
@@ -211,7 +265,7 @@ sudo systemctl status signalbox-daily.timer
 
 For user-level (no root):
 ```bash
-python main.py export-systemd daily --user
+python signalbox.py export-systemd daily --user
 ```
 
 ### Option 2: cron 
@@ -220,7 +274,7 @@ Generate crontab entry:
 
 ```bash
 # Generate entry (creates cron/<group>/ directory)
-python main.py export-cron daily
+python signalbox.py export-cron daily
 
 # Add to crontab
 crontab -e
@@ -233,7 +287,7 @@ crontab -e
 Before deploying schedules, validate your configuration:
 
 ```bash
-python main.py validate
+python signalbox.py validate
 ```
 
 This checks for:
@@ -266,7 +320,7 @@ Comprehensive guides are available in the `documentation/` directory:
 - Check crontab: `crontab -l`
 
 ### Configuration errors
-- Run `python main.py validate` to check for issues
+- Run `python signalbox.py validate` to check for issues
 - Verify YAML syntax
 - Ensure script names match between scripts and groups
 

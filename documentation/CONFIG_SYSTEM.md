@@ -32,21 +32,21 @@ Organize scripts into groups and define when they run
 
 ```bash
 # Show all global settings
-python main.py show-config
+python signalbox.py show-config
 
 # Get a specific setting
 # See Reference Table
-python main.py get-setting execution.default_timeout 
+python signalbox.py get-setting execution.default_timeout 
 
 # Get nested objects
-python main.py get-setting execution
+python signalbox.py get-setting execution
 ```
 
 ### Validate Configuration
 
 ```bash
 # Check all config files for errors
-python main.py validate
+python signalbox.py validate
 ```
 
 The validate command now:

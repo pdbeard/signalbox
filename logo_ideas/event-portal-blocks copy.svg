@@ -1,0 +1,26 @@
+<svg width="1200" height="420" viewBox="0 0 1200 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="420" fill="#1E293B"/>
+  
+  <!-- Isometric Blocks Icon -->
+  <g transform="translate(100, 120)">
+    <path d="M150 50 L250 100 L150 150 L50 100 Z" fill="#38BDF8"/>
+    <path d="M50 100 L150 150 V250 L50 200 Z" fill="#0284C7"/>
+    <path d="M250 100 L250 200 L150 250 V150 Z" fill="#0EA5E9"/>
+    
+    <!-- Floating blocks above (Traffic Light) -->
+    <!-- Green (Bottom) -->
+    <path d="M150 10 L210 40 L150 70 L90 40 Z" fill="#22C55E" opacity="0.9"/>
+    <!-- Yellow (Middle) -->
+    <path d="M150 -25 L210 5 L150 35 L90 5 Z" fill="#EAB308" opacity="0.9"/>
+    <!-- Red (Top) -->
+    <path d="M150 -60 L210 -30 L150 0 L90 -30 Z" fill="#EF4444" opacity="0.9"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="420" y="275" font-family="monospace" font-weight="bold" font-size="100" fill="#F8FAFC">
+    signalbox<tspan fill="#38BDF8">_</tspan>
+  </text>
+  <text x="420" y="330" font-family="monospace" font-weight="bold" font-size="30" fill="#94A3B8">
+    //CLI_TOOL
+  </text>
+</svg>
