@@ -8,6 +8,14 @@ venv/
 env/
 ENV/
 
+# Packaging/build
+build/
+dist/
+*.egg-info
+
+# Environment files
+.env
+
 # Logs
 logs/
 *.log

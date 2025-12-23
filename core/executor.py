@@ -5,11 +5,12 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import click
 
-from .config import get_config_value
+from .config import get_config_value, resolve_path
 from .runtime import save_script_runtime_state, save_group_runtime_state
 
 def ensure_log_dir(script_name):
 	log_dir = get_config_value('paths.log_dir', 'logs')
+	log_dir = resolve_path(log_dir)
 	script_log_dir = os.path.join(log_dir, script_name)
 	if not os.path.exists(script_log_dir):
 		os.makedirs(script_log_dir)
@@ -17,6 +18,7 @@ def ensure_log_dir(script_name):
 def rotate_logs(script):
 	name = script['name']
 	log_dir = get_config_value('paths.log_dir', 'logs')
+	log_dir = resolve_path(log_dir)
 	script_log_dir = os.path.join(log_dir, name)
 	if not os.path.exists(script_log_dir):
 		return
@@ -45,6 +47,7 @@ def run_script(name, config):
 	timestamp_format = get_config_value('logging.timestamp_format', '%Y%m%d_%H%M%S_%f')
 	timestamp = datetime.now().strftime(timestamp_format)
 	log_dir = get_config_value('paths.log_dir', 'logs')
+	log_dir = resolve_path(log_dir)
 	log_file = os.path.join(log_dir, name, f"{timestamp}.log")
 	timeout = get_config_value('execution.default_timeout', 300)
 	if timeout == 0:
