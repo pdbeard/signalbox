@@ -1,5 +1,8 @@
 Make timeout an overridable config within the scripts config
 
+Make some working default scripts (have them optionally read in config, something like, enable demo scritps or something, off by default i think is best)
+
+
 Log support - Count (number of runs), age (by days), and size (mb)?
 
 make better deployment section for scheduling documentation
