@@ -4,14 +4,114 @@
 import click
 from datetime import datetime
 import os
+import shutil
+import yaml
 
-from .config import load_config, get_config_value
+from .config import load_config, get_config_value, find_config_home, load_global_config
 from .executor import run_script, run_group_parallel, run_group_serial
+from .runtime import save_group_runtime_state
+from . import log_manager
+from . import validator
+from . import exporters
 
 @click.group()
 def cli():
 	"""signalbox - Script execution control and monitoring."""
 	pass
+
+@cli.command()
+def init():
+	"""Initialize signalbox configuration in ~/.config/signalbox/"""
+	config_dir = os.path.expanduser('~/.config/signalbox')
+	
+	if os.path.exists(config_dir):
+		click.echo(f"Configuration directory already exists: {config_dir}")
+		if not click.confirm("Do you want to reinitialize (this will backup existing config)?"):
+			return
+		# Backup existing config
+		backup_dir = f"{config_dir}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+		shutil.move(config_dir, backup_dir)
+		click.echo(f"Backed up existing config to: {backup_dir}")
+	
+	# Find the installed package's config templates
+	# Try to locate the original config from the package installation
+	try:
+		import pkg_resources
+		package_path = pkg_resources.resource_filename('signalbox', '')
+		template_config = os.path.join(os.path.dirname(package_path), 'config')
+		
+		# If not found, try relative to this file (for development)
+		if not os.path.exists(template_config):
+			current_file_dir = os.path.dirname(os.path.abspath(__file__))
+			template_config = os.path.join(os.path.dirname(current_file_dir), 'config')
+	except:
+		# Fallback to relative path from current module
+		current_file_dir = os.path.dirname(os.path.abspath(__file__))
+		template_config = os.path.join(os.path.dirname(current_file_dir), 'config')
+	
+	if os.path.exists(template_config):
+		# Copy the entire config directory
+		shutil.copytree(template_config, os.path.join(config_dir, 'config'))
+		click.echo(f"✓ Created configuration directory: {config_dir}")
+		click.echo(f"✓ Copied default config from: {template_config}")
+	else:
+		# Create minimal structure if template not found
+		os.makedirs(config_dir, exist_ok=True)
+		os.makedirs(os.path.join(config_dir, 'config/scripts'), exist_ok=True)
+		os.makedirs(os.path.join(config_dir, 'config/groups'), exist_ok=True)
+		
+		# Create minimal signalbox.yaml
+		default_config = {
+			'default_log_limit': {'type': 'count', 'value': 10},
+			'paths': {
+				'log_dir': 'logs',
+				'scripts_file': 'config/scripts',
+				'groups_file': 'config/groups'
+			},
+			'execution': {
+				'default_timeout': 300,
+				'capture_stdout': True,
+				'capture_stderr': True,
+				'max_parallel_workers': 5
+			},
+			'logging': {'timestamp_format': '%Y%m%d_%H%M%S_%f'},
+			'display': {'date_format': '%Y-%m-%d %H:%M:%S'}
+		}
+		
+		with open(os.path.join(config_dir, 'config/signalbox.yaml'), 'w') as f:
+			yaml.dump(default_config, f, default_flow_style=False, sort_keys=False)
+		
+		# Create example script
+		example_script = {
+			'scripts': [
+				{
+					'name': 'hello',
+					'command': 'echo "Hello from signalbox!"',
+					'description': 'Example script'
+				}
+			]
+		}
+		with open(os.path.join(config_dir, 'config/scripts/example.yaml'), 'w') as f:
+			yaml.dump(example_script, f, default_flow_style=False, sort_keys=False)
+		
+		click.echo(f"✓ Created minimal configuration: {config_dir}")
+	
+	# Create logs and runtime directories
+	os.makedirs(os.path.join(config_dir, 'logs'), exist_ok=True)
+	os.makedirs(os.path.join(config_dir, 'runtime/scripts'), exist_ok=True)
+	os.makedirs(os.path.join(config_dir, 'runtime/groups'), exist_ok=True)
+	
+	click.echo(f"✓ Created logs directory: {config_dir}/logs")
+	click.echo(f"✓ Created runtime directory: {config_dir}/runtime")
+	click.echo()
+	click.echo("🎉 Signalbox initialized successfully!")
+	click.echo()
+	click.echo("Next steps:")
+	click.echo(f"  1. Review configuration: {config_dir}/config/signalbox.yaml")
+	click.echo(f"  2. Add your scripts: {config_dir}/config/scripts/")
+	click.echo(f"  3. Run: signalbox list")
+	click.echo()
+	click.echo("You can now run signalbox from any directory!")
 
 @cli.command()
 def list():
@@ -85,3 +185,252 @@ def run_group(name):
 		group_status = 'failed'
 	# Saving group runtime state is handled in runtime.py
 	click.echo(f"Group {name} executed.")
+
+@cli.command()
+@click.argument('name')
+def logs(name):
+	"""Show the latest log for a script."""
+	config = load_config()
+	script = next((s for s in config['scripts'] if s['name'] == name), None)
+	if not script:
+		click.echo(f"Script {name} not found")
+		return
+	
+	log_path, exists = log_manager.get_latest_log(name)
+	if not exists:
+		click.echo("No logs found")
+		return
+	
+	# Use display settings from global config
+	include_paths = get_config_value('display.include_paths', False)
+	show_colors = get_config_value('display.colors', True)
+	
+	if include_paths:
+		click.echo(f"Log file: {log_path}")
+		click.echo("=" * 50)
+	
+	content = log_manager.read_log_content(log_path)
+	formatted_lines = log_manager.format_log_with_colors(content, show_colors)
+	
+	for line, color in formatted_lines:
+		if color:
+			click.echo(click.style(line, fg=color))
+		else:
+			click.echo(line)
+
+@cli.command()
+@click.argument('name')
+def history(name):
+	"""Show all log files for a script."""
+	config = load_config()
+	script = next((s for s in config['scripts'] if s['name'] == name), None)
+	if not script:
+		click.echo(f"Script {name} not found")
+		return
+	
+	log_info, exists = log_manager.get_log_history(name)
+	if not exists:
+		click.echo("No history found")
+		return
+	
+	# Use display settings from global config
+	include_paths = get_config_value('display.include_paths', False)
+	date_format = get_config_value('display.date_format', '%Y-%m-%d %H:%M:%S')
+	
+	script_log_dir = log_manager.get_script_log_dir(name)
+	path_info = f" ({script_log_dir})" if include_paths else ""
+	click.echo(f"History for {name}{path_info}:")
+	
+	for filename, mtime in log_info:
+		time_str = datetime.fromtimestamp(mtime).strftime(date_format)
+		click.echo(f"  {filename} - {time_str}")
+
+@cli.command()
+@click.argument('name')
+def clear_logs(name):
+	"""Clear all logs for a specific script."""
+	config = load_config()
+	script = next((s for s in config['scripts'] if s['name'] == name), None)
+	if not script:
+		click.echo(f"Script {name} not found")
+		return
+	
+	if log_manager.clear_script_logs(name):
+		click.echo(f"Cleared logs for {name}")
+	else:
+		click.echo(f"No logs found for {name}")
+
+@cli.command()
+def clear_all_logs():
+	"""Clear all logs for all scripts."""
+	if log_manager.clear_all_logs():
+		click.echo("Cleared all logs")
+	else:
+		click.echo("No logs directory found")
+
+@cli.command()
+def list_groups():
+	"""List all available groups and their scripts."""
+	config = load_config()
+	groups = config.get('groups', [])
+	if not groups:
+		click.echo("No groups defined.")
+		return
+	for group in groups:
+		schedule_info = f" [scheduled: {group['schedule']}]" if 'schedule' in group else ""
+		execution_mode = group.get('execution', 'serial')
+		stop_on_error = group.get('stop_on_error', False)
+		
+		# Build execution info
+		exec_info = f" [execution: {execution_mode}"
+		if execution_mode == 'serial' and stop_on_error:
+			exec_info += ", stop_on_error"
+		exec_info += "]"
+		
+		click.echo(f"Group: {group['name']} - {group.get('description', '')}{schedule_info}{exec_info}")
+		click.echo("  Scripts:")
+		for script_name in group.get('scripts', []):
+			click.echo(f"    - {script_name}")
+		click.echo("")
+
+@cli.command()
+def show_config():
+	"""Show global configuration settings."""
+	global_config = load_global_config()
+	
+	if not global_config:
+		click.echo("No global configuration found (config/signalbox.yaml)")
+		return
+	
+	click.echo("Global Configuration (config/signalbox.yaml):\n")
+	click.echo(yaml.dump(global_config, default_flow_style=False, sort_keys=False))
+
+@cli.command()
+@click.argument('key')
+def get_setting(key):
+	"""Get a specific configuration value (use dot notation, e.g., 'execution.default_timeout')."""
+	value = get_config_value(key)
+	if value is None:
+		click.echo(f"Setting '{key}' not found")
+	else:
+		click.echo(f"{key}: {value}")
+
+@cli.command()
+def list_schedules():
+	"""List all scheduled groups with their cron schedules."""
+	config = load_config()
+	groups = config.get('groups', [])
+	scheduled = [g for g in groups if 'schedule' in g]
+	
+	if not scheduled:
+		click.echo("No scheduled groups defined.")
+		return
+	
+	click.echo("Scheduled Groups:")
+	for group in scheduled:
+		script_count = len(group.get('scripts', []))
+		click.echo(f"\n  {group['name']}")
+		click.echo(f"    Schedule: {group['schedule']}")
+		click.echo(f"    Description: {group.get('description', 'N/A')}")
+		click.echo(f"    Scripts: {script_count}")
+		for script_name in group.get('scripts', []):
+			click.echo(f"      - {script_name}")
+
+@cli.command()
+@click.argument('group_name')
+@click.option('--user', is_flag=True, help='Generate for user systemd (not system-wide)')
+def export_systemd(group_name, user):
+	"""Generate systemd service and timer files for a scheduled group."""
+	config = load_config()
+	groups = config.get('groups', [])
+	group = next((g for g in groups if g['name'] == group_name), None)
+	
+	result = exporters.export_systemd(group, group_name)
+	
+	if not result.success:
+		click.echo(f"Error: {result.error}")
+		return
+	
+	# Show generated files
+	for file_path in result.files:
+		click.echo(f"✓ Generated {file_path}")
+	
+	# Show installation instructions
+	click.echo("")
+	instructions = exporters.get_systemd_install_instructions(
+		result.files[0], result.files[1], group_name, user
+	)
+	for instruction in instructions:
+		click.echo(instruction)
+
+@cli.command()
+@click.argument('group_name')
+def export_cron(group_name):
+	"""Generate crontab entry for a scheduled group."""
+	config = load_config()
+	groups = config.get('groups', [])
+	group = next((g for g in groups if g['name'] == group_name), None)
+	
+	result = exporters.export_cron(group, group_name)
+	
+	if not result.success:
+		click.echo(f"Error: {result.error}")
+		return
+	
+	# Show generated file
+	click.echo(f"✓ Generated {result.files[0]}")
+	click.echo("")
+	
+	# Show installation instructions
+	instructions = exporters.get_cron_install_instructions(
+		result.files[0], result.cron_entry, group
+	)
+	for instruction in instructions:
+		click.echo(instruction)
+
+@cli.command()
+def validate():
+	"""Validate configuration files for errors."""
+	result = validator.validate_configuration()
+	
+	# Show which files are being validated
+	if result.files_used:
+		click.echo(f"Validating: {', '.join(result.files_used)}\n")
+	
+	# Show errors
+	if result.errors:
+		click.echo("❌ Errors found:")
+		for error in result.errors:
+			click.echo(f"  - {error}")
+	
+	# Show warnings
+	if result.warnings:
+		click.echo("\n⚠️  Warnings:")
+		for warning in result.warnings:
+			click.echo(f"  - {warning}")
+		
+		strict_mode = get_config_value('validation.strict', False)
+		if strict_mode:
+			click.echo("\n❌ Validation failed (strict mode enabled)")
+			return False
+	
+	# Show success message
+	if not result.has_issues:
+		click.echo("✓ Configuration is valid")
+	elif not result.errors:
+		click.echo("\n✓ No errors found (warnings only)")
+	
+	# Show summary
+	if result.config and not result.has_issues:
+		summary = validator.get_validation_summary(result)
+		click.echo(f"\nSummary:")
+		click.echo(f"  Scripts: {summary.get('scripts', 0)}")
+		click.echo(f"  Groups: {summary.get('groups', 0)}")
+		click.echo(f"  Scheduled groups: {summary.get('scheduled_groups', 0)}")
+		
+		if 'default_timeout' in summary:
+			click.echo(f"  Default timeout: {summary['default_timeout']}s")
+			log_limit = summary.get('default_log_limit', {})
+			click.echo(f"  Default log limit: {log_limit.get('type', 'count')} = {log_limit.get('value', 10)}")
+	
+	return result.is_valid
