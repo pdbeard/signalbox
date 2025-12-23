@@ -9,7 +9,7 @@ import yaml
 
 from .config import load_config, get_config_value, load_global_config
 from .executor import run_script, run_group_parallel, run_group_serial
-from .runtime import save_group_runtime_state
+from .runtime import save_group_runtime_state, load_runtime_state, merge_config_with_runtime_state
 from . import log_manager
 from . import validator
 from . import exporters
@@ -117,6 +117,9 @@ def init():
 def list():
 	"""List all scripts and their status."""
 	config = load_config()
+	runtime_state = load_runtime_state()
+	config = merge_config_with_runtime_state(config, runtime_state)
+	
 	date_format = get_config_value('display.date_format', '%Y-%m-%d %H:%M:%S')
 	for script in config['scripts']:
 		status = script.get('last_status', 'not run')
@@ -183,7 +186,20 @@ def run_group(name):
 		group_status = 'partial'
 	else:
 		group_status = 'failed'
-	# Saving group runtime state is handled in runtime.py
+	
+	# Save group runtime state
+	group_source_file = config['_group_sources'].get(name)
+	if group_source_file:
+		save_group_runtime_state(
+			group_name=name,
+			source_file=group_source_file,
+			last_run=timestamp,
+			last_status=group_status,
+			execution_time=execution_time,
+			scripts_total=scripts_total,
+			scripts_successful=scripts_successful
+		)
+	
 	click.echo(f"Group {name} executed.")
 
 @cli.command()
