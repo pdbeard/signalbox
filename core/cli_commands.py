@@ -7,7 +7,7 @@ import os
 import shutil
 import yaml
 
-from .config import load_config, get_config_value, find_config_home, load_global_config
+from .config import load_config, get_config_value, load_global_config
 from .executor import run_script, run_group_parallel, run_group_serial
 from .runtime import save_group_runtime_state
 from . import log_manager

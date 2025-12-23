@@ -1,79 +1,83 @@
 #!/bin/bash
 # Comprehensive test of all signalbox commands
 
+# Find Python executable
+if [ -f "venv/bin/python" ]; then
+    PYTHON="venv/bin/python"
+elif command -v python3 &> /dev/null; then
+    PYTHON="python3"
+else
+    echo "❌ Error: No Python executable found"
+    exit 1
+fi
+
+# Track test results
+FAILED_TESTS=0
+PASSED_TESTS=0
+
+# Helper function to run test and check result
+run_test() {
+    local test_name="$1"
+    local command="$2"
+    
+    echo "Testing: $test_name"
+    if eval "$command" > /tmp/signalbox_test_output 2>&1; then
+        echo "✓ $test_name passed"
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+    else
+        echo "❌ $test_name FAILED"
+        echo "   Output:"
+        cat /tmp/signalbox_test_output | head -10
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+    fi
+    echo ""
+}
+
 echo "=== signalbox Test Suite ==="
+echo "Using Python: $PYTHON"
 echo ""
 
-echo "1. Testing configuration display..."
-python signalbox.py show-config | head -5
-echo "✓ show-config works"
-echo ""
+echo "1. Configuration Commands"
+run_test "show-config" "$PYTHON signalbox.py show-config"
+run_test "get-setting" "$PYTHON signalbox.py get-setting execution.default_timeout"
 
-echo "2. Testing get-setting..."
-python signalbox.py get-setting execution.default_timeout
-python signalbox.py get-setting display.use_colors
-echo "✓ get-setting works"
-echo ""
+echo "2. Validation"
+run_test "validate" "$PYTHON signalbox.py validate"
 
-echo "3. Testing validation..."
-python signalbox.py validate
-echo "✓ validate works"
-echo ""
+echo "3. List Commands"
+run_test "list scripts" "$PYTHON signalbox.py list"
+run_test "list-groups" "$PYTHON signalbox.py list-groups"
+run_test "list-schedules" "$PYTHON signalbox.py list-schedules"
 
-echo "4. Testing list commands..."
-python signalbox.py list | head -3
-echo "✓ list works"
-echo ""
+echo "4. Script Execution"
+run_test "run script" "$PYTHON signalbox.py run hello"
 
-python signalbox.py list-groups | head -5
-echo "✓ list-groups works"
-echo ""
+echo "5. Group Execution"
+run_test "run-group" "$PYTHON signalbox.py run-group basic"
 
-python signalbox.py list-schedules
-echo "✓ list-schedules works"
-echo ""
+echo "6. Log Commands"
+run_test "logs (view latest)" "$PYTHON signalbox.py logs hello"
+run_test "history" "$PYTHON signalbox.py history hello"
 
-echo "5. Testing script execution..."
-python signalbox.py run hello
-echo "✓ run works"
-echo ""
+echo "7. Export Commands"
+run_test "export-cron" "$PYTHON signalbox.py export-cron system"
+run_test "export-systemd" "$PYTHON signalbox.py export-systemd system"
 
-echo "6. Testing group execution..."
-python signalbox.py run-group basic | head -3
-echo "✓ run-group works"
-echo ""
-
-echo "7. Testing log viewing..."
-python signalbox.py logs hello | head -5
-echo "✓ logs works"
-echo ""
-
-echo "8. Testing history..."
-python signalbox.py history hello | head -3
-echo "✓ history works"
-echo ""
-
-echo "9. Testing export commands..."
-python signalbox.py export-cron system | head -3
-echo "✓ export-cron works"
-echo ""
-
-python signalbox.py export-systemd daily | head -5
-echo "✓ export-systemd works"
-echo ""
-
-echo "=== All Tests Passed ==="
+# Summary
+echo "========================================="
+if [ $FAILED_TESTS -eq 0 ]; then
+    echo "✓ All Tests Passed ($PASSED_TESTS/$PASSED_TESTS)"
+    EXIT_CODE=0
+else
+    echo "❌ Some Tests Failed"
+    echo "   Passed: $PASSED_TESTS"
+    echo "   Failed: $FAILED_TESTS"
+    EXIT_CODE=1
+fi
 echo ""
 echo "Configuration files in use:"
-echo "  - config.yaml (global settings)"
-echo "  - scripts.yaml (script definitions)"  
-echo "  - groups.yaml (groups and schedules)"
-echo ""
-echo "Documentation:"
-echo "  - README.md (overview)"
-echo "  - documentation/CONFIG_SYSTEM.md (config system overview)"
-echo "  - documentation/CONFIG_GUIDE.md (usage guide)"
-echo "  - documentation/CONFIG_REFERENCE.md (complete reference)"
-echo "  - documentation/FILE_STRUCTURE.md (file format examples)"
-echo "  - documentation/SCHEDULING_EXAMPLES.md (scheduling patterns)"
-echo "  - documentation/EXECUTION_MODES.md (parallel and serial execution)"
+echo "  - config/signalbox.yaml (global settings)"
+echo "  - config/scripts (script definitions)"  
+echo "  - config/groups (groups and schedules)"
+
+exit $EXIT_CODE
