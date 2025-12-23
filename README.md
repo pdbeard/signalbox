@@ -1,4 +1,7 @@
 # signalbox 🚦
+
+![signalbox logo](logo_ideas/event-portal-blocks.svg)
+
 signalbox is a CLI tool for managing, executing, and monitoring scripts with detailed logging, scheduling, and group execution capabilities. 
 
 ## Main Features
