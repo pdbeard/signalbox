@@ -2,11 +2,12 @@
 import os
 import yaml
 import click
+from .config import resolve_path
 
 def load_runtime_state():
 	"""Load runtime state (last_run, last_status) from runtime directory."""
 	runtime_state = {'scripts': {}, 'groups': {}}
-	runtime_scripts_dir = 'runtime/scripts'
+	runtime_scripts_dir = resolve_path('runtime/scripts')
 	if os.path.exists(runtime_scripts_dir):
 		for filename in os.listdir(runtime_scripts_dir):
 			if filename.startswith('runtime_') and filename.endswith('.yaml'):
@@ -18,7 +19,7 @@ def load_runtime_state():
 							runtime_state['scripts'].update(data['scripts'])
 				except Exception as e:
 					click.echo(f"Warning: Failed to load runtime state {filepath}: {e}", err=True)
-	runtime_groups_dir = 'runtime/groups'
+	runtime_groups_dir = resolve_path('runtime/groups')
 	if os.path.exists(runtime_groups_dir):
 		for filename in os.listdir(runtime_groups_dir):
 			if filename.startswith('runtime_') and filename.endswith('.yaml'):
@@ -37,7 +38,7 @@ def save_script_runtime_state(script_name, source_file, last_run, last_status):
 	config_filename = os.path.basename(source_file)
 	config_basename = os.path.splitext(config_filename)[0]
 	runtime_filename = f"runtime_{config_basename}.yaml"
-	runtime_filepath = os.path.join('runtime/scripts', runtime_filename)
+	runtime_filepath = resolve_path(os.path.join('runtime/scripts', runtime_filename))
 	runtime_data = {'scripts': {}}
 	if os.path.exists(runtime_filepath):
 		try:
@@ -61,7 +62,7 @@ def save_group_runtime_state(group_name, source_file, last_run, last_status, exe
 	config_filename = os.path.basename(source_file)
 	config_basename = os.path.splitext(config_filename)[0]
 	runtime_filename = f"runtime_{config_basename}.yaml"
-	runtime_filepath = os.path.join('runtime/groups', runtime_filename)
+	runtime_filepath = resolve_path(os.path.join('runtime/groups', runtime_filename))
 	runtime_data = {'groups': {}}
 	if os.path.exists(runtime_filepath):
 		try:

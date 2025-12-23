@@ -8,13 +8,52 @@ SCRIPTS_FILE = 'scripts.yaml'
 GROUPS_FILE = 'groups.yaml'
 
 _global_config = None
+_config_home = None
+
+def find_config_home():
+	"""
+	Find the signalbox configuration directory.
+	Priority order:
+	1. SIGNALBOX_HOME environment variable
+	2. ~/.config/signalbox/ if it exists
+	3. Current working directory
+	"""
+	global _config_home
+	if _config_home is not None:
+		return _config_home
+	
+	# Check SIGNALBOX_HOME environment variable
+	env_home = os.environ.get('SIGNALBOX_HOME')
+	if env_home:
+		env_home = os.path.expanduser(env_home)
+		if os.path.isdir(env_home):
+			_config_home = env_home
+			return _config_home
+	
+	# Check ~/.config/signalbox/
+	user_config = os.path.expanduser('~/.config/signalbox')
+	if os.path.isdir(user_config) and os.path.exists(os.path.join(user_config, 'config/signalbox.yaml')):
+		_config_home = user_config
+		return _config_home
+	
+	# Fall back to current working directory
+	_config_home = os.getcwd()
+	return _config_home
+
+def resolve_path(path):
+	"""Resolve a path relative to config home if it's not absolute."""
+	if os.path.isabs(path):
+		return path
+	config_home = find_config_home()
+	return os.path.join(config_home, path)
 
 def load_global_config():
 	"""Load global configuration settings from config/signalbox.yaml."""
 	global _global_config
 	if _global_config is None:
-		if os.path.exists(CONFIG_FILE):
-			with open(CONFIG_FILE, 'r') as f:
+		config_file = resolve_path(CONFIG_FILE)
+		if os.path.exists(config_file):
+			with open(config_file, 'r') as f:
 				_global_config = yaml.safe_load(f) or {}
 		else:
 			_global_config = {}
@@ -37,6 +76,7 @@ def load_config():
 	config = {'scripts': [], 'groups': [], '_script_sources': {}, '_group_sources': {}}
 	# Load scripts from directory
 	scripts_path = get_config_value('paths.scripts_file', SCRIPTS_FILE)
+	scripts_path = resolve_path(scripts_path)
 	if os.path.isdir(scripts_path):
 		for filename in sorted(os.listdir(scripts_path)):
 			if filename.endswith(('.yaml', '.yml')) and not filename.startswith('.'):
@@ -54,6 +94,7 @@ def load_config():
 					click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
 	# Load groups from directory
 	groups_path = get_config_value('paths.groups_file', GROUPS_FILE)
+	groups_path = resolve_path(groups_path)
 	if os.path.isdir(groups_path):
 		for filename in sorted(os.listdir(groups_path)):
 			if filename.endswith(('.yaml', '.yml')) and not filename.startswith('.'):
@@ -75,6 +116,7 @@ def load_config():
 def save_config(config):
 	"""Save configuration back to original source files."""
 	scripts_path = get_config_value('paths.scripts_file', SCRIPTS_FILE)
+	scripts_path = resolve_path(scripts_path)
 	script_sources = config.get('_script_sources', {})
 	if 'scripts' in config and os.path.isdir(scripts_path):
 		files_to_save = {}
@@ -95,6 +137,7 @@ def save_config(config):
 				yaml.dump({'scripts': scripts}, f, default_flow_style=False, sort_keys=False)
 	if 'groups' in config:
 		groups_path = get_config_value('paths.groups_file', GROUPS_FILE)
+		groups_path = resolve_path(groups_path)
 		group_sources = config.get('_group_sources', {})
 		if os.path.isdir(groups_path):
 			files_to_save = {}
