@@ -6,8 +6,7 @@ import click
 
 from .config import get_config_value
 from .runtime import save_script_runtime_state
-from .logger import ensure_log_dir, get_log_path, write_execution_log
-from .log_rotation import rotate_logs
+from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
 
 
 def run_script(name, config):
