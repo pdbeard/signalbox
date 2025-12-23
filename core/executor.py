@@ -8,6 +8,7 @@ from .config import get_config_value
 from .runtime import save_script_runtime_state
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
 from .exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeoutError
+from . import notifications
 
 
 def run_script(name, config):
@@ -106,9 +107,21 @@ def run_group_parallel(script_names, config):
     click.echo(f"  Completed: {len(results)}/{len(script_names)}")
     click.echo(f"  Successful: {success_count}/{len(results)}")
 
+    failed_names = None
     if success_count < len(results):
-        failed = [name for name, success, _ in results if not success]
-        click.echo(f"  Failed: {', '.join(failed)}")
+        failed_names = [name for name, success, _ in results if not success]
+        click.echo(f"  Failed: {', '.join(failed_names)}")
+
+    # Send notification
+    failed_count = len(results) - success_count
+    notifications.notify_execution_result(
+        total=len(results),
+        passed=success_count,
+        failed=failed_count,
+        context="scripts",
+        failed_names=failed_names,
+        config=config
+    )
 
     return success_count
 
@@ -125,6 +138,7 @@ def run_group_serial(script_names, config, stop_on_error):
             int: Number of scripts that executed successfully
     """
     success_count = 0
+    failed_names = []
 
     for script_name in script_names:
         try:
@@ -133,13 +147,27 @@ def run_group_serial(script_names, config, stop_on_error):
 
             if success:
                 success_count += 1
-            elif stop_on_error:
-                click.echo(f"⚠️  Script {script_name} failed. Stopping group execution (stop_on_error=true)")
-                return success_count
+            else:
+                failed_names.append(script_name)
+                if stop_on_error:
+                    click.echo(f"⚠️  Script {script_name} failed. Stopping group execution (stop_on_error=true)")
+                    break
         except Exception as e:
             click.echo(f"Error: {e.message if hasattr(e, 'message') else str(e)}")
+            failed_names.append(script_name)
             if stop_on_error:
                 click.echo(f"⚠️  Stopping group execution (stop_on_error=true)")
-                return success_count
+                break
+
+    # Send notification
+    failed_count = len(failed_names)
+    notifications.notify_execution_result(
+        total=len(script_names),
+        passed=success_count,
+        failed=failed_count,
+        context="scripts",
+        failed_names=failed_names if failed_names else None,
+        config=config
+    )
 
     return success_count

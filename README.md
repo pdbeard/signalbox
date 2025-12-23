@@ -9,7 +9,8 @@ signalbox is a CLI tool for managing, executing, and monitoring scripts with det
 -  Logs and execution history
 -  Parallel or serial execution modes
 -  Automatic log rotation (by count or age)
--  Generate systemd/cron configurations 
+-  Generate systemd/cron configurations
+-  **Desktop notifications** for script execution results (macOS & Linux) 
 
 
 ## Installation
@@ -98,6 +99,10 @@ python signalbox.py list  # Uses config/ in current directory
 ### Automation & Scheduling
 - `export-systemd <group>` - Generate systemd service/timer files
 - `export-cron <group>` - Generate crontab entry
+
+### Notifications
+- `notify-test` - Send a test notification to verify notification system works
+  - Options: `--title`, `--message`, `--urgency` (Linux only)
 
 ## Configuration
 

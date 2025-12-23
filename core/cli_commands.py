@@ -13,6 +13,7 @@ from .runtime import save_group_runtime_state, load_runtime_state, merge_config_
 from . import log_manager
 from . import validator
 from . import exporters
+from . import notifications
 from .exceptions import SignalboxError, ScriptNotFoundError, GroupNotFoundError
 
 
@@ -93,6 +94,11 @@ def init():
             },
             "logging": {"timestamp_format": "%Y%m%d_%H%M%S_%f"},
             "display": {"date_format": "%Y-%m-%d %H:%M:%S"},
+            "notifications": {
+                "enabled": True,
+                "on_failure_only": True,
+                "show_failed_names": True,
+            },
         }
 
         with open(os.path.join(config_dir, "config/signalbox.yaml"), "w") as f:
@@ -480,3 +486,33 @@ def validate():
     # Exit with appropriate code if validation failed
     if not result.is_valid:
         sys.exit(5)
+
+
+@cli.command()
+@click.option("--title", default="Signalbox Test", help="Notification title")
+@click.option("--message", default="This is a test notification from Signalbox", help="Notification message")
+@click.option(
+    "--urgency",
+    type=click.Choice(["low", "normal", "critical"]),
+    default="normal",
+    help="Notification urgency level (Linux only)",
+)
+@handle_exceptions
+def notify_test(title, message, urgency):
+    """Send a test notification to verify notification system works."""
+    import platform
+
+    system = platform.system()
+    click.echo(f"Sending test notification on {system}...")
+    click.echo(f"Title: {title}")
+    click.echo(f"Message: {message}")
+    if system == "Linux":
+        click.echo(f"Urgency: {urgency}")
+
+    success = notifications.send_notification(title, message, urgency)
+
+    if success:
+        click.echo("✓ Notification sent successfully!")
+    else:
+        click.echo("✗ Failed to send notification. Check logs for details.", err=True)
+        sys.exit(1)
