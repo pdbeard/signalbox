@@ -4,8 +4,10 @@
 import click
 from datetime import datetime
 import os
+import sys
 import shutil
 import yaml
+from functools import wraps
 
 from .config import load_config, get_config_value, load_global_config
 from .executor import run_script, run_group_parallel, run_group_serial
@@ -13,6 +15,22 @@ from .runtime import save_group_runtime_state, load_runtime_state, merge_config_
 from . import log_manager
 from . import validator
 from . import exporters
+from .exceptions import SignalboxError, ScriptNotFoundError, GroupNotFoundError
+
+
+def handle_exceptions(func):
+	"""Decorator to handle exceptions consistently across CLI commands."""
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		try:
+			return func(*args, **kwargs)
+		except SignalboxError as e:
+			click.echo(f"Error: {e.message}", err=True)
+			sys.exit(e.exit_code)
+		except Exception as e:
+			click.echo(f"Unexpected error: {str(e)}", err=True)
+			sys.exit(1)
+	return wrapper
 
 @click.group()
 def cli():
@@ -137,31 +155,36 @@ def list():
 
 @cli.command()
 @click.argument('name')
+@handle_exceptions
 def run(name):
 	"""Run a specific script by name."""
 	config = load_config()
 	run_script(name, config)
 
 @cli.command()
+@handle_exceptions
 def run_all():
 	"""Run all scripts."""
 	config = load_config()
 	click.echo("Running all scripts...")
 	for script in config['scripts']:
 		click.echo(f"Running {script['name']}...")
-		run_script(script['name'], config)
+		try:
+			run_script(script['name'], config)
+		except SignalboxError as e:
+			click.echo(f"Error: {e.message}", err=True)
 	click.echo("All scripts executed.")
 
 @cli.command('run-group')
 @click.argument('name')
+@handle_exceptions
 def run_group(name):
 	"""Run a group of scripts."""
 	config = load_config()
 	groups = config.get('groups', [])
 	group = next((g for g in groups if g['name'] == name), None)
 	if not group:
-		click.echo(f"Group {name} not found")
-		return
+		raise GroupNotFoundError(name)
 	execution_mode = group.get('execution', 'serial')
 	stop_on_error = group.get('stop_on_error', False)
 	click.echo(f"Running group {name}: {group['description']}")
@@ -204,13 +227,13 @@ def run_group(name):
 
 @cli.command()
 @click.argument('name')
+@handle_exceptions
 def logs(name):
 	"""Show the latest log for a script."""
 	config = load_config()
 	script = next((s for s in config['scripts'] if s['name'] == name), None)
 	if not script:
-		click.echo(f"Script {name} not found")
-		return
+		raise ScriptNotFoundError(name)
 	
 	log_path, exists = log_manager.get_latest_log(name)
 	if not exists:
@@ -236,13 +259,13 @@ def logs(name):
 
 @cli.command()
 @click.argument('name')
+@handle_exceptions
 def history(name):
 	"""Show all log files for a script."""
 	config = load_config()
 	script = next((s for s in config['scripts'] if s['name'] == name), None)
 	if not script:
-		click.echo(f"Script {name} not found")
-		return
+		raise ScriptNotFoundError(name)
 	
 	log_info, exists = log_manager.get_log_history(name)
 	if not exists:
@@ -263,13 +286,13 @@ def history(name):
 
 @cli.command()
 @click.argument('name')
+@handle_exceptions
 def clear_logs(name):
 	"""Clear all logs for a specific script."""
 	config = load_config()
 	script = next((s for s in config['scripts'] if s['name'] == name), None)
 	if not script:
-		click.echo(f"Script {name} not found")
-		return
+		raise ScriptNotFoundError(name)
 	
 	if log_manager.clear_script_logs(name):
 		click.echo(f"Cleared logs for {name}")
@@ -405,6 +428,7 @@ def export_cron(group_name):
 		click.echo(instruction)
 
 @cli.command()
+@handle_exceptions
 def validate():
 	"""Validate configuration files for errors."""
 	result = validator.validate_configuration()
@@ -428,7 +452,7 @@ def validate():
 		strict_mode = get_config_value('validation.strict', False)
 		if strict_mode:
 			click.echo("\n❌ Validation failed (strict mode enabled)")
-			return False
+			sys.exit(5)
 	
 	# Show success message
 	if not result.has_issues:
@@ -449,4 +473,6 @@ def validate():
 			log_limit = summary.get('default_log_limit', {})
 			click.echo(f"  Default log limit: {log_limit.get('type', 'count')} = {log_limit.get('value', 10)}")
 	
-	return result.is_valid
+	# Exit with appropriate code if validation failed
+	if not result.is_valid:
+		sys.exit(5)

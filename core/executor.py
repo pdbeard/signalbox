@@ -7,6 +7,7 @@ import click
 from .config import get_config_value
 from .runtime import save_script_runtime_state
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
+from .exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeoutError
 
 
 def run_script(name, config):
@@ -18,11 +19,15 @@ def run_script(name, config):
 	
 	Returns:
 		bool: True if script executed successfully (exit code 0), False otherwise
+	
+	Raises:
+		ScriptNotFoundError: If script not found in configuration
+		ExecutionTimeoutError: If script execution times out
+		ExecutionError: If script execution fails for any other reason
 	"""
 	script = next((s for s in config['scripts'] if s['name'] == name), None)
 	if not script:
-		click.echo(f"Script {name} not found")
-		return False
+		raise ScriptNotFoundError(name)
 	
 	# Prepare logging
 	ensure_log_dir(name)
@@ -72,11 +77,9 @@ def run_script(name, config):
 		return result.returncode == 0
 		
 	except subprocess.TimeoutExpired:
-		click.echo(f"Script {name} timed out after {timeout} seconds")
-		return False
+		raise ExecutionTimeoutError(name, timeout)
 	except Exception as e:
-		click.echo(f"Error running {name}: {e}")
-		return False
+		raise ExecutionError(name, str(e))
 
 def run_group_parallel(script_names, config):
 	"""Execute multiple scripts in parallel.
@@ -91,32 +94,31 @@ def run_group_parallel(script_names, config):
 	max_workers = get_config_value('execution.max_parallel_workers', 5)
 	
 	def run_script_wrapper(script_name):
-		"""Wrapper for parallel execution."""
-		script = next((s for s in config['scripts'] if s['name'] == script_name), None)
-		if script:
+		"""Wrapper for parallel execution that catches exceptions."""
+		try:
 			click.echo(f"Running {script_name}...")
 			success = run_script(script_name, config)
-			return (script_name, success)
-		else:
-			click.echo(f"Script {script_name} not found in config")
-			return (script_name, False)
+			return (script_name, success, None)
+		except Exception as e:
+			click.echo(f"Error: {e.message if hasattr(e, 'message') else str(e)}")
+			return (script_name, False, str(e))
 	
 	# Execute scripts in parallel
 	with ThreadPoolExecutor(max_workers=max_workers) as executor:
 		futures = {executor.submit(run_script_wrapper, name): name for name in script_names}
 		results = []
 		for future in as_completed(futures):
-			script_name, success = future.result()
-			results.append((script_name, success))
+			script_name, success, error = future.result()
+			results.append((script_name, success, error))
 	
 	# Print summary
 	click.echo("\nParallel execution summary:")
-	success_count = sum(1 for _, success in results if success)
+	success_count = sum(1 for _, success, _ in results if success)
 	click.echo(f"  Completed: {len(results)}/{len(script_names)}")
 	click.echo(f"  Successful: {success_count}/{len(results)}")
 	
 	if success_count < len(results):
-		failed = [name for name, success in results if not success]
+		failed = [name for name, success, _ in results if not success]
 		click.echo(f"  Failed: {', '.join(failed)}")
 	
 	return success_count
@@ -136,9 +138,7 @@ def run_group_serial(script_names, config, stop_on_error):
 	success_count = 0
 	
 	for script_name in script_names:
-		script = next((s for s in config['scripts'] if s['name'] == script_name), None)
-		
-		if script:
+		try:
 			click.echo(f"Running {script_name}...")
 			success = run_script(script_name, config)
 			
@@ -147,10 +147,10 @@ def run_group_serial(script_names, config, stop_on_error):
 			elif stop_on_error:
 				click.echo(f"⚠️  Script {script_name} failed. Stopping group execution (stop_on_error=true)")
 				return success_count
-		else:
-			click.echo(f"Script {script_name} not found in config")
+		except Exception as e:
+			click.echo(f"Error: {e.message if hasattr(e, 'message') else str(e)}")
 			if stop_on_error:
-				click.echo(f"⚠️  Script {script_name} not found. Stopping group execution (stop_on_error=true)")
+				click.echo(f"⚠️  Stopping group execution (stop_on_error=true)")
 				return success_count
 	
 	return success_count
