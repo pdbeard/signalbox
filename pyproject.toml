@@ -46,6 +46,10 @@ dev = [
     "pytest>=7.0.0",
 ]
 
+[project.scripts]
+signalbox = "core.cli_commands:cli"
+
+# Development tool scripts
 [tool.setuptools]
 packages = ["core"]
 py-modules = ["signalbox"]
@@ -57,3 +61,9 @@ target-version = ['py38']
 [tool.flake8]
 max-line-length = 120
 extend-ignore = ["E203", "W503"]
+per-file-ignores = [
+    # Allow f-strings without placeholders in CLI code (used for multiline formatting)
+    "core/cli_commands.py:F541",
+    "core/executor.py:F541",
+    "core/exporters.py:F541",
+]
