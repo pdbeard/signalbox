@@ -75,9 +75,9 @@ else
     EXIT_CODE=1
 fi
 echo ""
-echo "Configuration files in use:"
-echo "  - config/signalbox.yaml (global settings)"
-echo "  - config/scripts (script definitions)"  
-echo "  - config/groups (groups and schedules)"
+echo "Configuration files found:"
+[ -f "config/signalbox.yaml" ] && echo "  ✓ config/signalbox.yaml (global settings)" || echo "  ✗ config/signalbox.yaml (missing)"
+[ -d "config/scripts" ] && echo "  ✓ config/scripts/ ($(find config/scripts -name '*.yaml' -o -name '*.yml' 2>/dev/null | wc -l | xargs) files)" || echo "  ✗ config/scripts (missing)"
+[ -d "config/groups" ] && echo "  ✓ config/groups/ ($(find config/groups -name '*.yaml' -o -name '*.yml' 2>/dev/null | wc -l | xargs) files)" || echo "  ✗ config/groups (missing)"
 
 exit $EXIT_CODE
