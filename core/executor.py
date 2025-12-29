@@ -45,8 +45,14 @@ def run_script(name, config):
 
     # Get timeout setting
     timeout = get_config_value("execution.default_timeout", 300)
+    # Security: Enforce minimum timeout of 1 second to prevent DOS attacks
+    # A timeout of 0 would mean "no timeout" which could hang forever
+    min_timeout = get_config_value("execution.min_timeout", 1)
     if timeout == 0:
         timeout = None
+    elif timeout < min_timeout:
+        click.echo(f"Warning: Timeout {timeout}s is below minimum {min_timeout}s, using minimum", err=True)
+        timeout = min_timeout
 
     try:
         # Execute the script

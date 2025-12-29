@@ -26,8 +26,12 @@ Signalbox executes shell commands defined in YAML configuration files using Pyth
 
 ✅ **Python object deserialization attacks** - Uses `yaml.safe_load()` only  
 ✅ **Directory traversal in logs** - Validates log paths  
-✅ **Infinite execution** - Configurable timeouts  
-✅ **Resource exhaustion** - Log rotation and limits
+✅ **Infinite execution** - Configurable timeouts with minimum enforcement  
+✅ **Resource exhaustion** - Log rotation, size limits, and disk protection  
+✅ **DOS via timeout bypass** - Minimum timeout enforced (default: 1 second)  
+✅ **Disk filling attacks** - Maximum log file size limit (default: 100MB)  
+✅ **Unauthorized log access** - Log files created with restrictive permissions (0o600)  
+✅ **Log rotation race conditions** - File locking prevents concurrent corruption
 
 ### What Signalbox Does NOT Protect Against
 
@@ -213,6 +217,45 @@ Before deploying Signalbox in production:
 - [ ] Team trained on security implications
 - [ ] Test environment separated from production
 - [ ] Backup strategy implemented
+- [ ] Minimum timeout configured (prevent DOS)
+- [ ] Maximum log file size limit set (prevent disk exhaustion)
+- [ ] Log file permissions verified (0o600 for sensitive data)
+
+## Built-in Security Mitigations
+
+Signalbox implements several protections against common attack vectors:
+
+### 1. Timeout DOS Prevention
+**Issue:** Setting `timeout: 0` could allow infinite script execution  
+**Mitigation:** Enforces minimum timeout (default: 1 second)
+```yaml
+execution:
+  min_timeout: 1  # Minimum timeout in seconds
+```
+
+### 2. Disk Exhaustion Protection  
+**Issue:** Large script output could fill disk  
+**Mitigation:** Maximum log file size with automatic truncation
+```yaml
+logging:
+  max_file_size_mb: 100  # Truncates output exceeding this size
+```
+
+### 3. Log File Access Control
+**Issue:** Log files may contain sensitive command output  
+**Mitigation:** Created with `0o600` permissions (owner read/write only)
+```bash
+# Log files are automatically created with restrictive permissions
+ls -l ~/.config/signalbox/logs/*/
+# Output: -rw------- (only owner can read/write)
+```
+
+### 4. Concurrent Execution Safety
+**Issue:** Multiple scripts running simultaneously could corrupt log rotation  
+**Mitigation:** File locking prevents race conditions during rotation
+- Uses `fcntl.flock()` for atomic log rotation
+- Non-blocking locks prevent deadlocks
+- Failed rotations don't affect script execution
 
 ## Comparison to Similar Tools
 

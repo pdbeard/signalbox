@@ -19,6 +19,11 @@ execution:
   # Default timeout for scripts (in seconds, 0 = no timeout)
   default_timeout: 300
   
+  # Security: Minimum timeout to prevent DOS attacks (in seconds)
+  # Scripts with timeout below this value will use this minimum
+  # Set to 1 to allow very fast scripts while preventing infinite hangs
+  min_timeout: 1
+  
   # Capture output settings
   capture_stdout: true
   capture_stderr: true
@@ -30,6 +35,10 @@ execution:
 logging:
   # Timestamp format for log files
   timestamp_format: "%Y%m%d_%H%M%S_%f"
+  
+  # Security: Maximum log file size in MB to prevent disk filling
+  # If script output exceeds this, it will be truncated with a warning
+  max_file_size_mb: 100
 
 # Display settings  
 display:
