@@ -1,5 +1,8 @@
 # Basic Example Scripts
 #
+# ⚠️  SECURITY WARNING: Commands in this file are executed with full shell access.
+# Only use trusted configuration files. See SECURITY.md for details.
+#
 # ⚠️  IMPORTANT: These are EXAMPLE scripts for learning and getting started.
 # These scripts are NOT meant for production use - they are educational tools!
 #

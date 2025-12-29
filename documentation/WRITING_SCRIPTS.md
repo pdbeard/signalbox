@@ -1,5 +1,17 @@
 # Writing Scripts for signalbox
 
+## ⚠️ Security First
+
+**Signalbox executes commands with full shell access and your user's permissions.** Commands can:
+- Read/write any files you can access
+- Make network connections
+- Execute any programs
+- Delete data
+
+**Always review scripts before adding them to your configuration.** See [SECURITY.md](../SECURITY.md) for detailed security guidelines.
+
+---
+
 This guide covers best practices for writing scripts that work well with signalbox.
 
 ## Exit Code Requirements

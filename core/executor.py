@@ -1,4 +1,11 @@
 # Script and group execution logic for signalbox
+#
+# SECURITY NOTE: This module executes shell commands with shell=True to support
+# pipes, redirection, and complex bash scripts. Commands are executed with the
+# full permissions of the user running signalbox.
+#
+# Configuration files MUST be trusted. See SECURITY.md for details.
+#
 import subprocess
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed

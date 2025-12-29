@@ -24,7 +24,7 @@
 
 ### Error Handling
 - Use click.echo() for user messages (not print)
-- Warnings to stderr: `click.echo(msg, err=True)`
+- Warnings to stderr: gi`click.echo(msg, err=True)`
 - Graceful failures: return False/None on errors, don't crash
 
 ### Naming
