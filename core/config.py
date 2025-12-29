@@ -2,6 +2,7 @@
 import os
 import yaml
 import click
+from .helpers import load_yaml_files_from_dir
 
 CONFIG_FILE = "config/signalbox.yaml"
 SCRIPTS_FILE = "scripts.yaml"
@@ -93,42 +94,29 @@ class ConfigManager:
     def load_config(self):
         """Load configuration from scripts and groups directories."""
         config = {"scripts": [], "groups": [], "_script_sources": {}, "_group_sources": {}}
+        
         # Load scripts from directory
         scripts_path = self.get_config_value("paths.scripts_file", SCRIPTS_FILE)
         scripts_path = self.resolve_path(scripts_path)
         if os.path.isdir(scripts_path):
-            for filename in sorted(os.listdir(scripts_path)):
-                if filename.endswith((".yaml", ".yml")) and not filename.startswith("."):
-                    filepath = os.path.join(scripts_path, filename)
-                    try:
-                        with open(filepath, "r") as f:
-                            scripts_data = yaml.safe_load(f)
-                            if scripts_data and "scripts" in scripts_data:
-                                for script in scripts_data["scripts"]:
-                                    script_name = script.get("name")
-                                    if script_name:
-                                        config["_script_sources"][script_name] = filepath
-                                config["scripts"].extend(scripts_data["scripts"])
-                    except Exception as e:
-                        click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
+            scripts_list = load_yaml_files_from_dir(scripts_path, key="scripts", track_sources=True)
+            for item in scripts_list:
+                script_name = item["data"].get("name")
+                if script_name:
+                    config["_script_sources"][script_name] = item["source"]
+                config["scripts"].append(item["data"])
+        
         # Load groups from directory
         groups_path = self.get_config_value("paths.groups_file", GROUPS_FILE)
         groups_path = self.resolve_path(groups_path)
         if os.path.isdir(groups_path):
-            for filename in sorted(os.listdir(groups_path)):
-                if filename.endswith((".yaml", ".yml")) and not filename.startswith("."):
-                    filepath = os.path.join(groups_path, filename)
-                    try:
-                        with open(filepath, "r") as f:
-                            groups_data = yaml.safe_load(f)
-                            if groups_data and "groups" in groups_data:
-                                for group in groups_data["groups"]:
-                                    group_name = group.get("name")
-                                    if group_name:
-                                        config["_group_sources"][group_name] = filepath
-                                config["groups"].extend(groups_data["groups"])
-                    except Exception as e:
-                        click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
+            groups_list = load_yaml_files_from_dir(groups_path, key="groups", track_sources=True)
+            for item in groups_list:
+                group_name = item["data"].get("name")
+                if group_name:
+                    config["_group_sources"][group_name] = item["source"]
+                config["groups"].append(item["data"])
+        
         # Note: runtime state merging should be handled in runtime.py
         return config
 

@@ -1,3 +1,5 @@
+Possible blacklist for inline commands? (rm,chmod, etc. instead of pure trust)
+
 # Security Policy
 
 ## Supported Versions

@@ -16,6 +16,7 @@ from .runtime import save_script_runtime_state
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
 from .exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeoutError
 from . import notifications
+from .helpers import format_timestamp
 
 
 def run_script(name, config):
@@ -39,8 +40,7 @@ def run_script(name, config):
 
     # Prepare logging
     ensure_log_dir(name)
-    timestamp_format = get_config_value("logging.timestamp_format", "%Y%m%d_%H%M%S_%f")
-    timestamp = datetime.now().strftime(timestamp_format)
+    timestamp = format_timestamp(datetime.now())
     log_file = get_log_path(name, timestamp)
 
     # Get timeout setting

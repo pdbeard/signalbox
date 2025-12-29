@@ -3,6 +3,7 @@
 import os
 from datetime import datetime, timedelta
 from .config import get_config_value
+from .helpers import format_timestamp
 
 
 def get_script_log_dir(script_name):
@@ -29,8 +30,7 @@ def get_log_path(script_name, timestamp=None):
             str: Full path to the log file
     """
     if timestamp is None:
-        timestamp_format = get_config_value("logging.timestamp_format", "%Y%m%d_%H%M%S_%f")
-        timestamp = datetime.now().strftime(timestamp_format)
+        timestamp = format_timestamp(datetime.now())
 
     log_dir = get_config_value("paths.log_dir", "logs")
     return os.path.join(log_dir, script_name, f"{timestamp}.log")
