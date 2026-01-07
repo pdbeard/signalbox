@@ -58,7 +58,7 @@ def sample_config():
                 "command": "echo another",
                 "description": "Another script",
                 "last_run": "",
-                "last_status": "not run"
+                "last_status": "no logs"
             }
         ],
         "groups": [
@@ -173,7 +173,7 @@ class TestListCommand:
         assert "test_script" in result.output
         assert "another_script" in result.output
         assert "success" in result.output
-        assert "not run" in result.output
+        assert "no logs" in result.output
 
     @patch("core.cli_commands.load_config")
     @patch("core.cli_commands.load_runtime_state")
@@ -353,7 +353,7 @@ class TestLogsCommand:
         result = runner.invoke(logs, ["test_script"])
 
         assert result.exit_code == 0
-        assert "No logs found" in result.output
+        assert "no logs found" in result.output
 
     @patch("core.cli_commands.load_config")
     def test_logs_handles_script_not_found(self, mock_load, runner, sample_config):
@@ -430,7 +430,7 @@ class TestClearLogsCommand:
         result = runner.invoke(clear_logs, ["test_script"])
 
         assert result.exit_code == 0
-        assert "No logs found" in result.output
+        assert "no logs found" in result.output
 
 
 class TestClearAllLogsCommand:
@@ -454,7 +454,7 @@ class TestClearAllLogsCommand:
         result = runner.invoke(clear_all_logs)
 
         assert result.exit_code == 0
-        assert "No logs directory found" in result.output
+        assert "no logs directory found" in result.output
 
 
 class TestListGroupsCommand:

@@ -92,10 +92,10 @@ def merge_config_with_runtime_state(config, runtime_state):
         if script_name in runtime_state["scripts"]:
             runtime_info = runtime_state["scripts"][script_name]
             script["last_run"] = runtime_info.get("last_run", "")
-            script["last_status"] = runtime_info.get("last_status", "not run")
+            script["last_status"] = runtime_info.get("last_status", "no logs")
         else:
             script["last_run"] = ""
-            script["last_status"] = "not run"
+            script["last_status"] = "no logs"
     for group in config["groups"]:
         group_name = group["name"]
         if group_name in runtime_state["groups"]:

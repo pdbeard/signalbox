@@ -14,3 +14,7 @@ automate cron and systemd configs
     -Function to automatically install cron or systemd (give a choice or preference?)
         - can be called directly from the script if a user selects y, or can be called directly from a script --argument 
     
+
+
+
+include config check documentation

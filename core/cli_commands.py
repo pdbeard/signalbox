@@ -75,8 +75,15 @@ def init():
         template_config = os.path.join(current_file_dir, "config")
 
     if os.path.exists(template_config):
-        # Only copy the catalog directory
+        # Only copy the catalog directory and signalbox.yaml
         os.makedirs(os.path.join(config_dir, "config"), exist_ok=True)
+        # Copy signalbox.yaml
+        src_yaml = os.path.join(template_config, "signalbox.yaml")
+        dst_yaml = os.path.join(config_dir, "config", "signalbox.yaml")
+        if os.path.exists(src_yaml):
+            shutil.copy2(src_yaml, dst_yaml)
+            click.echo(f"✓ Copied default config: {src_yaml}")
+        # Copy catalog
         catalog_src = os.path.join(template_config, "catalog")
         catalog_dst = os.path.join(config_dir, "config", "catalog")
         if os.path.exists(catalog_src):
@@ -151,6 +158,35 @@ def init():
     click.echo("You can now run signalbox from any directory!")
 
 
+@cli.command("config-check")
+def config_check():
+    """Check all config files for missing required fields in scripts and groups."""
+    config = load_config()
+    errors = False
+    click.echo("Checking scripts...")
+    for script in config["scripts"]:
+        try:
+            name = script.get("name", "<unnamed>")
+            _ = script["description"]
+            _ = script["command"]
+        except KeyError as e:
+            click.echo(f"[CONFIG ERROR] Script entry missing required field: {e}. Offending script: {script}", err=True)
+            errors = True
+    click.echo("Checking groups...")
+    for group in config["groups"]:
+        try:
+            name = group.get("name", "<unnamed>")
+            _ = group["description"]
+            _ = group["scripts"]
+        except KeyError as e:
+            click.echo(f"[CONFIG ERROR] Group entry missing required field: {e}. Offending group: {group}", err=True)
+            errors = True
+    if not errors:
+        click.echo("✓ All config files passed basic validation.")
+    else:
+        click.echo("❌ Config errors found. See above.")
+
+
 @cli.command()
 def list():
     """List all scripts and their status."""
@@ -159,19 +195,30 @@ def list():
     config = merge_config_with_runtime_state(config, runtime_state)
 
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-    for script in config["scripts"]:
-        status = script.get("last_status", "not run")
-        last_run = script.get("last_run", "")
-        if last_run:
-            try:
-                timestamp_str = last_run.replace(".log", "")
-                dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S_%f")
-                human_date = dt.strftime(date_format)
-                click.echo(f"{script['name']}: {status} ({human_date}) - {script['description']}")
-            except ValueError:
-                click.echo(f"{script['name']}: {status} ({last_run}) - {script['description']}")
-        else:
-            click.echo(f"{script['name']}: {status} - {script['description']}")
+    scripts = config["scripts"]
+    if not scripts:
+        click.echo("No scripts defined.")
+        return
+    for script in scripts:
+        try:
+            status = script.get("last_status", "no logs")
+            last_run = script.get("last_run", "")
+            name = script.get("name", "<unnamed>")
+            description = script["description"]
+            if last_run:
+                try:
+                    timestamp_str = last_run.replace(".log", "")
+                    dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S_%f")
+                    human_date = dt.strftime(date_format)
+                    click.echo(f"{name}: {description} \n   {status} ({human_date}) ")
+                except ValueError:
+                    click.echo(f"{name}: {description} \n   {status} ({last_run})")
+            else:
+                click.echo(f"{name}: {description} \n   {status}")
+        except KeyError as e:
+            click.echo(f"[CONFIG ERROR] Script entry missing required field: {e}. Check your scripts YAML files. Offending script: {script}", err=True)
+        except Exception as e:
+            click.echo(f"[CONFIG ERROR] Unexpected error in script config: {e}. Offending script: {script}", err=True)
 
 
 @cli.command()
@@ -249,19 +296,40 @@ def run_group(name):
     click.echo(f"Group {name} executed.")
 
 
+
 @cli.command()
-@click.argument("name")
+@click.argument("name", required=False)
 @handle_exceptions
-def logs(name):
-    """Show the latest log for a script."""
+def logs(name=None):
+    """
+    Show the latest log for a script, or list all available logs.
+
+    Usage:
+      signalbox logs <script_name>   Show the latest log for the given script.
+      signalbox logs                 List all scripts with available logs.
+    """
     config = load_config()
+    if name is None:
+        # List all available logs for all scripts
+        scripts = config["scripts"]
+        found = False
+        for script in scripts:
+            script_name = script.get("name")
+            log_path, exists = log_manager.get_latest_log(script_name)
+            if exists:
+                click.echo(f"{script_name}: {log_path}")
+                found = True
+        if not found:
+            click.echo("no logs found for any script.")
+        return
+
     script = next((s for s in config["scripts"] if s["name"] == name), None)
     if not script:
         raise ScriptNotFoundError(name)
 
     log_path, exists = log_manager.get_latest_log(name)
     if not exists:
-        click.echo("No logs found")
+        click.echo("no logs found")
         return
 
     # Use display settings from global config
@@ -323,7 +391,7 @@ def clear_logs(name):
     if log_manager.clear_script_logs(name):
         click.echo(f"Cleared logs for {name}")
     else:
-        click.echo(f"No logs found for {name}")
+        click.echo(f"no logs found for {name}")
 
 
 @cli.command()
@@ -332,7 +400,7 @@ def clear_all_logs():
     if log_manager.clear_all_logs():
         click.echo("Cleared all logs")
     else:
-        click.echo("No logs directory found")
+        click.echo("no logs directory found")
 
 
 @cli.command()
@@ -344,21 +412,28 @@ def list_groups():
         click.echo("No groups defined.")
         return
     for group in groups:
-        schedule_info = f" [scheduled: {group['schedule']}]" if "schedule" in group else ""
-        execution_mode = group.get("execution", "serial")
-        stop_on_error = group.get("stop_on_error", False)
+        try:
+            name = group.get("name", "<unnamed>")
+            description = group["description"]
+            schedule_info = f" [scheduled: {group['schedule']}]" if "schedule" in group else ""
+            execution_mode = group.get("execution", "serial")
+            stop_on_error = group.get("stop_on_error", False)
 
-        # Build execution info
-        exec_info = f" [execution: {execution_mode}"
-        if execution_mode == "serial" and stop_on_error:
-            exec_info += ", stop_on_error"
-        exec_info += "]"
+            # Build execution info
+            exec_info = f" [execution: {execution_mode}"
+            if execution_mode == "serial" and stop_on_error:
+                exec_info += ", stop_on_error"
+            exec_info += "]"
 
-        click.echo(f"Group: {group['name']} - {group.get('description', '')}{schedule_info}{exec_info}")
-        click.echo("  Scripts:")
-        for script_name in group.get("scripts", []):
-            click.echo(f"    - {script_name}")
-        click.echo("")
+            click.echo(f"Group: {name} - {description}{schedule_info}{exec_info}")
+            click.echo("  Scripts:")
+            for script_name in group["scripts"]:
+                click.echo(f"    - {script_name}")
+            click.echo("")
+        except KeyError as e:
+            click.echo(f"[CONFIG ERROR] Group entry missing required field: {e}. Offending group: {group}", err=True)
+        except Exception as e:
+            click.echo(f"[CONFIG ERROR] Unexpected error in group config: {e}. Offending group: {group}", err=True)
 
 
 @cli.command()
