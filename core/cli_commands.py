@@ -158,33 +158,6 @@ def init():
     click.echo("You can now run signalbox from any directory!")
 
 
-@cli.command("config-check")
-def config_check():
-    """Check all config files for missing required fields in scripts and groups."""
-    config = load_config()
-    errors = False
-    click.echo("Checking scripts...")
-    for script in config["scripts"]:
-        try:
-            name = script.get("name", "<unnamed>")
-            _ = script["description"]
-            _ = script["command"]
-        except KeyError as e:
-            click.echo(f"[CONFIG ERROR] Script entry missing required field: {e}. Offending script: {script}", err=True)
-            errors = True
-    click.echo("Checking groups...")
-    for group in config["groups"]:
-        try:
-            name = group.get("name", "<unnamed>")
-            _ = group["description"]
-            _ = group["scripts"]
-        except KeyError as e:
-            click.echo(f"[CONFIG ERROR] Group entry missing required field: {e}. Offending group: {group}", err=True)
-            errors = True
-    if not errors:
-        click.echo("✓ All config files passed basic validation.")
-    else:
-        click.echo("❌ Config errors found. See above.")
 
 
 @cli.command()
@@ -532,11 +505,13 @@ def export_cron(group_name):
         click.echo(instruction)
 
 
+
 @cli.command()
 @handle_exceptions
 def validate():
-    """Validate configuration files for errors."""
-    result = validator.validate_configuration()
+    """Validate configuration files for errors, including catalog configs if enabled."""
+    include_catalog = get_config_value("include_catalog", True)
+    result = validator.validate_configuration(include_catalog=include_catalog)
 
     # Show which files are being validated
     if result.files_used:
