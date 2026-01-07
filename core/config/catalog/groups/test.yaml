@@ -34,3 +34,4 @@ groups:
   - hello       # (check) Runs and succeeds
   - fail_test   # (X) FAILS intentionally but execution continues
   - show_date   # (check) Still runs despite previous failure
+

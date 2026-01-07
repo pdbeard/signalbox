@@ -39,6 +39,9 @@ Issues = "https://github.com/pdbeard/signalbox/issues"
 [project.scripts]
 signalbox = "core.cli_commands:cli"
 
+[tool.setuptools.package-data]
+"core" = ["config/**/*"]
+
 [project.optional-dependencies]
 dev = [
     "flake8>=6.0.0",

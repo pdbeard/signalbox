@@ -1,12 +1,6 @@
 ![signalbox logo](logo_ideas/event-portal-blocks.svg)
 # signalbox 
-signalbox is a CLI tool for managing, executing, and monitoring scripts with detailed logging, scheduling, and group execution capabilities.
-
-## ⚠️ Security Notice
-
-**Signalbox executes shell commands with full user permissions.** Only use trusted YAML configuration files. Malicious configurations can execute arbitrary commands on your system.
-
-See [SECURITY.md](SECURITY.md) for detailed security considerations and best practices. 
+signalbox is a CLI tool for managing, executing, and monitoring scripts with detailed logging, scheduling, and group execution capabilities. 
 
 ## Main Features
 
@@ -15,25 +9,48 @@ See [SECURITY.md](SECURITY.md) for detailed security considerations and best pra
 -  Logs and execution history
 -  Parallel or serial execution modes
 -  Automatic log rotation (by count or age)
--  Generate systemd/cron configurations
--  **Desktop notifications** for script execution results (macOS & Linux) 
+-  Generate systemd/cron configurations 
 
 
 ## Installation
 
 ### Quick Install (Recommended)
+
 For user-level installation (no root required):
+
 ```bash
 pip install . --user
 ```
 
 This installs signalbox and all dependencies, making the `signalbox` command available in your PATH.
 
-**Note:** If you get "command not found" after installation, ensure `~/.local/bin` is in your PATH:
+Notes for Arch Linux (PEP 668)
+- Arch and similar distros may block pip installs.
+
+Recommended alternatives
+- Using a virtual environment:
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+python -m venv ~/venvs/signalbox
+source ~/venvs/signalbox/bin/activate
+pip install .
 ```
-Add this to your `~/.bashrc` or `~/.zshrc` to make it permanent.
+
+- Using pipx:
+```bash
+# Install pipx if needed
+sudo pacman -S python-pipx
+pipx install .
+```
+If a previous user-level install created a conflicting symlink:
+```bash
+rm ~/.local/bin/signalbox
+pipx install .
+```
+
+- breaking system protection (not recommended unless you understand the risks. But quick and easy!)
+```bash
+pip install . --user --break-system-packages
+```
 
 ### Initialize Configuration
 After installation, set up your configuration directory:
@@ -105,18 +122,7 @@ python signalbox.py list  # Uses config/ in current directory
 ### Automation & Scheduling
 - `export-systemd <group>` - Generate systemd service/timer files
 - `export-cron <group>` - Generate crontab entry
-
-### Notifications
-- `notify-test` - Send a test notification to verify notification system works
-  - Options: `--title`, `--message`, `--urgency` (Linux only)
-
-## Configuration
-
-### File Structure
-
-- **`config.yaml`** - Global settings and defaults (see [documentation/CONFIG_GUIDE.md](documentation/CONFIG_GUIDE.md))
-- **`scripts/`** - Script definitions (all .yaml files loaded)
-- **`groups/`** - Group definitions and scheduling (all .yaml files loaded)
+`** - Group definitions and scheduling (all .yaml files loaded)
 
 - See [documentation/FILE_STRUCTURE.md](documentation/FILE_STRUCTURE.md) for detailed examples
 
@@ -125,11 +131,6 @@ python signalbox.py list  # Uses config/ in current directory
 Example `scripts/basic.yaml`:
 ```yaml
 scripts:
-  - name: hello
-    command: echo "Hello World"
-    description: Simple echo script
-  
-  - name: show_date
     command: date
     description: Show current date and time
 ```

@@ -47,45 +47,64 @@ def init():
 
     if os.path.exists(config_dir):
         click.echo(f"Configuration directory already exists: {config_dir}")
-        if not click.confirm("Do you want to reinitialize (this will backup existing config)?"):
-            return
-        # Backup existing config
-        backup_dir = f"{config_dir}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        shutil.move(config_dir, backup_dir)
-        click.echo(f"Backed up existing config to: {backup_dir}")
+        if click.confirm("Do you want to backup your existing config before reinitializing?"):
+            backup_dir = f"{config_dir}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            shutil.move(config_dir, backup_dir)
+            click.echo(f"Backed up existing config to: {backup_dir}")
+        else:
+            # Remove previous config directory for a clean install
+            shutil.rmtree(config_dir)
+            click.echo(f"Removed previous config at: {config_dir}")
 
     # Find the installed package's config templates
     # Try to locate the original config from the package installation
     try:
-        import pkg_resources
+        import importlib.resources
 
-        package_path = pkg_resources.resource_filename("signalbox", "")
-        template_config = os.path.join(os.path.dirname(package_path), "config")
+        # Use importlib.resources to get the path to the package's config directory
+        with importlib.resources.path("core", "config") as template_config_path:
+            template_config = str(template_config_path)
 
         # If not found, try relative to this file (for development)
         if not os.path.exists(template_config):
             current_file_dir = os.path.dirname(os.path.abspath(__file__))
-            template_config = os.path.join(os.path.dirname(current_file_dir), "config")
+            template_config = os.path.join(current_file_dir, "config")
     except Exception:
         # Fallback to relative path from current module
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        template_config = os.path.join(os.path.dirname(current_file_dir), "config")
+        template_config = os.path.join(current_file_dir, "config")
 
     if os.path.exists(template_config):
-        # Copy the entire config directory
-        shutil.copytree(template_config, os.path.join(config_dir, "config"))
+        # Only copy the catalog directory
+        os.makedirs(os.path.join(config_dir, "config"), exist_ok=True)
+        catalog_src = os.path.join(template_config, "catalog")
+        catalog_dst = os.path.join(config_dir, "config", "catalog")
+        if os.path.exists(catalog_src):
+            shutil.copytree(catalog_src, catalog_dst)
+            click.echo(f"✓ Copied catalog from: {catalog_src}")
+        # Always create empty user scripts/groups directories
+        os.makedirs(os.path.join(config_dir, "config/scripts"), exist_ok=True)
+        os.makedirs(os.path.join(config_dir, "config/groups"), exist_ok=True)
         click.echo(f"✓ Created configuration directory: {config_dir}")
-        click.echo(f"✓ Copied default config from: {template_config}")
     else:
         # Create minimal structure if template not found
         os.makedirs(config_dir, exist_ok=True)
         os.makedirs(os.path.join(config_dir, "config/scripts"), exist_ok=True)
         os.makedirs(os.path.join(config_dir, "config/groups"), exist_ok=True)
+        os.makedirs(os.path.join(config_dir, "config/catalog/scripts"), exist_ok=True)
+        os.makedirs(os.path.join(config_dir, "config/catalog/groups"), exist_ok=True)
 
         # Create minimal signalbox.yaml
         default_config = {
             "default_log_limit": {"type": "count", "value": 10},
-            "paths": {"log_dir": "logs", "scripts_file": "config/scripts", "groups_file": "config/groups"},
+            "paths": {
+                "log_dir": "logs",
+                "scripts_file": "config/scripts",
+                "groups_file": "config/groups",
+                "catalog_scripts_file": "config/catalog/scripts",
+                "catalog_groups_file": "config/catalog/groups",
+            },
+            "include_catalog": True,
             "execution": {
                 "default_timeout": 300,
                 "capture_stdout": True,
@@ -121,12 +140,13 @@ def init():
     click.echo(f"✓ Created logs directory: {config_dir}/logs")
     click.echo(f"✓ Created runtime directory: {config_dir}/runtime")
     click.echo()
-    click.echo("🎉 Signalbox initialized successfully!")
+    click.echo("Signalbox initialized successfully!")
     click.echo()
     click.echo("Next steps:")
     click.echo(f"  1. Review configuration: {config_dir}/config/signalbox.yaml")
     click.echo(f"  2. Add your scripts: {config_dir}/config/scripts/")
-    click.echo(f"  3. Run: signalbox list")
+    click.echo(f"  3. Browse catalog scripts: {config_dir}/config/catalog/")
+    click.echo(f"  4. Run: signalbox list")
     click.echo()
     click.echo("You can now run signalbox from any directory!")
 

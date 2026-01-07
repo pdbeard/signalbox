@@ -38,34 +38,3 @@ scripts:
   log_limit:
     type: count
     value: 5
-- name: run_performance_tests
-  description: Execute performance benchmarks
-  command: echo "Running performance tests..." && sleep 3 && echo "API response time
-    - 85ms (target <100ms)" && echo "Memory usage - 45MB (target <50MB)" && echo "Performance
-    benchmarks passed"
-  log_limit:
-    type: count
-    value: 5
-- name: generate_documentation
-  description: Generate project documentation
-  command: echo "Generating documentation..." && sleep 2 && echo "API docs generated"
-    && echo "User guide updated" && echo "Documentation build completed"
-  log_limit:
-    type: count
-    value: 5
-- name: deploy_staging
-  description: Deploy to staging environment
-  command: echo "Deploying to staging..." && sleep 2 && echo "Files uploaded" && echo
-    "Services restarted" && echo "Health checks passed" && echo "Deployed to staging
-    successfully"
-  log_limit:
-    type: count
-    value: 5
-- name: deploy_production
-  description: Deploy to production environment
-  command: echo "Deploying to production..." && sleep 3 && echo "Blue-green deployment
-    initiated" && echo "Traffic switched" && echo "Health checks passed" && echo "Production
-    deployment completed"
-  log_limit:
-    type: count
-    value: 5

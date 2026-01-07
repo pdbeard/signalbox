@@ -38,11 +38,3 @@ groups:
   description: Complete infrastructure health check
   execution: parallel
   schedule: '*/15 * * * *'
-  scripts:
-  - check_disk_space
-  - check_memory_usage
-  - check_system_load
-  - check_running_services
-  - check_network_connectivity
-  - check_website_health
-  - check_api_response_time

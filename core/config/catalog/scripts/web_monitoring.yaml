@@ -38,26 +38,3 @@ scripts:
     value: 5
 - name: check_dns_resolution
   description: Test DNS resolution time
-  command: echo "Testing DNS resolution..." && time (dig +short httpbin.org > /dev/null)
-    2>&1 | grep real | awk '{print "DNS Resolution time:", $2}' && echo "Resolved
-    IPs:" && dig +short httpbin.org
-  log_limit:
-    type: count
-    value: 5
-- name: check_api_json_response
-  description: Test API JSON response and parsing
-  command: "echo \"Testing JSON API...\" && curl -s https://httpbin.org/json | jq\
-    \ -r '.slideshow.title' 2>/dev/null && echo \"\u2713 JSON API working\" || echo\
-    \ \"Testing without jq...\" && curl -s https://httpbin.org/json | grep -o '\"\
-    title\"[^,]*' | head -1"
-  log_limit:
-    type: count
-    value: 5
-- name: check_http_headers
-  description: Check important HTTP headers
-  command: echo "Checking HTTP headers..." && curl -s -I https://httpbin.org/get |
-    grep -E "(Server|Content-Type|Cache-Control)" | head -3 || echo "Header check
-    completed"
-  log_limit:
-    type: count
-    value: 5

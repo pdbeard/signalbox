@@ -1,0 +1,45 @@
+# ============================================================================
+# Global Configuration for signalbox
+# ============================================================================
+
+# Default log rotation settings (applied to scripts without specific log_limit)
+default_log_limit:
+  type: count
+  value: 10
+
+# Global paths
+# - All .yaml/.yml files in script/group directory are loaded (appended together)
+paths:
+  log_dir: logs
+  scripts_file: config/scripts  # Directory containing user script YAML files
+  groups_file: config/groups    # Directory containing user group YAML files
+  catalog_scripts_file: config/catalog/scripts  # Directory containing catalog script YAML files
+  catalog_groups_file: config/catalog/groups    # Directory containing catalog group YAML files
+
+# Catalog settings
+include_catalog: true  # Set to false to disable loading catalog scripts/groups
+
+# Execution settings
+execution:
+  # Default timeout for scripts (in seconds, 0 = no timeout)
+  default_timeout: 300
+  
+  # Security: Minimum timeout to prevent DOS attacks (in seconds)
+  # Scripts with timeout below this value will use this minimum
+  # Set to 1 to allow very fast scripts while preventing infinite hangs
+  min_timeout: 1
+  
+  # Capture output settings
+  capture_stdout: true
+  capture_stderr: true
+  
+  # Maximum number of parallel workers for parallel group execution
+  max_parallel_workers: 5
+
+# Logging settings
+logging:
+  # Timestamp format for log files
+  timestamp_format: "%Y%m%d_%H%M%S_%f"
+  
+  # Security: Maximum log file size in MB to prevent disk filling
+  # If script output exceeds this, it will be truncated with a warning
