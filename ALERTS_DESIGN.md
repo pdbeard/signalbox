@@ -45,6 +45,7 @@ scripts:
 4. **CLI Command: `signalbox alerts`**
    - List recent alerts with filtering options (by time, severity, script).
    - Show summary: script, message, timestamp, severity.
+   - Support filtering by script name: `signalbox alerts <script_name>` shows alerts only for the specified script. If no script is given, show all alerts (default behavior).
 5. **Notification Integration (Future)**
    - Optionally send alerts via email, Slack, etc.
    - Allow user-configurable notification channels.
@@ -66,5 +67,74 @@ $ signalbox alerts
 - How long should alert history be retained?
 - What notification channels are most useful for users?
 
+## Configuration Suggestions
+### v1 Configuration Approach
+
+- **Retention Policy:**
+   - Support both `max_days` (e.g., keep alerts for 30 days) and `max_entries` (e.g., keep last 1000 alerts).
+   - Allow special cases for severity (e.g., keep critical alerts longer).
+   - Example:
+      ```yaml
+      alerts:
+         retention:
+            max_days: 30
+            max_entries: 1000
+            per_severity:
+               critical: 90
+               warning: 30
+               info: 7
+      ```
+
+- **Notification Settings:**
+   - Simple enable/disable option at both global (signalbox.yaml) and local (script YAML) level.
+   - Notifications will use the existing `notifications.py` module.
+   - Example:
+      ```yaml
+      alerts:
+         notifications:
+            enabled: true
+      ```
+
+- **Storage:**
+   - Store alert logs in a simple file-based structure, similar to existing logs and runtime data.
+   - Alert logs can be placed in `logs/<script>/alerts`.
+
+- **Filtering & Suppression:**
+   - Filtering and suppression will be handled at the CLI level for v1 (e.g., `signalbox alerts --critical`, `signalbox alerts script-name --info`).
+
+- **UI/GUI:**
+   - No UI commands or controls for v1; focus is on CLI and config-driven management.
+
 ---
 This design doc provides a foundation for implementing robust, user-driven alerts in Signalbox. Feedback and suggestions are welcome.
+
+---
+
+## Step-by-Step Implementation Plan (v1)
+
+1. **Update Configuration Schema**
+   - Add `alerts.retention` and `alerts.notifications.enabled` options to both global (signalbox.yaml) and local script YAML schemas.
+   - Support `max_days`, `max_entries`, and `per_severity` for retention.
+
+2. **Alert Logging Structure**
+   - Create a directory structure for alert logs: `logs/<script>/alerts`.
+   - Store each alert as a line or record (e.g., JSON or plain text) with timestamp, severity, message, and script name.
+
+3. **Retention Enforcement**
+   - On alert log write or periodically, prune old alerts based on `max_days`, `max_entries`, and `per_severity` settings.
+
+4. **Notification Logic**
+   - Check the `enabled` flag (global and local) before sending notifications.
+   - Use the existing `notifications.py` module to send notifications for new alerts.
+
+5. **CLI Filtering**
+   - Update the `signalbox alerts` CLI to support filtering by severity (`--critical`, `--info`, etc.) and by script name (`signalbox alerts <script_name>`).
+
+6. **Documentation**
+   - Update user documentation and config guides to explain new alert retention and notification options.
+
+7. **Testing**
+   - Add tests for retention logic, notification enable/disable, and CLI filtering.
+
+8. **Review and Iterate**
+   - Gather feedback from users and refine retention, notification, and filtering features as needed.
