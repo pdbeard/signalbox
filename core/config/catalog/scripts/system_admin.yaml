@@ -15,26 +15,24 @@
 # your specific environment. The scripts include fallbacks for macOS compatibility.
 
 scripts:
-- name: check_disk_space
-  description: Monitor disk usage and warn if > 80%
-  command: "echo \"\U0001F4BE Checking disk space...\"\ndf -h / | awk 'NR==2 {\n \
-    \ usage = $5; \n  gsub(/%/, \"\", usage); \n  if(usage > 80) \n    print \"\u26A0\
-    \uFE0F  Disk usage HIGH: \" usage \"% (/\" $4 \" free)\"; \n  else if(usage >\
-    \ 60) \n    print \"\u26A1 Disk usage MEDIUM: \" usage \"% (/\" $4 \" free)\"\
-    ; \n  else \n    print \"\u2713 Disk usage OK: \" usage \"% (/\" $4 \" free)\"\
-    \n}'\n"
-  log_limit:
-    type: count
-    value: 10
-- name: check_memory_usage
-  description: Check system memory usage
-  command: "echo \"\U0001F9E0 Checking memory usage...\"\nfree -m 2>/dev/null | awk\
-    \ 'NR==2{\n  printf \"Memory: %s/%sMB (%.1f%% used)\\n\", $3,$2,$3*100/$2;\n \
-    \ if($3*100/$2 > 80) print \"\u26A0\uFE0F  Memory usage is high\";\n  else print\
-    \ \"\u2713 Memory usage normal\"\n}' || (\n  # Fallback for macOS\n  echo \"Memory\
-    \ check (macOS):\"\n  vm_stat | grep -E \"(Pages free|Pages active|Pages inactive|Pages\
-    \ speculative|Pages wired down)\" | awk '{print $3 \" \" $4}' | head -2\n)\n"
-  log_limit:
-    type: count
-    value: 10
-- name: check_system_load
+  - name: check_disk_space
+    description: Monitor disk usage and warn if > 80%
+    command: |
+      echo 'Checking disk space...'
+      df -h / | awk 'NR==2 { usage = $5; gsub(/%/, "", usage); if(usage > 80) print "Disk usage HIGH: " usage "% (/" $4 " free)"; else if(usage > 60) print "Disk usage MEDIUM: " usage "% (/" $4 " free)"; else print "Disk usage OK: " usage "% (/" $4 " free)" }'
+    log_limit:
+      type: count
+      value: 10
+  - name: check_memory_usage
+    description: Check system memory usage
+    command: |
+      echo 'Checking memory usage...'
+      free -m 2>/dev/null | awk 'NR==2{ printf "Memory: %s/%sMB (%.1f%% used)\n", $3,$2,$3*100/$2; if($3*100/$2 > 80) print "Memory usage is high"; else print "Memory usage normal" }' || (
+        # Fallback for macOS
+        echo 'Memory check (macOS):'
+        vm_stat | grep -E '(Pages free|Pages active|Pages inactive|Pages speculative|Pages wired down)' | awk '{print $3 " " $4}' | head -2
+      )
+    log_limit:
+      type: count
+      value: 10
+  - name: check_system_load

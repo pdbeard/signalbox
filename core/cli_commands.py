@@ -15,6 +15,7 @@ from . import validator
 from . import exporters
 from . import notifications
 from .exceptions import SignalboxError, ScriptNotFoundError, GroupNotFoundError
+from .helpers import format_timestamp, parse_timestamp
 
 
 def handle_exceptions(func):
@@ -47,71 +48,45 @@ def init():
 
     if os.path.exists(config_dir):
         click.echo(f"Configuration directory already exists: {config_dir}")
-        if click.confirm("Do you want to backup your existing config before reinitializing?"):
-            backup_dir = f"{config_dir}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            shutil.move(config_dir, backup_dir)
-            click.echo(f"Backed up existing config to: {backup_dir}")
-        else:
-            # Remove previous config directory for a clean install
-            shutil.rmtree(config_dir)
-            click.echo(f"Removed previous config at: {config_dir}")
+        if not click.confirm("Do you want to reinitialize (this will backup existing config)?"):
+            return
+        # Backup existing config
+        backup_dir = f"{config_dir}.backup.{format_timestamp(datetime.now())}"
+        shutil.move(config_dir, backup_dir)
+        click.echo(f"Backed up existing config to: {backup_dir}")
 
     # Find the installed package's config templates
     # Try to locate the original config from the package installation
     try:
-        import importlib.resources
+        import pkg_resources
 
-        # Use importlib.resources to get the path to the package's config directory
-        with importlib.resources.path("core", "config") as template_config_path:
-            template_config = str(template_config_path)
+        package_path = pkg_resources.resource_filename("signalbox", "")
+        template_config = os.path.join(os.path.dirname(package_path), "config")
 
         # If not found, try relative to this file (for development)
         if not os.path.exists(template_config):
             current_file_dir = os.path.dirname(os.path.abspath(__file__))
-            template_config = os.path.join(current_file_dir, "config")
+            template_config = os.path.join(os.path.dirname(current_file_dir), "config")
     except Exception:
         # Fallback to relative path from current module
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        template_config = os.path.join(current_file_dir, "config")
+        template_config = os.path.join(os.path.dirname(current_file_dir), "config")
 
     if os.path.exists(template_config):
-        # Only copy the catalog directory and signalbox.yaml
-        os.makedirs(os.path.join(config_dir, "config"), exist_ok=True)
-        # Copy signalbox.yaml
-        src_yaml = os.path.join(template_config, "signalbox.yaml")
-        dst_yaml = os.path.join(config_dir, "config", "signalbox.yaml")
-        if os.path.exists(src_yaml):
-            shutil.copy2(src_yaml, dst_yaml)
-            click.echo(f"✓ Copied default config: {src_yaml}")
-        # Copy catalog
-        catalog_src = os.path.join(template_config, "catalog")
-        catalog_dst = os.path.join(config_dir, "config", "catalog")
-        if os.path.exists(catalog_src):
-            shutil.copytree(catalog_src, catalog_dst)
-            click.echo(f"✓ Copied catalog from: {catalog_src}")
-        # Always create empty user scripts/groups directories
-        os.makedirs(os.path.join(config_dir, "config/scripts"), exist_ok=True)
-        os.makedirs(os.path.join(config_dir, "config/groups"), exist_ok=True)
+        # Copy the entire config directory
+        shutil.copytree(template_config, os.path.join(config_dir, "config"))
         click.echo(f"✓ Created configuration directory: {config_dir}")
+        click.echo(f"✓ Copied default config from: {template_config}")
     else:
         # Create minimal structure if template not found
         os.makedirs(config_dir, exist_ok=True)
         os.makedirs(os.path.join(config_dir, "config/scripts"), exist_ok=True)
         os.makedirs(os.path.join(config_dir, "config/groups"), exist_ok=True)
-        os.makedirs(os.path.join(config_dir, "config/catalog/scripts"), exist_ok=True)
-        os.makedirs(os.path.join(config_dir, "config/catalog/groups"), exist_ok=True)
 
         # Create minimal signalbox.yaml
         default_config = {
             "default_log_limit": {"type": "count", "value": 10},
-            "paths": {
-                "log_dir": "logs",
-                "scripts_file": "config/scripts",
-                "groups_file": "config/groups",
-                "catalog_scripts_file": "config/catalog/scripts",
-                "catalog_groups_file": "config/catalog/groups",
-            },
-            "include_catalog": True,
+            "paths": {"log_dir": "logs", "scripts_file": "config/scripts", "groups_file": "config/groups"},
             "execution": {
                 "default_timeout": 300,
                 "capture_stdout": True,
@@ -152,46 +127,62 @@ def init():
     click.echo("Next steps:")
     click.echo(f"  1. Review configuration: {config_dir}/config/signalbox.yaml")
     click.echo(f"  2. Add your scripts: {config_dir}/config/scripts/")
-    click.echo(f"  3. Browse catalog scripts: {config_dir}/config/catalog/")
-    click.echo(f"  4. Run: signalbox list")
-    click.echo()
-    click.echo("You can now run signalbox from any directory!")
-
-
+    click.echo(f"  3. Run: signalbox list")
+    click.echo("SECURITY: Signalbox executes commands with full shell access.")
+    click.echo("   Only use trusted YAML files. See SECURITY.md for details.")
+    click.echo("   You can now run signalbox from any directory!")
 
 
 @cli.command()
 def list():
-    """List all scripts and their status."""
+    """List all scripts and their status, grouped by config file."""
     config = load_config()
     runtime_state = load_runtime_state()
     config = merge_config_with_runtime_state(config, runtime_state)
 
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-    scripts = config["scripts"]
-    if not scripts:
-        click.echo("No scripts defined.")
-        return
-    for script in scripts:
-        try:
-            status = script.get("last_status", "no logs")
-            last_run = script.get("last_run", "")
-            name = script.get("name", "<unnamed>")
-            description = script["description"]
-            if last_run:
-                try:
-                    timestamp_str = last_run.replace(".log", "")
-                    dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S_%f")
-                    human_date = dt.strftime(date_format)
-                    click.echo(f"{name}: {description} \n   {status} ({human_date}) ")
-                except ValueError:
-                    click.echo(f"{name}: {description} \n   {status} ({last_run})")
-            else:
-                click.echo(f"{name}: {description} \n   {status}")
-        except KeyError as e:
-            click.echo(f"[CONFIG ERROR] Script entry missing required field: {e}. Check your scripts YAML files. Offending script: {script}", err=True)
-        except Exception as e:
-            click.echo(f"[CONFIG ERROR] Unexpected error in script config: {e}. Offending script: {script}", err=True)
+    # Group scripts by their source file
+    script_sources = config.get("_script_sources", {})
+    scripts_by_file = {}
+    for script in config["scripts"]:
+        source = script_sources.get(script.get("name"), "<unknown source>")
+        scripts_by_file.setdefault(source, []).append(script)
+
+    import os
+    for source_file, scripts in scripts_by_file.items():
+        file_name = os.path.basename(source_file)
+        click.echo(f"\n=== {file_name} ===")
+        for script in scripts:
+            try:
+                status = script.get("last_status", "not run")
+                last_run = script.get("last_run", "")
+                name = script["name"]
+                description = script["description"]
+                # Color for status
+                if status.lower() in ("success", "ok"):
+                    status_str = click.style(status, fg="green", bold=True)
+                elif status.lower() in ("failed", "fail", "error"):
+                    status_str = click.style(status, fg="red", bold=True)
+                else:
+                    status_str = click.style(status, fg="yellow")
+                if last_run:
+                    try:
+                        timestamp_str = last_run.replace(".log", "")
+                        dt = parse_timestamp(timestamp_str)
+                        human_date = dt.strftime(date_format)
+                        click.echo(f"{name}: {status_str} ({human_date}) - {description}")
+                    except Exception:
+                        click.echo(f"{name}: {status_str} ({last_run}) - {description}")
+                else:
+                    click.echo(f"{name}: {status_str} - {description}")
+            except KeyError as e:
+                label = click.style("[CONFIG ERROR]", fg="red", bold=True)
+                msg = f" Script entry missing required field: {e}. Check your scripts YAML files. Offending script: {script}"
+                click.echo(f"{label}{msg}", err=True)
+            except Exception as e:
+                label = click.style("[CONFIG ERROR]", fg="red", bold=True)
+                msg = f" Unexpected error in script config: {e}. Offending script: {script}"
+                click.echo(f"{label}{msg}", err=True)
 
 
 @cli.command()
@@ -237,8 +228,7 @@ def run_group(name):
         click.echo(f"Execution mode: serial (stop_on_error: {stop_on_error})")
     script_names = group["scripts"]
     start_time = datetime.now()
-    timestamp_format = get_config_value("logging.timestamp_format", "%Y%m%d_%H%M%S_%f")
-    timestamp = start_time.strftime(timestamp_format)
+    timestamp = format_timestamp(start_time)
     if execution_mode == "parallel":
         scripts_successful = run_group_parallel(script_names, config)
     else:
@@ -269,40 +259,19 @@ def run_group(name):
     click.echo(f"Group {name} executed.")
 
 
-
 @cli.command()
-@click.argument("name", required=False)
+@click.argument("name")
 @handle_exceptions
-def logs(name=None):
-    """
-    Show the latest log for a script, or list all available logs.
-
-    Usage:
-      signalbox logs <script_name>   Show the latest log for the given script.
-      signalbox logs                 List all scripts with available logs.
-    """
+def logs(name):
+    """Show the latest log for a script."""
     config = load_config()
-    if name is None:
-        # List all available logs for all scripts
-        scripts = config["scripts"]
-        found = False
-        for script in scripts:
-            script_name = script.get("name")
-            log_path, exists = log_manager.get_latest_log(script_name)
-            if exists:
-                click.echo(f"{script_name}: {log_path}")
-                found = True
-        if not found:
-            click.echo("no logs found for any script.")
-        return
-
     script = next((s for s in config["scripts"] if s["name"] == name), None)
     if not script:
         raise ScriptNotFoundError(name)
 
     log_path, exists = log_manager.get_latest_log(name)
     if not exists:
-        click.echo("no logs found")
+        click.echo("No logs found")
         return
 
     # Use display settings from global config
@@ -364,7 +333,7 @@ def clear_logs(name):
     if log_manager.clear_script_logs(name):
         click.echo(f"Cleared logs for {name}")
     else:
-        click.echo(f"no logs found for {name}")
+        click.echo(f"No logs found for {name}")
 
 
 @cli.command()
@@ -373,7 +342,7 @@ def clear_all_logs():
     if log_manager.clear_all_logs():
         click.echo("Cleared all logs")
     else:
-        click.echo("no logs directory found")
+        click.echo("No logs directory found")
 
 
 @cli.command()
@@ -386,8 +355,6 @@ def list_groups():
         return
     for group in groups:
         try:
-            name = group.get("name", "<unnamed>")
-            description = group["description"]
             schedule_info = f" [scheduled: {group['schedule']}]" if "schedule" in group else ""
             execution_mode = group.get("execution", "serial")
             stop_on_error = group.get("stop_on_error", False)
@@ -398,15 +365,19 @@ def list_groups():
                 exec_info += ", stop_on_error"
             exec_info += "]"
 
-            click.echo(f"Group: {name} - {description}{schedule_info}{exec_info}")
+            click.echo(f"Group: {group['name']} - {group.get('description', '')}{schedule_info}{exec_info}")
             click.echo("  Scripts:")
-            for script_name in group["scripts"]:
+            for script_name in group.get("scripts", []):
                 click.echo(f"    - {script_name}")
             click.echo("")
         except KeyError as e:
-            click.echo(f"[CONFIG ERROR] Group entry missing required field: {e}. Offending group: {group}", err=True)
+            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
+            msg = f" Group entry missing required field: {e}. Offending group: {group}"
+            click.echo(f"{label}{msg}", err=True)
         except Exception as e:
-            click.echo(f"[CONFIG ERROR] Unexpected error in group config: {e}. Offending group: {group}", err=True)
+            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
+            msg = f" Unexpected error in group config: {e}. Offending group: {group}"
+            click.echo(f"{label}{msg}", err=True)
 
 
 @cli.command()
@@ -505,13 +476,11 @@ def export_cron(group_name):
         click.echo(instruction)
 
 
-
 @cli.command()
 @handle_exceptions
 def validate():
-    """Validate configuration files for errors, including catalog configs if enabled."""
-    include_catalog = get_config_value("include_catalog", True)
-    result = validator.validate_configuration(include_catalog=include_catalog)
+    """Validate configuration files for errors."""
+    result = validator.validate_configuration()
 
     # Show which files are being validated
     if result.files_used:
@@ -559,28 +528,36 @@ def validate():
 
 
 @cli.command()
-@click.option("--title", default="Signalbox Test", help="Notification title")
-@click.option("--message", default="This is a test notification from Signalbox", help="Notification message")
+@click.option(
+    "--title",
+    default="Signalbox Test",
+    help="Notification title"
+)
+@click.option(
+    "--message",
+    default="This is a test notification from Signalbox",
+    help="Notification message"
+)
 @click.option(
     "--urgency",
     type=click.Choice(["low", "normal", "critical"]),
     default="normal",
-    help="Notification urgency level (Linux only)",
+    help="Notification urgency level (Linux only)"
 )
 @handle_exceptions
 def notify_test(title, message, urgency):
     """Send a test notification to verify notification system works."""
     import platform
-
+    
     system = platform.system()
     click.echo(f"Sending test notification on {system}...")
     click.echo(f"Title: {title}")
     click.echo(f"Message: {message}")
     if system == "Linux":
         click.echo(f"Urgency: {urgency}")
-
+    
     success = notifications.send_notification(title, message, urgency)
-
+    
     if success:
         click.echo("✓ Notification sent successfully!")
     else:

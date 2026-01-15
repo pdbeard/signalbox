@@ -18,3 +18,22 @@ automate cron and systemd configs
 
 
 include config check documentation
+
+
+parse output feature? maybe using something like awk?
+    - additional notify catch? 
+        - Example, harddrive usage script. Currently signal box just runs and doesn't care what about put is as long as the script ran. Could have a optional parse output. Then send to notification if x>90 or something?
+        - Maybe the concept a second validation gate, ie -> script ran successfully -> parse output -> if this, then green -> if this than yellow -> if this than red. 
+    or maybe just pass parse output to signalbox notify or something
+
+
+
+Signalbox Alerts: 
+- New CLI command: `signalbox alerts` lists recent alerts triggered by scripts.
+- Implementation steps:
+  - Parse script logs/output for alert patterns defined in YAML config.
+  - Support multiple alert patterns per script (alerts: list).
+  - Store alerts with script name, message, timestamp, and status.
+  - Display alert summary in CLI; allow filtering by time/severity.
+- Consider storing alerts in a dedicated log or database for efficient querying.
+- Design extensible pattern matching for future alert types.

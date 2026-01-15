@@ -1,0 +1,5 @@
+groups:
+- name: missing_description
+  scripts:
+    - hello
+    - show_date

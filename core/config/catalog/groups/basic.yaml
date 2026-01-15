@@ -13,11 +13,15 @@ groups:
   - show_date
   - current_dir
 - name: system
-  description: System monitoring
+  # description: System monitoring
   schedule: '*/5 * * * *'
   execution: parallel
   scripts:
   - system_uptime
   - disk_usage
   - list_files
-
+-name 
+as
+fk
+asd
+f

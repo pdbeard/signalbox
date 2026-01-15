@@ -50,6 +50,63 @@ def validate_configuration(include_catalog=True):
         catalog_scripts_file = resolve_path(catalog_scripts_file)
         catalog_groups_file = resolve_path(catalog_groups_file)
 
+        # Strictly validate all user script YAML files for syntax and required fields (user and catalog)
+        for script_dir in [scripts_file, catalog_scripts_file]:
+            if os.path.isdir(script_dir):
+                for fname in os.listdir(script_dir):
+                    if fname.endswith('.yaml') or fname.endswith('.yml'):
+                        fpath = os.path.join(script_dir, fname)
+                        file_errors = []
+                        try:
+                            with open(fpath, 'r') as f:
+                                data = yaml.safe_load(f)
+                            if not data or 'scripts' not in data:
+                                file_errors.append(f"No 'scripts' key found")
+                            else:
+                                for script in data['scripts']:
+                                    if 'name' not in script:
+                                        file_errors.append(f"Script missing 'name' field")
+                                    if 'command' not in script:
+                                        file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'command' field")
+                                    if 'description' not in script:
+                                        file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'description' field")
+                        except yaml.YAMLError as e:
+                            file_errors.append(f"YAML syntax error: {e}")
+                        except Exception as e:
+                            file_errors.append(f"Error loading: {e}")
+                        if file_errors:
+                            result.errors.append(f"\n=== {fname} ===")
+                            for err in file_errors:
+                                result.errors.append(f"  - {err}")
+
+        # Strictly validate all user group YAML files for syntax and required fields (user and catalog)
+        for group_dir in [groups_file, catalog_groups_file]:
+            if os.path.isdir(group_dir):
+                for fname in os.listdir(group_dir):
+                    if fname.endswith('.yaml') or fname.endswith('.yml'):
+                        fpath = os.path.join(group_dir, fname)
+                        file_errors = []
+                        try:
+                            with open(fpath, 'r') as f:
+                                data = yaml.safe_load(f)
+                            if not data or 'groups' not in data:
+                                file_errors.append(f"No 'groups' key found")
+                            else:
+                                for group in data['groups']:
+                                    if 'name' not in group:
+                                        file_errors.append(f"Group missing 'name' field")
+                                    if 'description' not in group:
+                                        file_errors.append(f"Group '{group.get('name', 'unknown')}' missing 'description' field")
+                                    if 'scripts' not in group:
+                                        file_errors.append(f"Group '{group.get('name', 'unknown')}' missing 'scripts' field")
+                        except yaml.YAMLError as e:
+                            file_errors.append(f"YAML syntax error: {e}")
+                        except Exception as e:
+                            file_errors.append(f"Error loading: {e}")
+                        if file_errors:
+                            result.errors.append(f"\n=== {fname} ===")
+                            for err in file_errors:
+                                result.errors.append(f"  - {err}")
         # Validate user scripts/groups, fallback to catalog if enabled
         user_scripts_exists = os.path.isdir(scripts_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(scripts_file)) if os.path.exists(scripts_file) else False
         user_groups_exists = os.path.isdir(groups_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(groups_file)) if os.path.exists(groups_file) else False
@@ -176,14 +233,8 @@ def _validate_scripts(result):
         duplicates = [n for n in script_names if script_names.count(n) > 1]
         result.errors.append(f"Duplicate script names: {', '.join(set(duplicates))}")
 
-    # Check required fields
-    for script in config["scripts"]:
-        if "name" not in script:
-            result.errors.append("Script missing 'name' field")
-        if "command" not in script:
-            result.errors.append(f"Script '{script.get('name', 'unknown')}' missing 'command' field")
-        if "description" not in script:
-            result.errors.append(f"Script '{script.get('name', 'unknown')}' missing 'description' field")
+    # Note: Required field validation is now done per-file during initial validation
+    # to properly group errors by source file
 
     # Check for unused scripts (if enabled in global config)
     if get_config_value("validation.warn_unused_scripts", True):
@@ -212,20 +263,14 @@ def _validate_groups(result):
         duplicates = [n for n in group_names if group_names.count(n) > 1]
         result.errors.append(f"Duplicate group names: {', '.join(set(duplicates))}")
 
+    # Note: Required field validation is now done per-file during initial validation
+    # to properly group errors by source file
+
     for group in groups:
         if "name" not in group:
-            result.errors.append("Group missing 'name' field")
             continue
 
         group_name = group["name"]
-
-        if "description" not in group:
-            result.errors.append(f"Group '{group_name}' missing 'description' field")
-
-        # Check for empty groups (if enabled in global config)
-        if get_config_value("validation.warn_empty_groups", True):
-            if "scripts" not in group or not group["scripts"]:
-                result.errors.append(f"Group '{group_name}' missing 'scripts' field")
 
         # Check if scripts exist
         if "scripts" in group and group["scripts"]:
