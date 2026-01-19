@@ -971,16 +971,16 @@ def validate():
         strict_mode = get_config_value('validation.strict', False)
         
         if errors:
-            click.echo("❌ Errors found:")
+            click.echo("Errors found:")
             for error in errors:
-                click.echo(f"  - {error}")
+                click.echo(f"{error}")
         
         if warnings:
-            click.echo("\n⚠️  Warnings:")
+            click.echo("\nWarnings:")
             for warning in warnings:
-                click.echo(f"  - {warning}")
+                click.echo(f"{warning}")
             if strict_mode:
-                click.echo("\n❌ Validation failed (strict mode enabled)")
+                click.echo("\nValidation failed (strict mode enabled)")
                 return False
         
         if not errors and not warnings:
@@ -1009,10 +1009,10 @@ def validate():
         return len(errors) == 0 and (not strict_mode or len(warnings) == 0)
         
     except yaml.YAMLError as e:
-        click.echo(f"❌ YAML syntax error: {e}")
+        click.echo(f" YAML syntax error: {e}")
         return False
     except Exception as e:
-        click.echo(f"❌ Error loading config: {e}")
+        click.echo(f" Error loading config: {e}")
         return False
 
 if __name__ == '__main__':

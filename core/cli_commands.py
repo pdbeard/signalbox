@@ -488,19 +488,24 @@ def validate():
 
     # Show errors
     if result.errors:
-        click.echo("❌ Errors found:")
+        click.echo("Errors found:")
         for error in result.errors:
-            click.echo(f"  - {error}")
+            if not error.strip():
+                click.echo()
+            elif error.strip().endswith(".yaml") or error.strip().startswith(("Script Config File", "Group Config File")):
+                click.echo(error)
+            else:
+                click.echo(f" - {error}")
 
     # Show warnings
     if result.warnings:
-        click.echo("\n⚠️  Warnings:")
+        click.echo("\nWarnings:")
         for warning in result.warnings:
-            click.echo(f"  - {warning}")
+            click.echo(f"{warning}")
 
         strict_mode = get_config_value("validation.strict", False)
         if strict_mode:
-            click.echo("\n❌ Validation failed (strict mode enabled)")
+            click.echo("\nValidation failed (strict mode enabled)")
             sys.exit(5)
 
     # Show success message

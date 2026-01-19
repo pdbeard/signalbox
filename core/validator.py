@@ -75,9 +75,9 @@ def validate_configuration(include_catalog=True):
                         except Exception as e:
                             file_errors.append(f"Error loading: {e}")
                         if file_errors:
-                            result.errors.append(f"\n=== {fname} ===")
+                            result.errors.append(f"\nScript Config File:  {fname}")
                             for err in file_errors:
-                                result.errors.append(f"  - {err}")
+                                result.errors.append(f"{err}")
 
         # Strictly validate all user group YAML files for syntax and required fields (user and catalog)
         for group_dir in [groups_file, catalog_groups_file]:
@@ -104,9 +104,9 @@ def validate_configuration(include_catalog=True):
                         except Exception as e:
                             file_errors.append(f"Error loading: {e}")
                         if file_errors:
-                            result.errors.append(f"\n=== {fname} ===")
+                            result.errors.append(f"\nGroup Config File:  {fname}")
                             for err in file_errors:
-                                result.errors.append(f"  - {err}")
+                                result.errors.append(f"{err}")
         # Validate user scripts/groups, fallback to catalog if enabled
         user_scripts_exists = os.path.isdir(scripts_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(scripts_file)) if os.path.exists(scripts_file) else False
         user_groups_exists = os.path.isdir(groups_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(groups_file)) if os.path.exists(groups_file) else False
