@@ -43,3 +43,39 @@ logging:
   
   # Security: Maximum log file size in MB to prevent disk filling
   # If script output exceeds this, it will be truncated with a warning
+# Alert settings
+alerts:
+  # Alert retention policy
+  retention:
+    max_days: 30           # Keep alerts for 30 days
+    max_entries: 1000      # Keep at most 1000 alerts per script
+    per_severity:
+      critical: 90         # Keep critical alerts for 90 days
+      warning: 30          # Keep warning alerts for 30 days
+      info: 7              # Keep info alerts for 7 days
+  
+  # Notification settings for alerts
+  notifications:
+    enabled: true          # Enable/disable alert notifications globally
+
+# Notification settings
+notifications:
+  enabled: true            # Enable/disable all notifications
+  on_failure_only: true    # Only send notifications on failures
+  show_failed_names: true  # Include failed script/group names in notifications
+
+# Display settings
+display:
+  # Date format for displaying timestamps
+  date_format: "%Y-%m-%d %H:%M:%S"
+  
+  # Include full file paths in output
+  include_paths: false
+  
+  # Enable colored output
+  colors: true
+
+# Validation settings
+validation:
+  # Strict mode: Treat warnings as errors
+  strict: false

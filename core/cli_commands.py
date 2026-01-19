@@ -14,6 +14,7 @@ from . import log_manager
 from . import validator
 from . import exporters
 from . import notifications
+from . import alerts
 from .exceptions import SignalboxError, ScriptNotFoundError, GroupNotFoundError
 from .helpers import format_timestamp, parse_timestamp
 
@@ -568,3 +569,54 @@ def notify_test(title, message, urgency):
     else:
         click.echo("✗ Failed to send notification. Check logs for details.", err=True)
         sys.exit(1)
+
+
+@cli.command()
+@click.argument("script_name", required=False)
+@click.option("--severity", type=click.Choice(["info", "warning", "critical"]), help="Filter by severity")
+@click.option("--days", type=int, help="Show alerts from last N days")
+@handle_exceptions
+def alerts_cmd(script_name, severity, days):
+    """List recent alerts. Optionally filter by script name, severity, or time range."""
+    
+    # Load alerts with filters
+    alert_list = alerts.load_alerts(script_name=script_name, severity=severity, max_days=days)
+    
+    if not alert_list:
+        if script_name:
+            click.echo(f"No alerts found for script '{script_name}'")
+        else:
+            click.echo("No alerts found")
+        return
+    
+    # Display alerts
+    date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
+    
+    for alert in alert_list:
+        try:
+            timestamp_str = alert.get("timestamp", "")
+            dt = parse_timestamp(timestamp_str)
+            human_date = dt.strftime(date_format)
+        except Exception:
+            human_date = timestamp_str
+        
+        severity_str = alert.get("severity", "info")
+        script = alert.get("script_name", "unknown")
+        message = alert.get("message", "")
+        
+        # Color code by severity
+        if severity_str == "critical":
+            severity_label = click.style(severity_str, fg="red", bold=True)
+        elif severity_str == "warning":
+            severity_label = click.style(severity_str, fg="yellow")
+        else:
+            severity_label = click.style(severity_str, fg="blue")
+        
+        click.echo(f"[{human_date}] [{severity_label}] {script}: {message}")
+    
+    # Show summary
+    click.echo(f"\nTotal alerts: {len(alert_list)}")
+
+
+# Register the alerts command with the CLI group
+cli.add_command(alerts_cmd, name="alerts")

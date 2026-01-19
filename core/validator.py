@@ -70,6 +70,25 @@ def validate_configuration(include_catalog=True):
                                         file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'command' field")
                                     if 'description' not in script:
                                         file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'description' field")
+                                    
+                                    # Validate alerts field if present
+                                    if 'alerts' in script:
+                                        alerts_list = script['alerts']
+                                        if not isinstance(alerts_list, list):
+                                            file_errors.append(f"Script '{script.get('name', 'unknown')}' alerts field must be a list")
+                                        else:
+                                            for idx, alert in enumerate(alerts_list):
+                                                if not isinstance(alert, dict):
+                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} must be a dict")
+                                                    continue
+                                                if 'pattern' not in alert:
+                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} missing 'pattern' field")
+                                                if 'message' not in alert:
+                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} missing 'message' field")
+                                                # Validate severity if present
+                                                if 'severity' in alert and alert['severity'] not in ['info', 'warning', 'critical']:
+                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} has invalid severity (must be info, warning, or critical)")
+
                         except yaml.YAMLError as e:
                             file_errors.append(f"YAML syntax error: {e}")
                         except Exception as e:

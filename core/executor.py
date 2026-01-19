@@ -16,6 +16,7 @@ from .runtime import save_script_runtime_state
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
 from .exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeoutError
 from . import notifications
+from . import alerts
 from .helpers import format_timestamp
 
 
@@ -60,6 +61,28 @@ def run_script(name, config):
 
         # Write log file
         write_execution_log(log_file, script["command"], result.returncode, result.stdout, result.stderr)
+
+        # Check for alert patterns in output
+        combined_output = result.stdout + "\n" + result.stderr
+        triggered_alerts = alerts.check_alert_patterns(name, script, combined_output)
+        
+        # Save and optionally notify for each triggered alert
+        if triggered_alerts:
+            alerts_enabled = get_config_value("alerts.notifications.enabled", True)
+            for alert in triggered_alerts:
+                alerts.save_alert(name, alert)
+                
+                # Send notification if alerts are enabled
+                if alerts_enabled:
+                    notifications.send_notification(
+                        title=f"Alert: {name}",
+                        message=alert["message"],
+                        urgency="critical" if alert["severity"] == "critical" else "normal"
+                    )
+                    
+                # Log to console
+                severity_label = alert["severity"].upper()
+                click.echo(f"  [{severity_label}] {alert['message']}")
 
         # Rotate old logs
         rotate_logs(script)
