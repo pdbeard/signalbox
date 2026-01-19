@@ -8,13 +8,18 @@ from typing import Dict, List, Optional, Callable
 
 
 def load_yaml_files_from_dir(
-    directory: str, 
-    key: str, 
+    directory: str,
+    key: str,
     filter_func: Optional[Callable[[str], bool]] = None,
     filename_prefix: str = "",
-    filename_suffix: str = (".yaml", ".yml"),
-    track_sources: bool = False
-) -> List[Dict]:
+    filename_suffix: tuple = (".yaml", ".yml"),
+    track_sources: bool = False,
+    suppress_warnings: bool = False
+) -> list:
+    import os
+    # Allow global suppression via env var
+    if os.environ.get("SIGNALBOX_SUPPRESS_CONFIG_WARNINGS", "0") == "1":
+        suppress_warnings = True
     """
     Load and merge YAML files from a directory.
     
@@ -79,7 +84,8 @@ def load_yaml_files_from_dir(
                     else:
                         items.extend(items_from_file)
         except Exception as e:
-            click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
+            if not suppress_warnings:
+                click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
     
     return items
 

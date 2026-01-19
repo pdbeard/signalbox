@@ -35,6 +35,16 @@ def run_script(name, config):
             ExecutionTimeoutError: If script execution times out
             ExecutionError: If script execution fails for any other reason
     """
+
+    # Validate configuration before running script
+    from . import validator, config as config_mod
+    validation_result = validator.validate_configuration()
+    if validation_result.errors or validation_result.warnings:
+        click.echo("Some configuration errors or warnings were found. Please run 'signalbox validate' for details.")
+
+    # Reload config with warnings suppressed for script execution
+    config = config_mod.load_config(suppress_warnings=True)
+
     script = next((s for s in config["scripts"] if s["name"] == name), None)
     if not script:
         raise ScriptNotFoundError(name)

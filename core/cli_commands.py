@@ -7,7 +7,7 @@ import shutil
 import yaml
 from functools import wraps
 
-from .config import load_config, get_config_value, load_global_config
+from .config import load_config, get_config_value, load_global_config, _default_config_manager
 from .executor import run_script, run_group_parallel, run_group_serial
 from .runtime import save_group_runtime_state, load_runtime_state, merge_config_with_runtime_state
 from . import log_manager
@@ -36,10 +36,19 @@ def handle_exceptions(func):
     return wrapper
 
 
+
+# Add --config/-c option to CLI
 @click.group()
-def cli():
+@click.option('--config', '-c', 'config_path', default=None, help='Path to custom signalbox.yaml config file')
+def cli(config_path):
     """signalbox - Script execution control and monitoring."""
-    pass
+    if config_path:
+        # Set config home to the directory containing the custom config file
+        import os
+        config_dir = os.path.dirname(os.path.abspath(config_path))
+        _default_config_manager._config_home = config_dir
+        # Optionally, reset cached config so it reloads
+        _default_config_manager._global_config = None
 
 
 @cli.command()
@@ -191,7 +200,9 @@ def list():
 @handle_exceptions
 def run(name):
     """Run a specific script by name."""
-    config = load_config()
+    import os
+    os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
+    config = load_config(suppress_warnings=True)
     run_script(name, config)
 
 
@@ -199,7 +210,9 @@ def run(name):
 @handle_exceptions
 def run_all():
     """Run all scripts."""
-    config = load_config()
+    import os
+    os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
+    config = load_config(suppress_warnings=True)
     click.echo("Running all scripts...")
     for script in config["scripts"]:
         click.echo(f"Running {script['name']}...")

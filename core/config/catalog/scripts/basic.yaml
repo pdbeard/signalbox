@@ -14,22 +14,38 @@ scripts:
   log_limit:
     type: count
     value: 3
+    alerts:
+      - pattern: "Hello"
+        message: "Hello script ran successfully."
+        severity: info
 - name: show_date
   description: Show current date and time
   command: date
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+        message: "Date command output detected."
+        severity: info
 - name: current_dir
   description: Print current working directory
   command: pwd
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "/"
+        message: "Current directory output detected."
+        severity: info
 - name: list_files
   description: List files in current directory
   command: ls -la
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "total|drwx|^-"
+        message: "Directory listing output detected."
+        severity: info
 

@@ -294,6 +294,50 @@ crontab -e
 ```
 
 
+
+## Alerting
+
+Signalbox supports script output pattern alerts for monitoring and notification.
+
+### Defining Alerts in Scripts
+
+Add an `alerts` section to any script definition:
+
+```yaml
+scripts:
+  - name: disk_check_test
+    command: ./check_disk.sh
+    description: Check disk usage
+    alerts:
+      - pattern: "Disk usage is above 80%"
+        message: "[CRITICAL] Disk usage is above 80%!"
+        severity: critical
+      - pattern: "Disk usage is above 60%"
+        message: "[Warning] Disk usage is above 60%"
+        severity: warning
+```
+
+**Alert fields:**
+- `pattern` (required): Regex or substring to match in script output (stdout or stderr)
+- `message` (required): Message to log and notify if pattern is matched
+- `severity` (optional): `info`, `warning`, or `critical` (default: info)
+
+When a script runs, if any alert pattern matches the output, the alert is logged and (optionally) a notification is sent.
+
+### Viewing Alerts
+
+List recent alerts:
+```bash
+signalbox alerts
+```
+Filter by script or severity:
+```bash
+signalbox alerts --script disk_check_test --severity critical
+```
+
+Alerts are stored in `logs/alerts.jsonl`.
+
+---
 ## Validation
 
 Before deploying schedules, validate your configuration:

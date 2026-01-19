@@ -52,6 +52,7 @@ def validate_configuration(include_catalog=True):
 
         # Strictly validate all user script YAML files for syntax and required fields (user and catalog)
         for script_dir in [scripts_file, catalog_scripts_file]:
+            is_catalog = (script_dir == catalog_scripts_file)
             if os.path.isdir(script_dir):
                 for fname in os.listdir(script_dir):
                     if fname.endswith('.yaml') or fname.endswith('.yml'):
@@ -70,7 +71,6 @@ def validate_configuration(include_catalog=True):
                                         file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'command' field")
                                     if 'description' not in script:
                                         file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'description' field")
-                                    
                                     # Validate alerts field if present
                                     if 'alerts' in script:
                                         alerts_list = script['alerts']
@@ -94,12 +94,14 @@ def validate_configuration(include_catalog=True):
                         except Exception as e:
                             file_errors.append(f"Error loading: {e}")
                         if file_errors:
-                            result.errors.append(f"\nScript Config File:  {fname}")
+                            prefix = "[Catalog] " if is_catalog else ""
+                            result.errors.append(f"\n{prefix}Script Config File:  {fname}")
                             for err in file_errors:
-                                result.errors.append(f"{err}")
+                                result.errors.append(f"{prefix}{err}")
 
         # Strictly validate all user group YAML files for syntax and required fields (user and catalog)
         for group_dir in [groups_file, catalog_groups_file]:
+            is_catalog = (group_dir == catalog_groups_file)
             if os.path.isdir(group_dir):
                 for fname in os.listdir(group_dir):
                     if fname.endswith('.yaml') or fname.endswith('.yml'):
@@ -123,9 +125,10 @@ def validate_configuration(include_catalog=True):
                         except Exception as e:
                             file_errors.append(f"Error loading: {e}")
                         if file_errors:
-                            result.errors.append(f"\nGroup Config File:  {fname}")
+                            prefix = "[Catalog] " if is_catalog else ""
+                            result.errors.append(f"\n{prefix}Group Config File:  {fname}")
                             for err in file_errors:
-                                result.errors.append(f"{err}")
+                                result.errors.append(f"{prefix}{err}")
         # Validate user scripts/groups, fallback to catalog if enabled
         user_scripts_exists = os.path.isdir(scripts_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(scripts_file)) if os.path.exists(scripts_file) else False
         user_groups_exists = os.path.isdir(groups_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(groups_file)) if os.path.exists(groups_file) else False

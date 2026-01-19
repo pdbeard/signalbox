@@ -21,6 +21,13 @@ scripts:
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "\u2713 Website OK"
+        message: "Website is up."
+        severity: info
+      - pattern: "\u2717 Website DOWN"
+        message: "Website is down!"
+        severity: critical
 - name: check_api_response_time
   description: Measure API response time
   command: echo "Testing API response time..." && time (curl -s https://httpbin.org/delay/1
@@ -28,6 +35,10 @@ scripts:
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "API Response time:"
+        message: "API response time measured."
+        severity: info
 - name: check_ssl_certificate
   description: Check SSL certificate expiration
   command: echo "Checking SSL certificate..." && echo | timeout 10 openssl s_client
@@ -36,5 +47,12 @@ scripts:
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "notAfter"
+        message: "SSL certificate expiry date found."
+        severity: info
+      - pattern: "SSL check failed"
+        message: "SSL certificate check failed!"
+        severity: warning
 - name: check_dns_resolution
   description: Test DNS resolution time

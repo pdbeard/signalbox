@@ -91,7 +91,7 @@ class ConfigManager:
                 return default
         return value
 
-    def load_config(self):
+    def load_config(self, suppress_warnings=False):
         """Load configuration from scripts and groups directories."""
         config = {"scripts": [], "groups": [], "_script_sources": {}, "_group_sources": {}}
         
@@ -99,7 +99,7 @@ class ConfigManager:
         scripts_path = self.get_config_value("paths.scripts_file", SCRIPTS_FILE)
         scripts_path = self.resolve_path(scripts_path)
         if os.path.isdir(scripts_path):
-            scripts_list = load_yaml_files_from_dir(scripts_path, key="scripts", track_sources=True)
+            scripts_list = load_yaml_files_from_dir(scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings)
             for item in scripts_list:
                 script_name = item["data"].get("name")
                 if script_name:
@@ -112,7 +112,7 @@ class ConfigManager:
             catalog_scripts_path = self.get_config_value("paths.catalog_scripts_file", "config/catalog/scripts")
             catalog_scripts_path = self.resolve_path(catalog_scripts_path)
             if os.path.isdir(catalog_scripts_path):
-                catalog_scripts_list = load_yaml_files_from_dir(catalog_scripts_path, key="scripts", track_sources=True)
+                catalog_scripts_list = load_yaml_files_from_dir(catalog_scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings)
                 for item in catalog_scripts_list:
                     script_name = item["data"].get("name")
                     if script_name:
@@ -123,7 +123,7 @@ class ConfigManager:
         groups_path = self.get_config_value("paths.groups_file", GROUPS_FILE)
         groups_path = self.resolve_path(groups_path)
         if os.path.isdir(groups_path):
-            groups_list = load_yaml_files_from_dir(groups_path, key="groups", track_sources=True)
+            groups_list = load_yaml_files_from_dir(groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings)
             for item in groups_list:
                 group_name = item["data"].get("name")
                 if group_name:
@@ -135,7 +135,7 @@ class ConfigManager:
             catalog_groups_path = self.get_config_value("paths.catalog_groups_file", "config/catalog/groups")
             catalog_groups_path = self.resolve_path(catalog_groups_path)
             if os.path.isdir(catalog_groups_path):
-                catalog_groups_list = load_yaml_files_from_dir(catalog_groups_path, key="groups", track_sources=True)
+                catalog_groups_list = load_yaml_files_from_dir(catalog_groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings)
                 for item in catalog_groups_list:
                     group_name = item["data"].get("name")
                     if group_name:
@@ -222,9 +222,9 @@ def get_config_value(path, default=None):
     return _default_config_manager.get_config_value(path, default)
 
 
-def load_config():
+def load_config(suppress_warnings=False):
     """Load configuration from scripts and groups directories."""
-    return _default_config_manager.load_config()
+    return _default_config_manager.load_config(suppress_warnings=suppress_warnings)
 
 
 def save_config(config):

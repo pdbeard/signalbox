@@ -185,6 +185,46 @@ async function main() {
 main();
 ```
 
+
+## Adding Alerts to Scripts
+
+You can define alerts in your script YAML to monitor for specific output patterns and trigger notifications.
+
+### Example
+
+```yaml
+scripts:
+    - name: check_website_health
+        command: ./check_website.sh
+        description: Check website status
+        alerts:
+            - pattern: "HTTP 5.."
+                message: "[CRITICAL] Website returned 5xx error!"
+                severity: critical
+            - pattern: "timeout"
+                message: "[Warning] Website check timed out"
+                severity: warning
+```
+
+**Alert fields:**
+- `pattern` (required): Regex or substring to match in output
+- `message` (required): Message to log/notify
+- `severity` (optional): `info`, `warning`, `critical` (default: info)
+
+Alerts are checked after script execution. If a pattern matches, the alert is logged and (if enabled) a notification is sent.
+
+### Viewing Alerts
+
+Use the CLI to view recent alerts:
+```bash
+signalbox alerts
+```
+You can filter by script name or severity:
+```bash
+signalbox alerts --script check_website_health --severity critical
+```
+
+---
 ## Best Practices
 
 ### 1. Always Set Explicit Exit Codes

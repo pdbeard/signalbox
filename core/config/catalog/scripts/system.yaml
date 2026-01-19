@@ -14,10 +14,21 @@ scripts:
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "up.*min|up.*day|up.*hour"
+        message: "System uptime output detected."
+        severity: info
 - name: disk_usage
   description: Show disk usage
   command: df -h
   log_limit:
     type: count
     value: 5
+    alerts:
+      - pattern: "([8-9][0-9]%|100%)"
+        message: "Disk usage above 80%!"
+        severity: warning
+      - pattern: "[0-7][0-9]%"
+        message: "Disk usage below 80%."
+        severity: info
 
