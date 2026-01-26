@@ -110,7 +110,7 @@ python signalbox.py list  # Uses config/ in current directory
 
 ### Log Management
 - `logs <name>` - View the latest log for a script
-- `history <name>` - List all historical runs for a script
+- `log-history <name>` - List all historical runs for a script
 - `clear-logs <name>` - Clear logs for a specific script
 - `clear-all-logs` - Clear all logs for all scripts
 

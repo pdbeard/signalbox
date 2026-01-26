@@ -307,11 +307,11 @@ def logs(name):
             click.echo(line)
 
 
-@cli.command()
+@cli.command("log-history")
 @click.argument("name")
 @handle_exceptions
-def history(name):
-    """Show all log files for a script."""
+def log_history(name):
+    """Show all historical log files for a script."""
     config = load_config()
     script = next((s for s in config["scripts"] if s["name"] == name), None)
     if not script:
@@ -328,7 +328,7 @@ def history(name):
 
     script_log_dir = log_manager.get_script_log_dir(name)
     path_info = f" ({script_log_dir})" if include_paths else ""
-    click.echo(f"History for {name}{path_info}:")
+    click.echo(f"Log history for {name}{path_info}:")
 
     for filename, mtime in log_info:
         time_str = datetime.fromtimestamp(mtime).strftime(date_format)
