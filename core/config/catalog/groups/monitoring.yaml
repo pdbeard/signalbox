@@ -23,8 +23,6 @@ groups:
   - check_api_response_time
   - check_ssl_certificate
   - check_dns_resolution
-  - check_api_json_response
-  - check_http_headers
 - name: system_health_parallel
   description: Fast parallel system monitoring
   execution: parallel
@@ -33,8 +31,8 @@ groups:
   - check_disk_space
   - check_memory_usage
   - check_system_load
-  - check_running_services
 - name: infrastructure_monitoring
   description: Complete infrastructure health check
   execution: parallel
   schedule: '*/15 * * * *'
+  scripts: []

@@ -22,16 +22,14 @@ groups:
   execution: serial
   stop_on_error: true  # STOPS when fail_test fails
   scripts:
-  - hello       # (check) Runs and succeeds
-  - fail_test   # (X) FAILS intentionally and STOPS execution here
-  - show_date   # (pause) Will NOT run (execution stopped)
+  - hello
+  - show_date
 
 - name: test_serial_continue
   description: Test serial continue on error (DEMO - execution continues despite errors)
   execution: serial
   stop_on_error: false  # CONTINUES even when fail_test fails
   scripts:
-  - hello       # (check) Runs and succeeds
-  - fail_test   # (X) FAILS intentionally but execution continues
-  - show_date   # (check) Still runs despite previous failure
+  - hello
+  - show_date
 

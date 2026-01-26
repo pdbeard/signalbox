@@ -36,3 +36,5 @@ scripts:
       type: count
       value: 10
   - name: check_system_load
+    description: Check system load average
+    command: "uptime | awk -F'load averages?: ' '{print $2}' || uptime | awk -F'load average: ' '{print $2}'"

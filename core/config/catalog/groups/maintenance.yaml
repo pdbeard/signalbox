@@ -16,25 +16,14 @@ groups:
   execution: serial
   stop_on_error: false
   scripts:
-  - security_updates_check
   - check_disk_space
-  - backup_system_config
-  - cleanup_temp_files
-  - check_running_services
 - name: weekly_maintenance
   description: Weekly comprehensive maintenance
   schedule: 0 3 * * 0
   execution: serial
   stop_on_error: false
   scripts:
-  - backup_system_config
-  - security_updates_check
-  - cleanup_temp_files
   - check_disk_space
   - check_memory_usage
   - check_system_load
   - run_tests
-  - generate_documentation
-- name: error_handling_demo_stop
-  description: Demonstrate serial execution with stop-on-error
-  execution: serial

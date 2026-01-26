@@ -25,9 +25,7 @@ groups:
   - lint_code
   - security_scan
   - run_tests
-  - run_performance_tests
   - build_project
-  - generate_documentation
 - name: staging_deployment
   description: Deploy to staging environment with verification
   execution: serial
@@ -36,5 +34,4 @@ groups:
   - run_tests
   - security_scan
   - build_project
-  - deploy_staging
   - check_website_health

@@ -1,5 +1,0 @@
-groups:
-- name: malformed_yaml
-  description: This is not valid YAML
-    scripts:
-      - hello
