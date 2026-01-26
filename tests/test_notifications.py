@@ -83,3 +83,21 @@ def test_send_linux_notification_fail_notify_send(monkeypatch):
         return Result()
     monkeypatch.setattr(subprocess, 'run', fake_run)
     assert notifications._send_linux_notification('t', 'm') is False
+
+def test_notify_execution_result_success(monkeypatch):
+    called = {}
+    monkeypatch.setattr(notifications, 'send_notification', lambda *a, **k: called.setdefault('sent', True) or True)
+    result = notifications.notify_execution_result(2, 2, 0, context="scripts", failed_names=None, config={"enabled": True, "on_failure_only": False})
+    # send_notification should not be called if there are no failures
+    assert not called.get('sent')
+    assert not result
+
+def test_notify_execution_result_failure_only(monkeypatch):
+    called = {}
+    monkeypatch.setattr(notifications, 'send_notification', lambda *a, **k: called.setdefault('sent', True) or True)
+    # Should not send if no failures and on_failure_only True
+    result = notifications.notify_execution_result(2, 2, 0, context="scripts", failed_names=None, config={"enabled": True, "on_failure_only": True})
+    assert not called.get('sent')
+    # Should send if failures present
+    result = notifications.notify_execution_result(2, 1, 1, context="scripts", failed_names=["fail"], config={"enabled": True, "on_failure_only": True})
+    assert called.get('sent')

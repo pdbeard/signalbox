@@ -87,6 +87,34 @@ def test_load_alerts_filtering(tmp_path, monkeypatch):
     script_alerts = alerts.load_alerts(script_name=script_name)
     assert len(script_alerts) == 3
 
+def test_check_alert_patterns_empty(monkeypatch):
+    script_name = "s"
+    script_config = {}
+    output = "no match"
+    assert alerts.check_alert_patterns(script_name, script_config, output) == []
+
+def test_check_alert_patterns_no_pattern(monkeypatch):
+    script_name = "s"
+    script_config = {"alerts": [{"message": "msg"}]}
+    output = "anything"
+    assert alerts.check_alert_patterns(script_name, script_config, output) == []
+
+def test_check_alert_patterns_regex(monkeypatch):
+    script_name = "s"
+    script_config = {"alerts": [{"pattern": "\\d+", "message": "number found"}]}
+    output = "value 123"
+    result = alerts.check_alert_patterns(script_name, script_config, output)
+    assert result and result[0]["message"] == "number found"
+
+def test_save_and_load_alert(tmp_path, monkeypatch):
+    script_name = "s"
+    log_dir = tmp_path / "logs"
+    monkeypatch.setattr(alerts, "get_config_value", lambda k, d=None: str(log_dir))
+    alert = {"pattern": "p", "message": "m", "severity": "info", "timestamp": alerts.format_timestamp(datetime.now()), "script_name": script_name}
+    alerts.save_alert(script_name, alert)
+    loaded = alerts.load_alerts(script_name=script_name)
+    assert loaded and loaded[0]["message"] == "m"
+
     def test_alert_retention_and_summary(tmp_path, monkeypatch):
         import json
         from datetime import datetime, timedelta

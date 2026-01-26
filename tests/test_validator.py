@@ -69,6 +69,23 @@ def test_validate_configuration_strict_mode(monkeypatch):
     result.warnings.append('warn')
     assert not result.is_valid
 
+def test_validate_configuration_empty(monkeypatch):
+    monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
+    monkeypatch.setattr(validator, 'resolve_path', lambda p: p)
+    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {})
+    monkeypatch.setattr(validator, 'load_global_config', lambda *a, **kw: {})
+    result = validator.validate_configuration()
+    assert result.errors
+
+def test_validate_configuration_invalid_types(monkeypatch):
+    monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
+    monkeypatch.setattr(validator, 'resolve_path', lambda p: p)
+    # scripts is not a list
+    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {'scripts': 'notalist', 'groups': []})
+    monkeypatch.setattr(validator, 'load_global_config', lambda *a, **kw: {})
+    result = validator.validate_configuration()
+    assert result.errors
+
 def test_validate_configuration_invalid_group(monkeypatch):
     monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
     monkeypatch.setattr(validator, 'resolve_path', lambda p: p)
