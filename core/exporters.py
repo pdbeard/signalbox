@@ -34,18 +34,54 @@ def get_python_executable():
     Returns:
             str: Path to Python executable
     """
-    script_dir = os.path.abspath(os.path.dirname(__file__))
-    python_exec = os.path.abspath(os.path.join(script_dir, "venv", "bin", "python"))
+    import sys
+    return sys.executable
 
-    if not os.path.exists(python_exec):
-        python_exec = "python3"  # Fallback to system python
 
-    return python_exec
+def get_signalbox_command():
+    """Determine the signalbox command to use for exported scripts.
+
+    Returns:
+            str: Command to invoke signalbox (either CLI entry point or script path)
+    """
+    import shutil
+    
+    # Check if signalbox is installed as a CLI command
+    signalbox_cmd = shutil.which('signalbox')
+    if signalbox_cmd:
+        return 'signalbox'
+    
+    # Fall back to development mode - use the root signalbox.py
+    # Find the project root (parent of core directory)
+    core_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(core_dir)
+    signalbox_py = os.path.join(project_root, 'signalbox.py')
+    
+    if os.path.exists(signalbox_py):
+        python_exec = get_python_executable()
+        return f'{python_exec} {signalbox_py}'
+    
+    # Last resort fallback
+    return 'signalbox'
 
 
 def get_script_dir():
-    """Get the absolute path to the script directory."""
-    return os.path.abspath(os.path.dirname(__file__))
+    """Get the absolute path to the script directory.
+    
+    Returns the directory where scripts should be executed from.
+    In production, this is typically the user's home or config directory.
+    In development, this is the project root.
+    """
+    import shutil
+    
+    # If signalbox is installed, use the config directory
+    if shutil.which('signalbox'):
+        return os.path.expanduser('~/.config/signalbox')
+    
+    # In development mode, use project root
+    core_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(core_dir)
+    return project_root
 
 
 def generate_systemd_service(group, group_name):
@@ -59,7 +95,7 @@ def generate_systemd_service(group, group_name):
             str: Service file content
     """
     script_dir = get_script_dir()
-    python_exec = get_python_executable()
+    signalbox_cmd = get_signalbox_command()
 
     return f"""[Unit]
 Description=signalbox - {group.get('description', group_name)}
@@ -68,7 +104,7 @@ After=network.target
 [Service]
 Type=oneshot
 WorkingDirectory={script_dir}
-ExecStart={python_exec} {os.path.join(script_dir, 'signalbox.py')} run-group {group_name}
+ExecStart={signalbox_cmd} run-group {group_name}
 StandardOutput=journal
 StandardError=journal
 
@@ -198,9 +234,9 @@ def generate_cron_entry(group, group_name):
             str: Cron entry line
     """
     script_dir = get_script_dir()
-    python_exec = get_python_executable()
+    signalbox_cmd = get_signalbox_command()
 
-    return f"{group['schedule']} cd {script_dir} && {python_exec} signalbox.py run-group {group_name}"
+    return f"{group['schedule']} cd {script_dir} && {signalbox_cmd} run-group {group_name}"
 
 
 def export_cron(group, group_name):

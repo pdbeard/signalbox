@@ -38,8 +38,11 @@ def handle_exceptions(func):
 
 
 # Add --config/-c option to CLI
+import importlib.metadata
+
 @click.group()
 @click.option('--config', '-c', 'config_path', default=None, help='Path to custom signalbox.yaml config file')
+@click.version_option(importlib.metadata.version("signalbox"), '--version', '-V', message="%(version)s")
 def cli(config_path):
     """signalbox - Script execution control and monitoring."""
     if config_path:
