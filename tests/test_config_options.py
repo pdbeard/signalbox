@@ -36,12 +36,23 @@ def test_custom_log_dir(tmp_path):
         config.reset_config()
 
         from click.testing import CliRunner
+        from unittest.mock import patch
         runner = CliRunner()
-            runner.invoke(cli, ["--config", str(config_file), "run", "hello"])
+        # Patch core.config.load_config to return our test config dict, not the config module
+        test_config_dict = {
+            "scripts": [{"name": "hello", "command": "echo hi", "description": "test"}],
+            "groups": [],
+            "_script_sources": {"hello": str(scripts_dir / "test.yaml")},
+            "_group_sources": {},
+        }
+        with patch("core.config.load_config", return_value=test_config_dict):
+            result = runner.invoke(cli, ["--config", str(config_file), "run", "hello"])
+        print("CLI output:", result.output)
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
         log_dir = custom_log_dir / "hello"
-        assert log_dir.exists()
+        assert log_dir.exists(), f"Log dir does not exist: {log_dir}"
         log_files = list(log_dir.glob("*.log"))
-        assert log_files, "No log files found in custom log_dir"
+        assert log_files, f"No log files found in custom log_dir: {log_dir}"
     finally:
         import shutil
 

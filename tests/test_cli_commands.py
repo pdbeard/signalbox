@@ -366,7 +366,7 @@ class TestLogsCommand:
         result = runner.invoke(logs, ["test_script"])
 
         assert result.exit_code == 0
-        assert "no logs found" in result.output
+        assert "No logs found" in result.output
 
     @patch("core.cli_commands.load_config")
     def test_logs_handles_script_not_found(self, mock_load, runner, sample_config):
@@ -442,7 +442,7 @@ class TestClearLogsCommand:
         result = runner.invoke(clear_logs, ["test_script"])
 
         assert result.exit_code == 0
-        assert "no logs found" in result.output
+        assert "No logs found for test_script" in result.output
 
 
 class TestClearAllLogsCommand:
@@ -466,7 +466,7 @@ class TestClearAllLogsCommand:
         result = runner.invoke(clear_all_logs)
 
         assert result.exit_code == 0
-        assert "no logs directory found" in result.output
+        assert "No logs directory found" in result.output
 
 
 class TestListGroupsCommand:

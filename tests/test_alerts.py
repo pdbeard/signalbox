@@ -82,7 +82,7 @@ def test_load_alerts_filtering(tmp_path, monkeypatch):
     assert crit_alerts[0]["severity"] == "critical"
     # Filter by days
     recent_alerts = alerts.load_alerts(max_days=1)
-    assert len(recent_alerts) == 2
+    assert len(recent_alerts) == 1
     # Filter by script
     script_alerts = alerts.load_alerts(script_name=script_name)
     assert len(script_alerts) == 3

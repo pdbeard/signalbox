@@ -16,22 +16,24 @@ from core.exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeou
 class TestRunScript:
     """Tests for run_script function."""
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.save_script_runtime_state")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
+    @patch("core.config.load_config")
     @patch("core.executor.get_config_value")
+    @patch("core.executor.get_log_path")
+    @patch("core.executor.ensure_log_dir")
+    @patch("core.executor.save_script_runtime_state")
+    @patch("core.executor.rotate_logs")
+    @patch("core.executor.write_execution_log")
+    @patch("core.executor.subprocess.run")
     def test_run_script_success(
         self,
-        mock_get_config,
-        mock_log_path,
-        mock_ensure_dir,
-        mock_save_state,
-        mock_rotate,
-        mock_write_log,
         mock_subprocess,
+        mock_write_log,
+        mock_rotate,
+        mock_save_state,
+        mock_ensure_dir,
+        mock_log_path,
+        mock_get_config,
+        mock_load_config,
     ):
         """Test successful script execution."""
         # Setup mocks
@@ -51,6 +53,7 @@ class TestRunScript:
             "scripts": [{"name": "test_script", "command": "echo 'hello'", "description": "Test"}],
             "_script_sources": {"test_script": "scripts/test.yaml"},
         }
+        mock_load_config.side_effect = lambda *args, **kwargs: config
 
         # Execute
         result = run_script("test_script", config)
@@ -67,22 +70,24 @@ class TestRunScript:
         assert config["scripts"][0]["last_status"] == "success"
         assert "last_run" in config["scripts"][0]
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.save_script_runtime_state")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
+    @patch("core.config.load_config")
     @patch("core.executor.get_config_value")
+    @patch("core.executor.get_log_path")
+    @patch("core.executor.ensure_log_dir")
+    @patch("core.executor.save_script_runtime_state")
+    @patch("core.executor.rotate_logs")
+    @patch("core.executor.write_execution_log")
+    @patch("core.executor.subprocess.run")
     def test_run_script_failure(
         self,
-        mock_get_config,
-        mock_log_path,
-        mock_ensure_dir,
-        mock_save_state,
-        mock_rotate,
-        mock_write_log,
         mock_subprocess,
+        mock_write_log,
+        mock_rotate,
+        mock_save_state,
+        mock_ensure_dir,
+        mock_log_path,
+        mock_get_config,
+        mock_load_config,
     ):
         """Test script execution that fails (non-zero exit code)."""
         mock_get_config.side_effect = lambda key, default: {
@@ -101,6 +106,7 @@ class TestRunScript:
             "scripts": [{"name": "failing_script", "command": "exit 1", "description": "Fails"}],
             "_script_sources": {"failing_script": "scripts/fail.yaml"},
         }
+        mock_load_config.side_effect = lambda *args, **kwargs: config
 
         # Execute
         result = run_script("failing_script", config)
@@ -122,11 +128,12 @@ class TestRunScript:
 
         assert "nonexistent_script" in str(exc_info.value)
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
+    @patch("core.config.load_config")
     @patch("core.executor.get_config_value")
-    def test_run_script_timeout(self, mock_get_config, mock_log_path, mock_ensure_dir, mock_subprocess):
+    @patch("core.executor.get_log_path")
+    @patch("core.executor.ensure_log_dir")
+    @patch("core.executor.subprocess.run")
+    def test_run_script_timeout(self, mock_subprocess, mock_ensure_dir, mock_log_path, mock_get_config, mock_load_config):
         """Test script execution that times out."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
@@ -141,21 +148,22 @@ class TestRunScript:
             "scripts": [{"name": "slow_script", "command": "sleep 100", "description": "Slow"}],
             "_script_sources": {"slow_script": "scripts/slow.yaml"},
         }
-
+        mock_load_config.side_effect = lambda *args, **kwargs: config
         with pytest.raises(ExecutionTimeoutError) as exc_info:
             run_script("slow_script", config)
 
         assert "slow_script" in str(exc_info.value)
         assert "5" in str(exc_info.value)
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
+    @patch("core.config.load_config")
     @patch("core.executor.get_config_value")
+    @patch("core.executor.get_log_path")
+    @patch("core.executor.ensure_log_dir")
+    @patch("core.executor.rotate_logs")
+    @patch("core.executor.write_execution_log")
+    @patch("core.executor.subprocess.run")
     def test_run_script_no_timeout(
-        self, mock_get_config, mock_log_path, mock_ensure_dir, mock_rotate, mock_write_log, mock_subprocess
+        self, mock_subprocess, mock_write_log, mock_rotate, mock_ensure_dir, mock_log_path, mock_get_config, mock_load_config
     ):
         """Test script execution with timeout disabled (0 = None)."""
         mock_get_config.side_effect = lambda key, default: {
@@ -174,21 +182,22 @@ class TestRunScript:
             "scripts": [{"name": "unlimited", "command": "echo test", "description": "Test"}],
             "_script_sources": {},
         }
-
+        mock_load_config.side_effect = lambda *args, **kwargs: config
         run_script("unlimited", config)
 
         # Verify timeout=None was passed
         call_args = mock_subprocess.call_args
         assert call_args[1]["timeout"] is None
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
+    @patch("core.config.load_config")
     @patch("core.executor.get_config_value")
+    @patch("core.executor.get_log_path")
+    @patch("core.executor.ensure_log_dir")
+    @patch("core.executor.rotate_logs")
+    @patch("core.executor.write_execution_log")
+    @patch("core.executor.subprocess.run")
     def test_run_script_no_source_tracking(
-        self, mock_get_config, mock_log_path, mock_ensure_dir, mock_rotate, mock_write_log, mock_subprocess
+        self, mock_subprocess, mock_write_log, mock_rotate, mock_ensure_dir, mock_log_path, mock_get_config, mock_load_config
     ):
         """Test script execution when source file is not tracked."""
         mock_get_config.side_effect = lambda key, default: {
@@ -208,7 +217,7 @@ class TestRunScript:
             "scripts": [{"name": "no_source", "command": "echo test", "description": "Test"}],
             "_script_sources": {},
         }
-
+        mock_load_config.side_effect = lambda *args, **kwargs: config
         result = run_script("no_source", config)
 
         # Should still succeed
@@ -219,7 +228,8 @@ class TestRunScript:
     @patch("core.executor.ensure_log_dir")
     @patch("core.executor.get_log_path")
     @patch("core.executor.get_config_value")
-    def test_run_script_subprocess_exception(self, mock_get_config, mock_log_path, mock_ensure_dir, mock_subprocess):
+    @patch("core.config.load_config")
+    def test_run_script_subprocess_exception(self, mock_load_config, mock_get_config, mock_log_path, mock_ensure_dir, mock_subprocess):
         """Test script execution when subprocess raises an unexpected exception."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
@@ -234,7 +244,7 @@ class TestRunScript:
             "scripts": [{"name": "error_script", "command": "invalid_command", "description": "Error"}],
             "_script_sources": {},
         }
-
+        mock_load_config.return_value = config
         with pytest.raises(ExecutionError) as exc_info:
             run_script("error_script", config)
 
@@ -465,12 +475,14 @@ class TestExecutorIntegration:
     @patch("core.executor.save_script_runtime_state")
     @patch("core.executor.ensure_log_dir")
     @patch("core.executor.get_log_path")
-    @patch("core.executor.get_config_value")
     @patch("core.executor.notifications.notify_execution_result")
+    @patch("core.executor.get_config_value")
+    @patch("core.config.load_config")
     def test_full_parallel_workflow(
         self,
-        mock_notify,
+        mock_load_config,
         mock_get_config,
+        mock_notify,
         mock_log_path,
         mock_ensure_dir,
         mock_save_state,
@@ -479,12 +491,21 @@ class TestExecutorIntegration:
         mock_subprocess,
     ):
         """Test complete parallel execution workflow."""
-        mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 300,
-            "execution.max_parallel_workers": 5,
-        }.get(key, default)
-        mock_log_path.return_value = "/logs/test.log"
+        def get_config_side_effect(key, default=None):
+            if key == "execution.max_parallel_workers":
+                return 5
+            if key == "logging.timestamp_format":
+                return "%Y%m%d_%H%M%S_%f"
+            if key == "execution.default_timeout":
+                return 300
+            return default
+        mock_get_config.side_effect = get_config_side_effect
+        mock_notify.side_effect = lambda *args, **kwargs: None
+        def log_path_side_effect(name, *args, **kwargs):
+            if name == "execution.max_parallel_workers":
+                return None
+            return f"/logs/{name}.log"
+        mock_log_path.side_effect = log_path_side_effect
 
         mock_result = Mock()
         mock_result.returncode = 0
@@ -499,7 +520,8 @@ class TestExecutorIntegration:
             ],
             "_script_sources": {"script1": "scripts/test1.yaml", "script2": "scripts/test2.yaml"},
         }
-
+        mock_load_config.side_effect = lambda *args, **kwargs: config
+        mock_notify.side_effect = lambda *args, **kwargs: None
         success_count = run_group_parallel(["script1", "script2"], config)
 
         assert success_count == 2
@@ -512,12 +534,14 @@ class TestExecutorIntegration:
     @patch("core.executor.save_script_runtime_state")
     @patch("core.executor.ensure_log_dir")
     @patch("core.executor.get_log_path")
-    @patch("core.executor.get_config_value")
     @patch("core.executor.notifications.notify_execution_result")
+    @patch("core.executor.get_config_value")
+    @patch("core.config.load_config")
     def test_full_serial_workflow(
         self,
-        mock_notify,
+        mock_load_config,
         mock_get_config,
+        mock_notify,
         mock_log_path,
         mock_ensure_dir,
         mock_save_state,
@@ -526,11 +550,19 @@ class TestExecutorIntegration:
         mock_subprocess,
     ):
         """Test complete serial execution workflow."""
-        mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 300,
-        }.get(key, default)
-        mock_log_path.return_value = "/logs/test.log"
+        def get_config_side_effect(key, default=None):
+            if key == "logging.timestamp_format":
+                return "%Y%m%d_%H%M%S_%f"
+            if key == "execution.default_timeout":
+                return 300
+            return default
+        mock_get_config.side_effect = get_config_side_effect
+        mock_notify.side_effect = lambda *args, **kwargs: None
+        def log_path_side_effect(name, *args, **kwargs):
+            if name == "execution.max_parallel_workers":
+                return None
+            return f"/logs/{name}.log"
+        mock_log_path.side_effect = log_path_side_effect
 
         mock_result = Mock()
         mock_result.returncode = 0
@@ -545,7 +577,8 @@ class TestExecutorIntegration:
             ],
             "_script_sources": {"script1": "scripts/test1.yaml", "script2": "scripts/test2.yaml"},
         }
-
+        mock_load_config.side_effect = lambda *args, **kwargs: config
+        mock_notify.side_effect = lambda *args, **kwargs: None
         success_count = run_group_serial(["script1", "script2"], config, stop_on_error=False)
 
         assert success_count == 2
