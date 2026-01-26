@@ -16,8 +16,26 @@ from core.runtime import (
 )
 
 
+
 class TestLoadRuntimeState:
     """Tests for load_runtime_state function."""
+
+    @patch("core.runtime.resolve_path")
+    @patch("core.runtime.os.path.exists")
+    @patch("core.runtime.os.listdir")
+    @patch("builtins.open", new_callable=mock_open)
+    def test_load_group_runtime_state_corrupt_yaml(self, mock_file, mock_listdir, mock_exists, mock_resolve):
+        """Test loading group runtime state with corrupt YAML file."""
+        mock_resolve.side_effect = lambda path: f"/config/{path}"
+        def exists_side_effect(path):
+            return path == "/config/runtime/groups"
+        mock_exists.side_effect = exists_side_effect
+        mock_listdir.return_value = ["runtime_test_group.yaml"]
+        # Simulate YAML error
+        with patch("yaml.safe_load", side_effect=yaml.YAMLError("Invalid YAML")):
+            result = load_runtime_state()
+        # Should return empty state for groups
+        assert result["groups"] == {}
 
     @patch("core.runtime.resolve_path")
     @patch("core.runtime.os.path.exists")
@@ -280,7 +298,34 @@ class TestSaveScriptRuntimeState:
 
 class TestSaveGroupRuntimeState:
     """Tests for save_group_runtime_state function."""
+    @patch("core.runtime.resolve_path")
+    @patch("core.runtime.os.path.exists")
+    @patch("core.runtime.os.makedirs")
+    @patch("builtins.open", new_callable=mock_open)
+    def test_save_group_state_corrupt_existing_file(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
+        """Test saving group state when existing file is corrupted."""
+        mock_resolve.return_value = "/config/runtime/groups/runtime_test.yaml"
+        mock_exists.return_value = True
+        with patch("yaml.safe_load", side_effect=yaml.YAMLError("Corrupted")), patch("yaml.dump") as mock_dump:
+            save_group_runtime_state("test_group", "groups/test.yaml", "20240101_120000", "success", 10.0, 2, 2)
+        dumped_data = mock_dump.call_args[0][0]
+        assert "groups" in dumped_data
+        assert "test_group" in dumped_data["groups"]
 
+    @patch("core.runtime.resolve_path")
+    @patch("core.runtime.os.path.exists")
+    @patch("core.runtime.os.makedirs")
+    @patch("builtins.open", new_callable=mock_open)
+    def test_save_group_state_missing_fields(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
+        """Test saving group state with missing/extra fields in existing data."""
+        mock_resolve.return_value = "/config/runtime/groups/runtime_test.yaml"
+        mock_exists.return_value = True
+        existing_data = {"groups": {"test_group": {"last_run": "old", "extra": 1}}}
+        with patch("yaml.safe_load", return_value=existing_data), patch("yaml.dump") as mock_dump:
+            save_group_runtime_state("test_group", "groups/test.yaml", "20240101_120000", "success", 10.0, 2, 2)
+        dumped_data = mock_dump.call_args[0][0]
+        assert "last_run" in dumped_data["groups"]["test_group"]
+        assert "last_status" in dumped_data["groups"]["test_group"]
     @patch("core.runtime.resolve_path")
     @patch("core.runtime.os.path.exists")
     @patch("core.runtime.os.makedirs")
@@ -387,6 +432,13 @@ class TestSaveGroupRuntimeState:
 class TestMergeConfigWithRuntimeState:
     """Tests for merge_config_with_runtime_state function."""
 
+    def test_merge_with_extra_runtime_fields(self):
+        """Test merging config with runtime state containing extra fields."""
+        config = {"scripts": [{"name": "script1", "command": "echo 1", "description": "Test"}], "groups": []}
+        runtime_state = {"scripts": {"script1": {"last_run": "t", "last_status": "ok", "extra": 123}}, "groups": {}}
+        result = merge_config_with_runtime_state(config, runtime_state)
+        assert result["scripts"][0]["last_status"] == "ok"
+        assert "extra" not in result["scripts"][0]  # Should not leak extra fields
     def test_merge_scripts_with_runtime_state(self):
         """Test merging script config with runtime state."""
         config = {
