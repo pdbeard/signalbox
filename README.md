@@ -254,7 +254,10 @@ groups:
 ```
 
 ## Automation Setup
-Currently, signalbox simply generates the config files for you to add at your discretion
+
+Currently, signalbox simply generates the config files for you to add at your discretion.
+
+**Note:** Only groups that have a `schedule` field (cron expression) can be exported using `export-systemd` or `export-cron`. Attempting to export a group without a schedule will result in an error. Be sure your group YAML includes a `schedule` if you want to automate it.
 
 ### Option 1: systemd 
 Generate systemd files for a scheduled group:
