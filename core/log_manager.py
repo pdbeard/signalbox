@@ -49,11 +49,11 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
     # Security: Set restrictive permissions (owner read/write only)
     # This prevents other users from reading potentially sensitive log output
     import os
-    
+
     # Check max log file size to prevent disk filling attacks
     max_log_size = get_config_value("logging.max_file_size_mb", 100) * 1024 * 1024
     content_size = len(command) + len(str(return_code)) + len(stdout) + len(stderr)
-    
+
     if content_size > max_log_size:
         # Truncate output if too large
         truncation_msg = f"\n\n[OUTPUT TRUNCATED - exceeded {max_log_size / (1024*1024):.1f}MB limit]\n"
@@ -61,7 +61,7 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
         half_size = remaining_size // 2
         stdout = stdout[:half_size] + truncation_msg + stdout[-half_size:] if len(stdout) > half_size else stdout
         stderr = stderr[:half_size] + truncation_msg + stderr[-half_size:] if len(stderr) > half_size else stderr
-    
+
     with open(log_file, "w") as f:
         if get_config_value("logging.include_command", True):
             f.write(f"Command: {command}\n")
@@ -74,7 +74,7 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
 
         if get_config_value("execution.capture_stderr", True):
             f.write("STDERR:\n" + stderr + "\n")
-    
+
     # Set secure permissions: 0o600 (owner read/write only)
     os.chmod(log_file, 0o600)
 
@@ -91,7 +91,7 @@ def rotate_logs(script):
     """
     import fcntl
     import tempfile
-    
+
     name = script["name"]
     script_log_dir = get_script_log_dir(name)
 
@@ -101,7 +101,7 @@ def rotate_logs(script):
     # Security: Use file locking to prevent race conditions
     # Multiple concurrent executions could corrupt log rotation
     lock_file = os.path.join(tempfile.gettempdir(), f"signalbox_rotate_{name}.lock")
-    
+
     try:
         with open(lock_file, "w") as lock:
             # Try to acquire exclusive lock (non-blocking)
@@ -110,7 +110,7 @@ def rotate_logs(script):
             except IOError:
                 # Another process is rotating logs, skip
                 return
-            
+
             # Get log limit settings
             default_limit = get_config_value("default_log_limit", {"type": "count", "value": 10})
             log_limit = script.get("log_limit", default_limit)
@@ -121,11 +121,12 @@ def rotate_logs(script):
                 _rotate_by_count(script_log_dir, log_files, log_limit["value"])
             elif log_limit["type"] == "age":
                 _rotate_by_age(script_log_dir, log_files, log_limit["value"])
-            
+
             # Lock is automatically released when file is closed
     except Exception as e:
         # Don't fail the entire script execution if rotation fails
         import click
+
         click.echo(f"Warning: Log rotation failed for {name}: {e}", err=True)
 
 

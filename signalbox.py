@@ -8,6 +8,5 @@ Entry point for the signalbox CLI. All logic is now modularized in core/.
 
 from core.cli_commands import cli
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     cli()
-

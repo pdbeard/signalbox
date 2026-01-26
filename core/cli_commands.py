@@ -1,11 +1,12 @@
 # CLI command definitions for signalbox
-import click
+import importlib.metadata
 from datetime import datetime
 import os
 import sys
 import shutil
 import yaml
 from functools import wraps
+import click
 
 from .config import load_config, get_config_value, load_global_config, _default_config_manager
 from .executor import run_script, run_group_parallel, run_group_serial
@@ -17,8 +18,6 @@ from . import notifications
 from . import alerts
 from .exceptions import SignalboxError, ScriptNotFoundError, GroupNotFoundError
 from .helpers import format_timestamp, parse_timestamp
-
-
 def handle_exceptions(func):
     """Decorator to handle exceptions consistently across CLI commands."""
 
@@ -35,19 +34,15 @@ def handle_exceptions(func):
 
     return wrapper
 
-
-
-# Add --config/-c option to CLI
-import importlib.metadata
-
 @click.group()
-@click.option('--config', '-c', 'config_path', default=None, help='Path to custom signalbox.yaml config file')
-@click.version_option(importlib.metadata.version("signalbox"), '--version', '-V', message="%(version)s")
+@click.option("--config", "-c", "config_path", default=None, help="Path to custom signalbox.yaml config file")
+@click.version_option(importlib.metadata.version("signalbox"), "--version", "-V", message="%(version)s")
 def cli(config_path):
     """signalbox - Script execution control and monitoring."""
     if config_path:
         # Set config home to the directory containing the custom config file
         import os
+
         config_dir = os.path.dirname(os.path.abspath(config_path))
         _default_config_manager._config_home = config_dir
         # Optionally, reset cached config so it reloads
@@ -162,6 +157,7 @@ def list():
         scripts_by_file.setdefault(source, []).append(script)
 
     import os
+
     for source_file, scripts in scripts_by_file.items():
         file_name = os.path.basename(source_file)
         click.echo(f"\n=== {file_name} ===")
@@ -204,6 +200,7 @@ def list():
 def run(name):
     """Run a specific script by name."""
     import os
+
     os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
     config = load_config(suppress_warnings=True)
     run_script(name, config)
@@ -214,6 +211,7 @@ def run(name):
 def run_all():
     """Run all scripts."""
     import os
+
     os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
     config = load_config(suppress_warnings=True)
     click.echo("Running all scripts...")
@@ -509,7 +507,9 @@ def validate():
         for error in result.errors:
             if not error.strip():
                 click.echo()
-            elif error.strip().endswith(".yaml") or error.strip().startswith(("Script Config File", "Group Config File")):
+            elif error.strip().endswith(".yaml") or error.strip().startswith(
+                ("Script Config File", "Group Config File")
+            ):
                 click.echo(error)
             else:
                 click.echo(f" - {error}")
@@ -550,36 +550,28 @@ def validate():
 
 
 @cli.command()
-@click.option(
-    "--title",
-    default="Signalbox Test",
-    help="Notification title"
-)
-@click.option(
-    "--message",
-    default="This is a test notification from Signalbox",
-    help="Notification message"
-)
+@click.option("--title", default="Signalbox Test", help="Notification title")
+@click.option("--message", default="This is a test notification from Signalbox", help="Notification message")
 @click.option(
     "--urgency",
     type=click.Choice(["low", "normal", "critical"]),
     default="normal",
-    help="Notification urgency level (Linux only)"
+    help="Notification urgency level (Linux only)",
 )
 @handle_exceptions
 def notify_test(title, message, urgency):
     """Send a test notification to verify notification system works."""
     import platform
-    
+
     system = platform.system()
     click.echo(f"Sending test notification on {system}...")
     click.echo(f"Title: {title}")
     click.echo(f"Message: {message}")
     if system == "Linux":
         click.echo(f"Urgency: {urgency}")
-    
+
     success = notifications.send_notification(title, message, urgency)
-    
+
     if success:
         click.echo("✓ Notification sent successfully!")
     else:
@@ -594,20 +586,20 @@ def notify_test(title, message, urgency):
 @handle_exceptions
 def alerts_cmd(script_name, severity, days):
     """List recent alerts. Optionally filter by script name, severity, or time range."""
-    
+
     # Load alerts with filters
     alert_list = alerts.load_alerts(script_name=script_name, severity=severity, max_days=days)
-    
+
     if not alert_list:
         if script_name:
             click.echo(f"No alerts found for script '{script_name}'")
         else:
             click.echo("No alerts found")
         return
-    
+
     # Display alerts
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-    
+
     for alert in alert_list:
         try:
             timestamp_str = alert.get("timestamp", "")
@@ -615,11 +607,11 @@ def alerts_cmd(script_name, severity, days):
             human_date = dt.strftime(date_format)
         except Exception:
             human_date = timestamp_str
-        
+
         severity_str = alert.get("severity", "info")
         script = alert.get("script_name", "unknown")
         message = alert.get("message", "")
-        
+
         # Color code by severity
         if severity_str == "critical":
             severity_label = click.style(severity_str, fg="red", bold=True)
@@ -627,9 +619,9 @@ def alerts_cmd(script_name, severity, days):
             severity_label = click.style(severity_str, fg="yellow")
         else:
             severity_label = click.style(severity_str, fg="blue")
-        
+
         click.echo(f"[{human_date}] [{severity_label}] {script}: {message}")
-    
+
     # Show summary
     click.echo(f"\nTotal alerts: {len(alert_list)}")
 

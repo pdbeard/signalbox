@@ -4,17 +4,13 @@ Tests for core.executor module.
 Tests script execution, timeout handling, parallel/serial group execution,
 logging, and error handling.
 """
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock, call
+from unittest.mock import Mock, patch
 import subprocess
-from datetime import datetime
 
 from core.executor import run_script, run_group_parallel, run_group_serial
-from core.exceptions import (
-    ScriptNotFoundError,
-    ExecutionError,
-    ExecutionTimeoutError
-)
+from core.exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeoutError
 
 
 class TestRunScript:
@@ -35,16 +31,16 @@ class TestRunScript:
         mock_save_state,
         mock_rotate,
         mock_write_log,
-        mock_subprocess
+        mock_subprocess,
     ):
         """Test successful script execution."""
         # Setup mocks
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 300
+            "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test_20240101_120000_000000.log"
-        
+
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Success output"
@@ -52,10 +48,8 @@ class TestRunScript:
         mock_subprocess.return_value = mock_result
 
         config = {
-            "scripts": [
-                {"name": "test_script", "command": "echo 'hello'", "description": "Test"}
-            ],
-            "_script_sources": {"test_script": "scripts/test.yaml"}
+            "scripts": [{"name": "test_script", "command": "echo 'hello'", "description": "Test"}],
+            "_script_sources": {"test_script": "scripts/test.yaml"},
         }
 
         # Execute
@@ -64,17 +58,11 @@ class TestRunScript:
         # Verify
         assert result is True
         mock_ensure_dir.assert_called_once_with("test_script")
-        mock_subprocess.assert_called_once_with(
-            "echo 'hello'",
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
+        mock_subprocess.assert_called_once_with("echo 'hello'", shell=True, capture_output=True, text=True, timeout=300)
         mock_write_log.assert_called_once()
         mock_rotate.assert_called_once()
         mock_save_state.assert_called_once()
-        
+
         # Verify script was updated
         assert config["scripts"][0]["last_status"] == "success"
         assert "last_run" in config["scripts"][0]
@@ -94,15 +82,15 @@ class TestRunScript:
         mock_save_state,
         mock_rotate,
         mock_write_log,
-        mock_subprocess
+        mock_subprocess,
     ):
         """Test script execution that fails (non-zero exit code)."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 300
+            "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test_fail.log"
-        
+
         mock_result = Mock()
         mock_result.returncode = 1
         mock_result.stdout = "Some output"
@@ -110,10 +98,8 @@ class TestRunScript:
         mock_subprocess.return_value = mock_result
 
         config = {
-            "scripts": [
-                {"name": "failing_script", "command": "exit 1", "description": "Fails"}
-            ],
-            "_script_sources": {"failing_script": "scripts/fail.yaml"}
+            "scripts": [{"name": "failing_script", "command": "exit 1", "description": "Fails"}],
+            "_script_sources": {"failing_script": "scripts/fail.yaml"},
         }
 
         # Execute
@@ -127,48 +113,38 @@ class TestRunScript:
     def test_run_script_not_found(self):
         """Test running a script that doesn't exist."""
         config = {
-            "scripts": [
-                {"name": "existing_script", "command": "echo test", "description": "Test"}
-            ],
-            "_script_sources": {}
+            "scripts": [{"name": "existing_script", "command": "echo test", "description": "Test"}],
+            "_script_sources": {},
         }
 
         with pytest.raises(ScriptNotFoundError) as exc_info:
             run_script("nonexistent_script", config)
-        
+
         assert "nonexistent_script" in str(exc_info.value)
 
     @patch("core.executor.subprocess.run")
     @patch("core.executor.ensure_log_dir")
     @patch("core.executor.get_log_path")
     @patch("core.executor.get_config_value")
-    def test_run_script_timeout(
-        self,
-        mock_get_config,
-        mock_log_path,
-        mock_ensure_dir,
-        mock_subprocess
-    ):
+    def test_run_script_timeout(self, mock_get_config, mock_log_path, mock_ensure_dir, mock_subprocess):
         """Test script execution that times out."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 5
+            "execution.default_timeout": 5,
         }.get(key, default)
         mock_log_path.return_value = "/logs/timeout.log"
-        
+
         # Simulate timeout
         mock_subprocess.side_effect = subprocess.TimeoutExpired("cmd", 5)
 
         config = {
-            "scripts": [
-                {"name": "slow_script", "command": "sleep 100", "description": "Slow"}
-            ],
-            "_script_sources": {"slow_script": "scripts/slow.yaml"}
+            "scripts": [{"name": "slow_script", "command": "sleep 100", "description": "Slow"}],
+            "_script_sources": {"slow_script": "scripts/slow.yaml"},
         }
 
         with pytest.raises(ExecutionTimeoutError) as exc_info:
             run_script("slow_script", config)
-        
+
         assert "slow_script" in str(exc_info.value)
         assert "5" in str(exc_info.value)
 
@@ -179,21 +155,15 @@ class TestRunScript:
     @patch("core.executor.get_log_path")
     @patch("core.executor.get_config_value")
     def test_run_script_no_timeout(
-        self,
-        mock_get_config,
-        mock_log_path,
-        mock_ensure_dir,
-        mock_rotate,
-        mock_write_log,
-        mock_subprocess
+        self, mock_get_config, mock_log_path, mock_ensure_dir, mock_rotate, mock_write_log, mock_subprocess
     ):
         """Test script execution with timeout disabled (0 = None)."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 0
+            "execution.default_timeout": 0,
         }.get(key, default)
         mock_log_path.return_value = "/logs/no_timeout.log"
-        
+
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Done"
@@ -201,10 +171,8 @@ class TestRunScript:
         mock_subprocess.return_value = mock_result
 
         config = {
-            "scripts": [
-                {"name": "unlimited", "command": "echo test", "description": "Test"}
-            ],
-            "_script_sources": {}
+            "scripts": [{"name": "unlimited", "command": "echo test", "description": "Test"}],
+            "_script_sources": {},
         }
 
         run_script("unlimited", config)
@@ -220,21 +188,15 @@ class TestRunScript:
     @patch("core.executor.get_log_path")
     @patch("core.executor.get_config_value")
     def test_run_script_no_source_tracking(
-        self,
-        mock_get_config,
-        mock_log_path,
-        mock_ensure_dir,
-        mock_rotate,
-        mock_write_log,
-        mock_subprocess
+        self, mock_get_config, mock_log_path, mock_ensure_dir, mock_rotate, mock_write_log, mock_subprocess
     ):
         """Test script execution when source file is not tracked."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 300
+            "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test.log"
-        
+
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Output"
@@ -243,14 +205,12 @@ class TestRunScript:
 
         # No _script_sources for this script
         config = {
-            "scripts": [
-                {"name": "no_source", "command": "echo test", "description": "Test"}
-            ],
-            "_script_sources": {}
+            "scripts": [{"name": "no_source", "command": "echo test", "description": "Test"}],
+            "_script_sources": {},
         }
 
         result = run_script("no_source", config)
-        
+
         # Should still succeed
         assert result is True
         assert config["scripts"][0]["last_status"] == "success"
@@ -259,33 +219,25 @@ class TestRunScript:
     @patch("core.executor.ensure_log_dir")
     @patch("core.executor.get_log_path")
     @patch("core.executor.get_config_value")
-    def test_run_script_subprocess_exception(
-        self,
-        mock_get_config,
-        mock_log_path,
-        mock_ensure_dir,
-        mock_subprocess
-    ):
+    def test_run_script_subprocess_exception(self, mock_get_config, mock_log_path, mock_ensure_dir, mock_subprocess):
         """Test script execution when subprocess raises an unexpected exception."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 300
+            "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/error.log"
-        
+
         # Simulate unexpected error
         mock_subprocess.side_effect = OSError("Command not found")
 
         config = {
-            "scripts": [
-                {"name": "error_script", "command": "invalid_command", "description": "Error"}
-            ],
-            "_script_sources": {}
+            "scripts": [{"name": "error_script", "command": "invalid_command", "description": "Error"}],
+            "_script_sources": {},
         }
 
         with pytest.raises(ExecutionError) as exc_info:
             run_script("error_script", config)
-        
+
         assert "error_script" in str(exc_info.value)
 
 
@@ -308,7 +260,7 @@ class TestRunGroupParallel:
         assert success_count == 3
         assert mock_run_script.call_count == 3
         mock_notify.assert_called_once()
-        
+
         # Verify notification was called with correct args
         notify_call = mock_notify.call_args
         assert notify_call[1]["total"] == 3
@@ -321,11 +273,11 @@ class TestRunGroupParallel:
     def test_parallel_some_failures(self, mock_get_config, mock_notify, mock_run_script):
         """Test parallel execution with some failures."""
         mock_get_config.return_value = 5
-        
+
         # Make script2 fail
         def run_script_side_effect(name, config):
             return name != "script2"
-        
+
         mock_run_script.side_effect = run_script_side_effect
 
         config = {"scripts": [], "_script_sources": {}}
@@ -334,7 +286,7 @@ class TestRunGroupParallel:
         success_count = run_group_parallel(script_names, config)
 
         assert success_count == 2
-        
+
         notify_call = mock_notify.call_args
         assert notify_call[1]["total"] == 3
         assert notify_call[1]["passed"] == 2
@@ -347,13 +299,13 @@ class TestRunGroupParallel:
     def test_parallel_with_exceptions(self, mock_get_config, mock_notify, mock_run_script):
         """Test parallel execution when some scripts raise exceptions."""
         mock_get_config.return_value = 5
-        
+
         # script1 succeeds, script2 raises exception, script3 succeeds
         def run_script_side_effect(name, config):
             if name == "script2":
                 raise ScriptNotFoundError("script2")
             return True
-        
+
         mock_run_script.side_effect = run_script_side_effect
 
         config = {"scripts": [], "_script_sources": {}}
@@ -362,7 +314,7 @@ class TestRunGroupParallel:
         success_count = run_group_parallel(script_names, config)
 
         assert success_count == 2
-        
+
         notify_call = mock_notify.call_args
         assert notify_call[1]["failed"] == 1
         assert "script2" in notify_call[1]["failed_names"]
@@ -400,7 +352,7 @@ class TestRunGroupSerial:
 
         assert success_count == 3
         assert mock_run_script.call_count == 3
-        
+
         # Verify execution order
         calls = mock_run_script.call_args_list
         assert calls[0][0][0] == "script1"
@@ -421,7 +373,7 @@ class TestRunGroupSerial:
 
         assert success_count == 2
         assert mock_run_script.call_count == 3  # All 3 should run
-        
+
         notify_call = mock_notify.call_args
         assert notify_call[1]["passed"] == 2
         assert notify_call[1]["failed"] == 1
@@ -440,7 +392,7 @@ class TestRunGroupSerial:
 
         assert success_count == 1
         assert mock_run_script.call_count == 2  # Should stop after script2
-        
+
         notify_call = mock_notify.call_args
         assert notify_call[1]["passed"] == 1
         assert notify_call[1]["failed"] == 1
@@ -449,11 +401,12 @@ class TestRunGroupSerial:
     @patch("core.executor.notifications.notify_execution_result")
     def test_serial_exception_no_stop(self, mock_notify, mock_run_script):
         """Test serial execution when script raises exception, stop_on_error=False."""
+
         def run_script_side_effect(name, config):
             if name == "script2":
                 raise ScriptNotFoundError("script2")
             return True
-        
+
         mock_run_script.side_effect = run_script_side_effect
 
         config = {"scripts": [], "_script_sources": {}}
@@ -468,11 +421,12 @@ class TestRunGroupSerial:
     @patch("core.executor.notifications.notify_execution_result")
     def test_serial_exception_stop_on_error(self, mock_notify, mock_run_script):
         """Test serial execution when script raises exception, stop_on_error=True."""
+
         def run_script_side_effect(name, config):
             if name == "script2":
                 raise ExecutionError("script2", "Failed to execute")
             return True
-        
+
         mock_run_script.side_effect = run_script_side_effect
 
         config = {"scripts": [], "_script_sources": {}}
@@ -495,7 +449,7 @@ class TestRunGroupSerial:
         success_count = run_group_serial(script_names, config, stop_on_error=False)
 
         assert success_count == 0
-        
+
         notify_call = mock_notify.call_args
         assert notify_call[1]["passed"] == 0
         assert notify_call[1]["failed"] == 3
@@ -522,16 +476,16 @@ class TestExecutorIntegration:
         mock_save_state,
         mock_rotate,
         mock_write_log,
-        mock_subprocess
+        mock_subprocess,
     ):
         """Test complete parallel execution workflow."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 300,
-            "execution.max_parallel_workers": 5
+            "execution.max_parallel_workers": 5,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test.log"
-        
+
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Output"
@@ -543,10 +497,7 @@ class TestExecutorIntegration:
                 {"name": "script1", "command": "echo 1", "description": "Test 1"},
                 {"name": "script2", "command": "echo 2", "description": "Test 2"},
             ],
-            "_script_sources": {
-                "script1": "scripts/test1.yaml",
-                "script2": "scripts/test2.yaml"
-            }
+            "_script_sources": {"script1": "scripts/test1.yaml", "script2": "scripts/test2.yaml"},
         }
 
         success_count = run_group_parallel(["script1", "script2"], config)
@@ -572,15 +523,15 @@ class TestExecutorIntegration:
         mock_save_state,
         mock_rotate,
         mock_write_log,
-        mock_subprocess
+        mock_subprocess,
     ):
         """Test complete serial execution workflow."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
-            "execution.default_timeout": 300
+            "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test.log"
-        
+
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = "Output"
@@ -592,16 +543,13 @@ class TestExecutorIntegration:
                 {"name": "script1", "command": "echo 1", "description": "Test 1"},
                 {"name": "script2", "command": "echo 2", "description": "Test 2"},
             ],
-            "_script_sources": {
-                "script1": "scripts/test1.yaml",
-                "script2": "scripts/test2.yaml"
-            }
+            "_script_sources": {"script1": "scripts/test1.yaml", "script2": "scripts/test2.yaml"},
         }
 
         success_count = run_group_serial(["script1", "script2"], config, stop_on_error=False)
 
         assert success_count == 2
-        
+
         # Verify serial execution (second call happens after first completes)
         assert mock_subprocess.call_count == 2
         calls = mock_subprocess.call_args_list

@@ -38,6 +38,7 @@ def run_script(name, config):
 
     # Validate configuration before running script
     from . import validator, config as config_mod
+
     validation_result = validator.validate_configuration()
     if validation_result.errors or validation_result.warnings:
         click.echo("Some configuration errors or warnings were found. Please run 'signalbox validate' for details.")
@@ -75,21 +76,21 @@ def run_script(name, config):
         # Check for alert patterns in output
         combined_output = result.stdout + "\n" + result.stderr
         triggered_alerts = alerts.check_alert_patterns(name, script, combined_output)
-        
+
         # Save and optionally notify for each triggered alert
         if triggered_alerts:
             alerts_enabled = get_config_value("alerts.notifications.enabled", True)
             for alert in triggered_alerts:
                 alerts.save_alert(name, alert)
-                
+
                 # Send notification if alerts are enabled
                 if alerts_enabled:
                     notifications.send_notification(
                         title=f"Alert: {name}",
                         message=alert["message"],
-                        urgency="critical" if alert["severity"] == "critical" else "normal"
+                        urgency="critical" if alert["severity"] == "critical" else "normal",
                     )
-                    
+
                 # Log to console
                 severity_label = alert["severity"].upper()
                 click.echo(f"  [{severity_label}] {alert['message']}")
@@ -166,7 +167,7 @@ def run_group_parallel(script_names, config):
         failed=failed_count,
         context="scripts",
         failed_names=failed_names,
-        config=config
+        config=config,
     )
 
     return success_count
@@ -213,7 +214,7 @@ def run_group_serial(script_names, config, stop_on_error):
         failed=failed_count,
         context="scripts",
         failed_names=failed_names if failed_names else None,
-        config=config
+        config=config,
     )
 
     return success_count

@@ -1,7 +1,14 @@
 [flake8]
 max-line-length = 120
-extend-ignore = E203, W503
+extend-ignore = E203, W503, E501
 per-file-ignores =
     core/cli_commands.py:F541
     core/executor.py:F541
     core/exporters.py:F541
+
+exclude =
+    build,
+    signalbox.egg-info,
+    __pycache__,
+    venv,
+    .venv

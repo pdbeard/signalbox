@@ -7,7 +7,6 @@ This module provides shared fixtures used across test modules.
 import pytest
 import tempfile
 import shutil
-import os
 import yaml
 from pathlib import Path
 
@@ -37,7 +36,7 @@ def temp_config_dir(temp_dir):
         └── groups/
     """
     config_dir = Path(temp_dir)
-    
+
     # Create directory structure
     (config_dir / "config").mkdir()
     (config_dir / "config" / "scripts").mkdir()
@@ -46,7 +45,7 @@ def temp_config_dir(temp_dir):
     (config_dir / "runtime").mkdir()
     (config_dir / "runtime" / "scripts").mkdir()
     (config_dir / "runtime" / "groups").mkdir()
-    
+
     yield str(config_dir)
 
 
@@ -54,7 +53,7 @@ def temp_config_dir(temp_dir):
 def sample_signalbox_yaml(temp_config_dir):
     """Create a sample signalbox.yaml configuration file."""
     config_file = Path(temp_config_dir) / "config" / "signalbox.yaml"
-    
+
     config_data = {
         "default_log_limit": {"type": "count", "value": 10},
         "paths": {
@@ -71,10 +70,10 @@ def sample_signalbox_yaml(temp_config_dir):
         "logging": {"timestamp_format": "%Y%m%d_%H%M%S_%f"},
         "display": {"date_format": "%Y-%m-%d %H:%M:%S"},
     }
-    
+
     with open(config_file, "w") as f:
         yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
-    
+
     return str(config_file)
 
 
@@ -82,7 +81,7 @@ def sample_signalbox_yaml(temp_config_dir):
 def sample_scripts_yaml(temp_config_dir):
     """Create sample script YAML files."""
     scripts_dir = Path(temp_config_dir) / "config" / "scripts"
-    
+
     # Create basic.yaml
     basic_scripts = {
         "scripts": [
@@ -99,11 +98,11 @@ def sample_scripts_yaml(temp_config_dir):
             },
         ]
     }
-    
+
     basic_file = scripts_dir / "basic.yaml"
     with open(basic_file, "w") as f:
         yaml.dump(basic_scripts, f, default_flow_style=False, sort_keys=False)
-    
+
     # Create system.yaml
     system_scripts = {
         "scripts": [
@@ -114,11 +113,11 @@ def sample_scripts_yaml(temp_config_dir):
             }
         ]
     }
-    
+
     system_file = scripts_dir / "system.yaml"
     with open(system_file, "w") as f:
         yaml.dump(system_scripts, f, default_flow_style=False, sort_keys=False)
-    
+
     return [str(basic_file), str(system_file)]
 
 
@@ -126,7 +125,7 @@ def sample_scripts_yaml(temp_config_dir):
 def sample_groups_yaml(temp_config_dir):
     """Create sample group YAML files."""
     groups_dir = Path(temp_config_dir) / "config" / "groups"
-    
+
     groups_data = {
         "groups": [
             {
@@ -143,11 +142,11 @@ def sample_groups_yaml(temp_config_dir):
             },
         ]
     }
-    
+
     groups_file = groups_dir / "test.yaml"
     with open(groups_file, "w") as f:
         yaml.dump(groups_data, f, default_flow_style=False, sort_keys=False)
-    
+
     return str(groups_file)
 
 
@@ -155,7 +154,7 @@ def sample_groups_yaml(temp_config_dir):
 def full_config(temp_config_dir, sample_signalbox_yaml, sample_scripts_yaml, sample_groups_yaml):
     """
     Create a complete signalbox configuration with all files.
-    
+
     Returns the path to the config home directory.
     """
     return temp_config_dir

@@ -43,7 +43,7 @@ def validate_configuration(include_catalog=True):
         groups_file = get_config_value("paths.groups_file", "config/groups")
         catalog_scripts_file = get_config_value("paths.catalog_scripts_file", "config/catalog/scripts")
         catalog_groups_file = get_config_value("paths.catalog_groups_file", "config/catalog/groups")
-        
+
         # Resolve all paths to absolute paths
         scripts_file = resolve_path(scripts_file)
         groups_file = resolve_path(groups_file)
@@ -52,42 +52,60 @@ def validate_configuration(include_catalog=True):
 
         # Strictly validate all user script YAML files for syntax and required fields (user and catalog)
         for script_dir in [scripts_file, catalog_scripts_file]:
-            is_catalog = (script_dir == catalog_scripts_file)
+            is_catalog = script_dir == catalog_scripts_file
             if os.path.isdir(script_dir):
                 for fname in os.listdir(script_dir):
-                    if fname.endswith('.yaml') or fname.endswith('.yml'):
+                    if fname.endswith(".yaml") or fname.endswith(".yml"):
                         fpath = os.path.join(script_dir, fname)
                         file_errors = []
                         try:
-                            with open(fpath, 'r') as f:
+                            with open(fpath, "r") as f:
                                 data = yaml.safe_load(f)
-                            if not data or 'scripts' not in data:
-                                file_errors.append(f"No 'scripts' key found")
+                            if not data or "scripts" not in data:
+                                file_errors.append("No 'scripts' key found")
                             else:
-                                for script in data['scripts']:
-                                    if 'name' not in script:
-                                        file_errors.append(f"Script missing 'name' field")
-                                    if 'command' not in script:
-                                        file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'command' field")
-                                    if 'description' not in script:
-                                        file_errors.append(f"Script '{script.get('name', 'unknown')}' missing 'description' field")
+                                for script in data["scripts"]:
+                                    if "name" not in script:
+                                        file_errors.append("Script missing 'name' field")
+                                    if "command" not in script:
+                                        file_errors.append(
+                                            f"Script '{script.get('name', 'unknown')}' missing 'command' field"
+                                        )
+                                    if "description" not in script:
+                                        file_errors.append(
+                                            f"Script '{script.get('name', 'unknown')}' missing 'description' field"
+                                        )
                                     # Validate alerts field if present
-                                    if 'alerts' in script:
-                                        alerts_list = script['alerts']
+                                    if "alerts" in script:
+                                        alerts_list = script["alerts"]
                                         if not isinstance(alerts_list, list):
-                                            file_errors.append(f"Script '{script.get('name', 'unknown')}' alerts field must be a list")
+                                            file_errors.append(
+                                                f"Script '{script.get('name', 'unknown')}' alerts field must be a list"
+                                            )
                                         else:
                                             for idx, alert in enumerate(alerts_list):
                                                 if not isinstance(alert, dict):
-                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} must be a dict")
+                                                    file_errors.append(
+                                                        f"Script '{script.get('name', 'unknown')}' alert #{idx+1} must be a dict"
+                                                    )
                                                     continue
-                                                if 'pattern' not in alert:
-                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} missing 'pattern' field")
-                                                if 'message' not in alert:
-                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} missing 'message' field")
+                                                if "pattern" not in alert:
+                                                    file_errors.append(
+                                                        f"Script '{script.get('name', 'unknown')}' alert #{idx+1} missing 'pattern' field"
+                                                    )
+                                                if "message" not in alert:
+                                                    file_errors.append(
+                                                        f"Script '{script.get('name', 'unknown')}' alert #{idx+1} missing 'message' field"
+                                                    )
                                                 # Validate severity if present
-                                                if 'severity' in alert and alert['severity'] not in ['info', 'warning', 'critical']:
-                                                    file_errors.append(f"Script '{script.get('name', 'unknown')}' alert #{idx+1} has invalid severity (must be info, warning, or critical)")
+                                                if "severity" in alert and alert["severity"] not in [
+                                                    "info",
+                                                    "warning",
+                                                    "critical",
+                                                ]:
+                                                    file_errors.append(
+                                                        f"Script '{script.get('name', 'unknown')}' alert #{idx+1} has invalid severity (must be info, warning, or critical)"
+                                                    )
 
                         except yaml.YAMLError as e:
                             file_errors.append(f"YAML syntax error: {e}")
@@ -101,25 +119,29 @@ def validate_configuration(include_catalog=True):
 
         # Strictly validate all user group YAML files for syntax and required fields (user and catalog)
         for group_dir in [groups_file, catalog_groups_file]:
-            is_catalog = (group_dir == catalog_groups_file)
+            is_catalog = group_dir == catalog_groups_file
             if os.path.isdir(group_dir):
                 for fname in os.listdir(group_dir):
-                    if fname.endswith('.yaml') or fname.endswith('.yml'):
+                    if fname.endswith(".yaml") or fname.endswith(".yml"):
                         fpath = os.path.join(group_dir, fname)
                         file_errors = []
                         try:
-                            with open(fpath, 'r') as f:
+                            with open(fpath, "r") as f:
                                 data = yaml.safe_load(f)
-                            if not data or 'groups' not in data:
-                                file_errors.append(f"No 'groups' key found")
+                            if not data or "groups" not in data:
+                                file_errors.append("No 'groups' key found")
                             else:
-                                for group in data['groups']:
-                                    if 'name' not in group:
-                                        file_errors.append(f"Group missing 'name' field")
-                                    if 'description' not in group:
-                                        file_errors.append(f"Group '{group.get('name', 'unknown')}' missing 'description' field")
-                                    if 'scripts' not in group:
-                                        file_errors.append(f"Group '{group.get('name', 'unknown')}' missing 'scripts' field")
+                                for group in data["groups"]:
+                                    if "name" not in group:
+                                        file_errors.append("Group missing 'name' field")
+                                    if "description" not in group:
+                                        file_errors.append(
+                                            f"Group '{group.get('name', 'unknown')}' missing 'description' field"
+                                        )
+                                    if "scripts" not in group:
+                                        file_errors.append(
+                                            f"Group '{group.get('name', 'unknown')}' missing 'scripts' field"
+                                        )
                         except yaml.YAMLError as e:
                             file_errors.append(f"YAML syntax error: {e}")
                         except Exception as e:
@@ -130,38 +152,51 @@ def validate_configuration(include_catalog=True):
                             for err in file_errors:
                                 result.errors.append(f"{prefix}{err}")
         # Validate user scripts/groups, fallback to catalog if enabled
-        user_scripts_exists = os.path.isdir(scripts_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(scripts_file)) if os.path.exists(scripts_file) else False
-        user_groups_exists = os.path.isdir(groups_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(groups_file)) if os.path.exists(groups_file) else False
-        catalog_scripts_exists = os.path.isdir(catalog_scripts_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(catalog_scripts_file)) if os.path.exists(catalog_scripts_file) else False
-        catalog_groups_exists = os.path.isdir(catalog_groups_file) and any(f.endswith(('.yaml', '.yml')) for f in os.listdir(catalog_groups_file)) if os.path.exists(catalog_groups_file) else False
+        user_scripts_exists = (
+            os.path.isdir(scripts_file) and any(f.endswith((".yaml", ".yml")) for f in os.listdir(scripts_file))
+            if os.path.exists(scripts_file)
+            else False
+        )
+        catalog_scripts_exists = (
+            os.path.isdir(catalog_scripts_file)
+            and any(f.endswith((".yaml", ".yml")) for f in os.listdir(catalog_scripts_file))
+            if os.path.exists(catalog_scripts_file)
+            else False
+        )
+        catalog_groups_exists = (
+            os.path.isdir(catalog_groups_file)
+            and any(f.endswith((".yaml", ".yml")) for f in os.listdir(catalog_groups_file))
+            if os.path.exists(catalog_groups_file)
+            else False
+        )
 
         if not user_scripts_exists and include_catalog and catalog_scripts_exists:
             # Use catalog scripts as config source
             result.config = {"scripts": [], "groups": []}
             # Load all catalog scripts
             for fname in os.listdir(catalog_scripts_file):
-                if fname.endswith('.yaml') or fname.endswith('.yml'):
+                if fname.endswith(".yaml") or fname.endswith(".yml"):
                     fpath = os.path.join(catalog_scripts_file, fname)
                     try:
-                        with open(fpath, 'r') as f:
+                        with open(fpath, "r") as f:
                             catalog_data = yaml.safe_load(f) or {}
-                        if 'scripts' in catalog_data:
-                            result.config['scripts'].extend(catalog_data['scripts'])
+                        if "scripts" in catalog_data:
+                            result.config["scripts"].extend(catalog_data["scripts"])
                         result.files_used.append(fpath)
                     except Exception as e:
                         result.errors.append(f"[Catalog] Error loading {fpath}: {e}")
             # Load all catalog groups
             if catalog_groups_exists:
                 for fname in os.listdir(catalog_groups_file):
-                    if fname.endswith('.yaml') or fname.endswith('.yml'):
+                    if fname.endswith(".yaml") or fname.endswith(".yml"):
                         fpath = os.path.join(catalog_groups_file, fname)
                         try:
-                            with open(fpath, 'r') as f:
+                            with open(fpath, "r") as f:
                                 catalog_data = yaml.safe_load(f) or {}
-                            if 'groups' in catalog_data:
-                                if 'groups' not in result.config:
-                                    result.config['groups'] = []
-                                result.config['groups'].extend(catalog_data['groups'])
+                            if "groups" in catalog_data:
+                                if "groups" not in result.config:
+                                    result.config["groups"] = []
+                                result.config["groups"].extend(catalog_data["groups"])
                             result.files_used.append(fpath)
                         except Exception as e:
                             result.errors.append(f"[Catalog] Error loading {fpath}: {e}")
@@ -194,19 +229,23 @@ def validate_configuration(include_catalog=True):
             # Validate catalog scripts
             if catalog_scripts_exists:
                 for fname in os.listdir(catalog_scripts_file):
-                    if fname.endswith('.yaml') or fname.endswith('.yml'):
+                    if fname.endswith(".yaml") or fname.endswith(".yml"):
                         fpath = os.path.join(catalog_scripts_file, fname)
                         try:
-                            with open(fpath, 'r') as f:
+                            with open(fpath, "r") as f:
                                 catalog_data = yaml.safe_load(f) or {}
-                            if 'scripts' in catalog_data:
-                                for script in catalog_data['scripts']:
-                                    if 'name' not in script:
+                            if "scripts" in catalog_data:
+                                for script in catalog_data["scripts"]:
+                                    if "name" not in script:
                                         result.errors.append(f"[Catalog] Script in {fname} missing 'name' field")
-                                    if 'command' not in script:
-                                        result.errors.append(f"[Catalog] Script '{script.get('name', 'unknown')}' in {fname} missing 'command' field")
-                                    if 'description' not in script:
-                                        result.errors.append(f"[Catalog] Script '{script.get('name', 'unknown')}' in {fname} missing 'description' field")
+                                    if "command" not in script:
+                                        result.errors.append(
+                                            f"[Catalog] Script '{script.get('name', 'unknown')}' in {fname} missing 'command' field"
+                                        )
+                                    if "description" not in script:
+                                        result.errors.append(
+                                            f"[Catalog] Script '{script.get('name', 'unknown')}' in {fname} missing 'description' field"
+                                        )
                             if fpath not in result.files_used:
                                 result.files_used.append(fpath)
                         except Exception as e:
@@ -214,19 +253,23 @@ def validate_configuration(include_catalog=True):
             # Validate catalog groups
             if catalog_groups_exists:
                 for fname in os.listdir(catalog_groups_file):
-                    if fname.endswith('.yaml') or fname.endswith('.yml'):
+                    if fname.endswith(".yaml") or fname.endswith(".yml"):
                         fpath = os.path.join(catalog_groups_file, fname)
                         try:
-                            with open(fpath, 'r') as f:
+                            with open(fpath, "r") as f:
                                 catalog_data = yaml.safe_load(f) or {}
-                            if 'groups' in catalog_data:
-                                for group in catalog_data['groups']:
-                                    if 'name' not in group:
+                            if "groups" in catalog_data:
+                                for group in catalog_data["groups"]:
+                                    if "name" not in group:
                                         result.errors.append(f"[Catalog] Group in {fname} missing 'name' field")
-                                    if 'scripts' not in group:
-                                        result.errors.append(f"[Catalog] Group '{group.get('name', 'unknown')}' in {fname} missing 'scripts' field")
-                                    if 'description' not in group:
-                                        result.errors.append(f"[Catalog] Group '{group.get('name', 'unknown')}' in {fname} missing 'description' field")
+                                    if "scripts" not in group:
+                                        result.errors.append(
+                                            f"[Catalog] Group '{group.get('name', 'unknown')}' in {fname} missing 'scripts' field"
+                                        )
+                                    if "description" not in group:
+                                        result.errors.append(
+                                            f"[Catalog] Group '{group.get('name', 'unknown')}' in {fname} missing 'description' field"
+                                        )
                             if fpath not in result.files_used:
                                 result.files_used.append(fpath)
                         except Exception as e:
@@ -248,12 +291,12 @@ def _validate_scripts(result):
         result.errors.append("No scripts defined in config")
         return
 
-    script_names = [s.get("name", f"<unnamed_{i}>") for i, s in enumerate(config["scripts"])]
+    script_names = [s.get("name", "<unnamed_{}>".format(i)) for i, s in enumerate(config["scripts"])]
 
     # Check for duplicate script names
     if len(script_names) != len(set(script_names)):
         duplicates = [n for n in script_names if script_names.count(n) > 1]
-        result.errors.append(f"Duplicate script names: {', '.join(set(duplicates))}")
+        result.errors.append("Duplicate script names: {}".format(", ".join(set(duplicates))))
 
     # Note: Required field validation is now done per-file during initial validation
     # to properly group errors by source file
@@ -266,7 +309,7 @@ def _validate_scripts(result):
                 used_scripts.update(group.get("scripts", []))
             unused = set(script_names) - used_scripts
             if unused:
-                result.warnings.append(f"Unused scripts (not in any group): {', '.join(unused)}")
+                result.warnings.append("Unused scripts (not in any group): {}".format(", ".join(unused)))
 
 
 def _validate_groups(result):
@@ -277,13 +320,13 @@ def _validate_groups(result):
         return
 
     groups = config["groups"]
-    group_names = [g.get("name", f"<unnamed_{i}>") for i, g in enumerate(groups)]
+    group_names = [g.get("name", "<unnamed_{}>".format(i)) for i, g in enumerate(groups)]
     script_names = [s.get("name") for s in config.get("scripts", []) if "name" in s]
 
     # Check for duplicate group names
     if len(group_names) != len(set(group_names)):
         duplicates = [n for n in group_names if group_names.count(n) > 1]
-        result.errors.append(f"Duplicate group names: {', '.join(set(duplicates))}")
+        result.errors.append("Duplicate group names: {}".format(", ".join(set(duplicates))))
 
     # Note: Required field validation is now done per-file during initial validation
     # to properly group errors by source file
@@ -298,7 +341,7 @@ def _validate_groups(result):
         if "scripts" in group and group["scripts"]:
             for script_name in group["scripts"]:
                 if script_name not in script_names:
-                    result.errors.append(f"Group '{group_name}' references non-existent script '{script_name}'")
+                    result.errors.append("Group '{}' references non-existent script '{}'".format(group_name, script_name))
 
         # Validate schedule if present
         if "schedule" in group:
@@ -306,7 +349,7 @@ def _validate_groups(result):
             parts = schedule.split()
             if len(parts) != 5:
                 result.warnings.append(
-                    f"Group '{group_name}' schedule may be invalid: '{schedule}' (expected 5 fields)"
+                    "Group '{}' schedule may be invalid: '{}' (expected 5 fields)".format(group_name, schedule)
                 )
 
 
@@ -320,7 +363,7 @@ def _validate_global_config(result):
     # Validate timeout value
     timeout = get_config_value("execution.default_timeout", 300)
     if not isinstance(timeout, (int, float)) or timeout < 0:
-        result.warnings.append(f"Invalid timeout value: {timeout} (should be >= 0)")
+        result.warnings.append("Invalid timeout value: {} (should be >= 0)".format(timeout))
 
 
 def get_validation_summary(result):

@@ -1,9 +1,7 @@
 import os
-import tempfile
-import shutil
-import pytest
 from core import alerts
 from datetime import datetime, timedelta
+
 
 def test_check_alert_patterns_and_save(tmp_path, monkeypatch):
     # Setup: create a fake script config with alerts
@@ -11,14 +9,16 @@ def test_check_alert_patterns_and_save(tmp_path, monkeypatch):
     script_config = {
         "alerts": [
             {"pattern": "ALERT: Disk usage HIGH", "message": "Disk usage is above 80%!", "severity": "critical"},
-            {"pattern": "Disk usage OK", "message": "Disk usage is normal.", "severity": "info"}
+            {"pattern": "Disk usage OK", "message": "Disk usage is normal.", "severity": "info"},
         ]
     }
     output = "Checking disk space...\nALERT: Disk usage HIGH: 85% (/ 10G free)\n"
 
     # Patch get_config_value to use a temp log dir
     log_dir = tmp_path / "logs"
-    monkeypatch.setattr(alerts, "get_config_value", lambda key, default=None: str(log_dir) if key == "paths.log_dir" else default)
+    monkeypatch.setattr(
+        alerts, "get_config_value", lambda key, default=None: str(log_dir) if key == "paths.log_dir" else default
+    )
 
     # Check alert patterns
     triggered = alerts.check_alert_patterns(script_name, script_config, output)
@@ -35,19 +35,40 @@ def test_check_alert_patterns_and_save(tmp_path, monkeypatch):
     assert len(lines) == 1
     assert "Disk usage is above 80%" in lines[0]
 
+
 def test_load_alerts_filtering(tmp_path, monkeypatch):
     script_name = "test_script"
     log_dir = tmp_path / "logs"
-    monkeypatch.setattr(alerts, "get_config_value", lambda key, default=None: str(log_dir) if key == "paths.log_dir" else default)
+    monkeypatch.setattr(
+        alerts, "get_config_value", lambda key, default=None: str(log_dir) if key == "paths.log_dir" else default
+    )
     alerts_dir = log_dir / script_name / "alerts"
     os.makedirs(alerts_dir)
     alert_log = alerts_dir / "alerts.jsonl"
     now = datetime.now()
     # Write 3 alerts: critical, info, warning
     alert_data = [
-        {"pattern": "A", "message": "Critical alert", "severity": "critical", "timestamp": alerts.format_timestamp(now), "script_name": script_name},
-        {"pattern": "B", "message": "Info alert", "severity": "info", "timestamp": alerts.format_timestamp(now - timedelta(days=2)), "script_name": script_name},
-        {"pattern": "C", "message": "Warning alert", "severity": "warning", "timestamp": alerts.format_timestamp(now - timedelta(days=1)), "script_name": script_name},
+        {
+            "pattern": "A",
+            "message": "Critical alert",
+            "severity": "critical",
+            "timestamp": alerts.format_timestamp(now),
+            "script_name": script_name,
+        },
+        {
+            "pattern": "B",
+            "message": "Info alert",
+            "severity": "info",
+            "timestamp": alerts.format_timestamp(now - timedelta(days=2)),
+            "script_name": script_name,
+        },
+        {
+            "pattern": "C",
+            "message": "Warning alert",
+            "severity": "warning",
+            "timestamp": alerts.format_timestamp(now - timedelta(days=1)),
+            "script_name": script_name,
+        },
     ]
     with open(alert_log, "w") as f:
         for a in alert_data:

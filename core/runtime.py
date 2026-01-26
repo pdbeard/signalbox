@@ -1,7 +1,6 @@
 # Runtime state management for signalbox
 import os
 import yaml
-import click
 from .config import resolve_path
 from .helpers import load_yaml_dict_from_dir
 
@@ -9,23 +8,15 @@ from .helpers import load_yaml_dict_from_dir
 def load_runtime_state():
     """Load runtime state (last_run, last_status) from runtime directory."""
     runtime_state = {"scripts": {}, "groups": {}}
-    
+
     # Load script runtime state
     runtime_scripts_dir = resolve_path("runtime/scripts")
-    runtime_state["scripts"] = load_yaml_dict_from_dir(
-        runtime_scripts_dir,
-        "scripts",
-        filename_prefix="runtime_"
-    )
-    
+    runtime_state["scripts"] = load_yaml_dict_from_dir(runtime_scripts_dir, "scripts", filename_prefix="runtime_")
+
     # Load group runtime state
     runtime_groups_dir = resolve_path("runtime/groups")
-    runtime_state["groups"] = load_yaml_dict_from_dir(
-        runtime_groups_dir,
-        "groups",
-        filename_prefix="runtime_"
-    )
-    
+    runtime_state["groups"] = load_yaml_dict_from_dir(runtime_groups_dir, "groups", filename_prefix="runtime_")
+
     return runtime_state
 
 

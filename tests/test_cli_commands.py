@@ -4,12 +4,10 @@ Tests for core.cli_commands module.
 Tests CLI command functionality including list, run, run-group, logs,
 validation, and other commands.
 """
+
 import pytest
 from click.testing import CliRunner
 from unittest.mock import patch, MagicMock, mock_open
-import os
-import yaml
-from pathlib import Path
 
 from core.cli_commands import (
     cli,
@@ -30,9 +28,9 @@ from core.cli_commands import (
     export_cron,
     validate,
     notify_test,
-    handle_exceptions
+    handle_exceptions,
 )
-from core.exceptions import ScriptNotFoundError, GroupNotFoundError
+from core.exceptions import ScriptNotFoundError
 
 
 @pytest.fixture
@@ -51,15 +49,15 @@ def sample_config():
                 "command": "echo test",
                 "description": "Test script",
                 "last_run": "20240101_120000_000000",
-                "last_status": "success"
+                "last_status": "success",
             },
             {
                 "name": "another_script",
                 "command": "echo another",
                 "description": "Another script",
                 "last_run": "",
-                "last_status": "no logs"
-            }
+                "last_status": "no logs",
+            },
         ],
         "groups": [
             {
@@ -67,11 +65,11 @@ def sample_config():
                 "description": "Test group",
                 "scripts": ["test_script", "another_script"],
                 "execution": "serial",
-                "stop_on_error": False
+                "stop_on_error": False,
             }
         ],
         "_script_sources": {"test_script": "scripts/test.yaml"},
-        "_group_sources": {"test_group": "groups/test.yaml"}
+        "_group_sources": {"test_group": "groups/test.yaml"},
     }
 
 
@@ -80,28 +78,31 @@ class TestHandleExceptions:
 
     def test_handles_signalbox_error(self, runner):
         """Test that SignalboxError is caught and handled."""
+
         @handle_exceptions
         def failing_command():
             raise ScriptNotFoundError("test_script")
 
         with pytest.raises(SystemExit) as exc_info:
             failing_command()
-        
+
         assert exc_info.value.code == 3
 
     def test_handles_generic_exception(self, runner):
         """Test that generic exceptions are caught."""
+
         @handle_exceptions
         def failing_command():
             raise ValueError("Something went wrong")
 
         with pytest.raises(SystemExit) as exc_info:
             failing_command()
-        
+
         assert exc_info.value.code == 1
 
     def test_passes_through_successful_execution(self):
         """Test that successful execution passes through."""
+
         @handle_exceptions
         def successful_command():
             return "success"
@@ -131,7 +132,9 @@ class TestInitCommand:
     @patch("core.cli_commands.shutil.move")
     @patch("core.cli_commands.shutil.copytree")
     @patch("core.cli_commands.os.makedirs")
-    def test_init_with_existing_config_confirms_backup(self, mock_makedirs, mock_copytree, mock_move, mock_exists, runner):
+    def test_init_with_existing_config_confirms_backup(
+        self, mock_makedirs, mock_copytree, mock_move, mock_exists, runner
+    ):
         """Test init command handles existing config with confirmation."""
         mock_exists.return_value = True
 
@@ -179,7 +182,9 @@ class TestListCommand:
     @patch("core.cli_commands.load_runtime_state")
     @patch("core.cli_commands.merge_config_with_runtime_state")
     @patch("core.cli_commands.get_config_value")
-    def test_list_handles_timestamp_formatting(self, mock_get_config, mock_merge, mock_runtime, mock_load, runner, sample_config):
+    def test_list_handles_timestamp_formatting(
+        self, mock_get_config, mock_merge, mock_runtime, mock_load, runner, sample_config
+    ):
         """Test list command formats timestamps correctly."""
         mock_load.return_value = sample_config
         mock_runtime.return_value = {"scripts": {}, "groups": {}}
@@ -256,7 +261,9 @@ class TestRunGroupCommand:
     @patch("core.cli_commands.run_group_serial")
     @patch("core.cli_commands.save_group_runtime_state")
     @patch("core.cli_commands.get_config_value")
-    def test_run_group_serial_execution(self, mock_get_config, mock_save, mock_run_serial, mock_load, runner, sample_config):
+    def test_run_group_serial_execution(
+        self, mock_get_config, mock_save, mock_run_serial, mock_load, runner, sample_config
+    ):
         """Test run_group with serial execution."""
         mock_load.return_value = sample_config
         mock_run_serial.return_value = 2
@@ -273,7 +280,9 @@ class TestRunGroupCommand:
     @patch("core.cli_commands.run_group_parallel")
     @patch("core.cli_commands.save_group_runtime_state")
     @patch("core.cli_commands.get_config_value")
-    def test_run_group_parallel_execution(self, mock_get_config, mock_save, mock_run_parallel, mock_load, runner, sample_config):
+    def test_run_group_parallel_execution(
+        self, mock_get_config, mock_save, mock_run_parallel, mock_load, runner, sample_config
+    ):
         """Test run_group with parallel execution."""
         # Modify config for parallel execution
         sample_config["groups"][0]["execution"] = "parallel"
@@ -301,22 +310,24 @@ class TestRunGroupCommand:
     @patch("core.cli_commands.run_group_serial")
     @patch("core.cli_commands.save_group_runtime_state")
     @patch("core.cli_commands.get_config_value")
-    def test_run_group_calculates_status(self, mock_get_config, mock_save, mock_run_serial, mock_load, runner, sample_config):
+    def test_run_group_calculates_status(
+        self, mock_get_config, mock_save, mock_run_serial, mock_load, runner, sample_config
+    ):
         """Test run_group calculates correct status based on results."""
         mock_load.return_value = sample_config
         mock_get_config.return_value = "%Y%m%d_%H%M%S_%f"
-        
+
         # Test different scenarios
         scenarios = [
             (2, "success"),  # All succeeded
             (1, "partial"),  # Some succeeded
-            (0, "failed"),   # None succeeded
+            (0, "failed"),  # None succeeded
         ]
-        
+
         for scripts_successful, expected_status in scenarios:
             mock_run_serial.return_value = scripts_successful
-            result = runner.invoke(run_group, ["test_group"])
-            
+            runner.invoke(run_group, ["test_group"])
+
             # Verify save_group_runtime_state was called with correct status
             call_args = mock_save.call_args
             assert call_args[1]["last_status"] == expected_status
@@ -330,7 +341,9 @@ class TestLogsCommand:
     @patch("core.cli_commands.log_manager.read_log_content")
     @patch("core.cli_commands.log_manager.format_log_with_colors")
     @patch("core.cli_commands.get_config_value")
-    def test_logs_displays_latest_log(self, mock_get_config, mock_format, mock_read, mock_get_log, mock_load, runner, sample_config):
+    def test_logs_displays_latest_log(
+        self, mock_get_config, mock_format, mock_read, mock_get_log, mock_load, runner, sample_config
+    ):
         """Test logs command displays latest log."""
         mock_load.return_value = sample_config
         mock_get_log.return_value = ("/path/to/log.txt", True)
@@ -372,17 +385,16 @@ class TestHistoryCommand:
     @patch("core.cli_commands.log_manager.get_log_history")
     @patch("core.cli_commands.log_manager.get_script_log_dir")
     @patch("core.cli_commands.get_config_value")
-    def test_history_displays_log_files(self, mock_get_config, mock_get_dir, mock_get_history, mock_load, runner, sample_config):
+    def test_history_displays_log_files(
+        self, mock_get_config, mock_get_dir, mock_get_history, mock_load, runner, sample_config
+    ):
         """Test history command displays log history."""
         mock_load.return_value = sample_config
-        mock_get_history.return_value = (
-            [("log1.txt", 1704110400), ("log2.txt", 1704196800)],
-            True
-        )
+        mock_get_history.return_value = ([("log1.txt", 1704110400), ("log2.txt", 1704196800)], True)
         mock_get_dir.return_value = "/logs/test_script"
         mock_get_config.side_effect = lambda key, default: {
             "display.include_paths": False,
-            "display.date_format": "%Y-%m-%d"
+            "display.date_format": "%Y-%m-%d",
         }.get(key, default)
 
         result = runner.invoke(history, ["test_script"])
@@ -502,7 +514,7 @@ class TestShowConfigCommand:
         """Test show_config displays global configuration."""
         mock_load.return_value = {
             "execution": {"default_timeout": 300},
-            "logging": {"timestamp_format": "%Y%m%d_%H%M%S_%f"}
+            "logging": {"timestamp_format": "%Y%m%d_%H%M%S_%f"},
         }
 
         result = runner.invoke(show_config)
@@ -747,11 +759,23 @@ class TestCLIIntegration:
         result = runner.invoke(cli, ["--help"])
 
         commands = [
-            "init", "list", "run", "run-all", "run-group",
-            "logs", "history", "clear-logs", "clear-all-logs",
-            "list-groups", "show-config", "get-setting",
-            "list-schedules", "export-systemd", "export-cron",
-            "validate", "notify-test"
+            "init",
+            "list",
+            "run",
+            "run-all",
+            "run-group",
+            "logs",
+            "history",
+            "clear-logs",
+            "clear-all-logs",
+            "list-groups",
+            "show-config",
+            "get-setting",
+            "list-schedules",
+            "export-systemd",
+            "export-cron",
+            "validate",
+            "notify-test",
         ]
 
         for command in commands:

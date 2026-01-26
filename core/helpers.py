@@ -1,6 +1,7 @@
 """
 Helper utilities for signalbox to reduce code duplication.
 """
+
 import os
 import yaml
 import click
@@ -14,9 +15,10 @@ def load_yaml_files_from_dir(
     filename_prefix: str = "",
     filename_suffix: tuple = (".yaml", ".yml"),
     track_sources: bool = False,
-    suppress_warnings: bool = False
+    suppress_warnings: bool = False,
 ) -> list:
     import os
+
     # Allow global suppression via env var
     if os.environ.get("SIGNALBOX_SUPPRESS_CONFIG_WARNINGS", "0") == "1":
         suppress_warnings = True
@@ -56,23 +58,23 @@ def load_yaml_files_from_dir(
         # Returns: [{"data": {...}, "source": "path/to/file.yaml"}, ...]
     """
     items = []
-    
+
     if not os.path.exists(directory):
         return items
-    
+
     for filename in sorted(os.listdir(directory)):
         # Apply filters
         if filename_prefix and not filename.startswith(filename_prefix):
             continue
-            
+
         if not filename.endswith(filename_suffix):
             continue
-            
+
         if filter_func and not filter_func(filename):
             continue
-        
+
         filepath = os.path.join(directory, filename)
-        
+
         try:
             with open(filepath, "r") as f:
                 data = yaml.safe_load(f)
@@ -86,7 +88,7 @@ def load_yaml_files_from_dir(
         except Exception as e:
             if not suppress_warnings:
                 click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
-    
+
     return items
 
 
@@ -95,24 +97,24 @@ def load_yaml_dict_from_dir(
     key: str,
     filter_func: Optional[Callable[[str], bool]] = None,
     filename_prefix: str = "",
-    filename_suffix: str = (".yaml", ".yml")
+    filename_suffix: str = (".yaml", ".yml"),
 ) -> Dict:
     """
     Load and merge YAML files from a directory into a dictionary.
-    
+
     Similar to load_yaml_files_from_dir but merges dictionaries instead
     of extending lists. Useful for runtime state loading.
-    
+
     Args:
         directory: Path to directory containing YAML files
         key: Key to extract from each YAML file (e.g., 'scripts', 'groups')
         filter_func: Optional function to filter filenames
         filename_prefix: Only process files starting with this prefix
         filename_suffix: Tuple of file extensions to process
-        
+
     Returns:
         Merged dictionary from all matching YAML files
-        
+
     Example:
         # Load runtime state
         runtime_scripts = load_yaml_dict_from_dir(
@@ -122,23 +124,23 @@ def load_yaml_dict_from_dir(
         )
     """
     merged_dict = {}
-    
+
     if not os.path.exists(directory):
         return merged_dict
-    
+
     for filename in sorted(os.listdir(directory)):
         # Apply filters
         if filename_prefix and not filename.startswith(filename_prefix):
             continue
-            
+
         if not filename.endswith(filename_suffix):
             continue
-            
+
         if filter_func and not filter_func(filename):
             continue
-        
+
         filepath = os.path.join(directory, filename)
-        
+
         try:
             with open(filepath, "r") as f:
                 data = yaml.safe_load(f)
@@ -147,30 +149,31 @@ def load_yaml_dict_from_dir(
                         merged_dict.update(data[key])
         except Exception as e:
             click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
-    
+
     return merged_dict
 
 
 def get_timestamp_format() -> str:
     """
     Get the configured timestamp format.
-    
+
     Centralized function to avoid hardcoding '%Y%m%d_%H%M%S_%f' everywhere.
-    
+
     Returns:
         Timestamp format string from config, or default
     """
     from .config import get_config_value
+
     return get_config_value("logging.timestamp_format", "%Y%m%d_%H%M%S_%f")
 
 
 def format_timestamp(dt) -> str:
     """
     Format a datetime object using the configured timestamp format.
-    
+
     Args:
         dt: datetime object to format
-        
+
     Returns:
         Formatted timestamp string
     """
@@ -180,14 +183,15 @@ def format_timestamp(dt) -> str:
 def parse_timestamp(timestamp_str: str):
     """
     Parse a timestamp string using the configured format.
-    
+
     Args:
         timestamp_str: Timestamp string to parse
-        
+
     Returns:
         datetime object, or None if parsing fails
     """
     from datetime import datetime
+
     try:
         # Remove .log extension if present
         timestamp_str = timestamp_str.replace(".log", "")

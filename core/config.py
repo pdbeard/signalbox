@@ -1,7 +1,6 @@
 # Configuration management for signalbox
 import os
 import yaml
-import click
 from .helpers import load_yaml_files_from_dir
 
 CONFIG_FILE = "config/signalbox.yaml"
@@ -94,54 +93,62 @@ class ConfigManager:
     def load_config(self, suppress_warnings=False):
         """Load configuration from scripts and groups directories."""
         config = {"scripts": [], "groups": [], "_script_sources": {}, "_group_sources": {}}
-        
+
         # Load user scripts from directory
         scripts_path = self.get_config_value("paths.scripts_file", SCRIPTS_FILE)
         scripts_path = self.resolve_path(scripts_path)
         if os.path.isdir(scripts_path):
-            scripts_list = load_yaml_files_from_dir(scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings)
+            scripts_list = load_yaml_files_from_dir(
+                scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings
+            )
             for item in scripts_list:
                 script_name = item["data"].get("name")
                 if script_name:
                     config["_script_sources"][script_name] = item["source"]
                 config["scripts"].append(item["data"])
-        
+
         # Load catalog scripts if enabled
         include_catalog = self.get_config_value("include_catalog", True)
         if include_catalog:
             catalog_scripts_path = self.get_config_value("paths.catalog_scripts_file", "config/catalog/scripts")
             catalog_scripts_path = self.resolve_path(catalog_scripts_path)
             if os.path.isdir(catalog_scripts_path):
-                catalog_scripts_list = load_yaml_files_from_dir(catalog_scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings)
+                catalog_scripts_list = load_yaml_files_from_dir(
+                    catalog_scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings
+                )
                 for item in catalog_scripts_list:
                     script_name = item["data"].get("name")
                     if script_name:
                         config["_script_sources"][script_name] = item["source"]
                     config["scripts"].append(item["data"])
-        
+
         # Load user groups from directory
         groups_path = self.get_config_value("paths.groups_file", GROUPS_FILE)
         groups_path = self.resolve_path(groups_path)
         if os.path.isdir(groups_path):
-            groups_list = load_yaml_files_from_dir(groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings)
+            groups_list = load_yaml_files_from_dir(
+                groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings
+            )
             for item in groups_list:
                 group_name = item["data"].get("name")
                 if group_name:
                     config["_group_sources"][group_name] = item["source"]
                 config["groups"].append(item["data"])
-        
+
         # Load catalog groups if enabled
         if include_catalog:
             catalog_groups_path = self.get_config_value("paths.catalog_groups_file", "config/catalog/groups")
             catalog_groups_path = self.resolve_path(catalog_groups_path)
             if os.path.isdir(catalog_groups_path):
-                catalog_groups_list = load_yaml_files_from_dir(catalog_groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings)
+                catalog_groups_list = load_yaml_files_from_dir(
+                    catalog_groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings
+                )
                 for item in catalog_groups_list:
                     group_name = item["data"].get("name")
                     if group_name:
                         config["_group_sources"][group_name] = item["source"]
                     config["groups"].append(item["data"])
-        
+
         # Note: runtime state merging should be handled in runtime.py
         return config
 

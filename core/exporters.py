@@ -35,6 +35,7 @@ def get_python_executable():
             str: Path to Python executable
     """
     import sys
+
     return sys.executable
 
 
@@ -45,39 +46,39 @@ def get_signalbox_command():
             str: Command to invoke signalbox (either CLI entry point or script path)
     """
     import shutil
-    
+
     # Check if signalbox is installed as a CLI command
-    signalbox_cmd = shutil.which('signalbox')
+    signalbox_cmd = shutil.which("signalbox")
     if signalbox_cmd:
-        return 'signalbox'
-    
+        return "signalbox"
+
     # Fall back to development mode - use the root signalbox.py
     # Find the project root (parent of core directory)
     core_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(core_dir)
-    signalbox_py = os.path.join(project_root, 'signalbox.py')
-    
+    signalbox_py = os.path.join(project_root, "signalbox.py")
+
     if os.path.exists(signalbox_py):
         python_exec = get_python_executable()
-        return f'{python_exec} {signalbox_py}'
-    
+        return f"{python_exec} {signalbox_py}"
+
     # Last resort fallback
-    return 'signalbox'
+    return "signalbox"
 
 
 def get_script_dir():
     """Get the absolute path to the script directory.
-    
+
     Returns the directory where scripts should be executed from.
     In production, this is typically the user's home or config directory.
     In development, this is the project root.
     """
     import shutil
-    
+
     # If signalbox is installed, use the config directory
-    if shutil.which('signalbox'):
-        return os.path.expanduser('~/.config/signalbox')
-    
+    if shutil.which("signalbox"):
+        return os.path.expanduser("~/.config/signalbox")
+
     # In development mode, use project root
     core_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(core_dir)
