@@ -86,3 +86,32 @@ def test_load_alerts_filtering(tmp_path, monkeypatch):
     # Filter by script
     script_alerts = alerts.load_alerts(script_name=script_name)
     assert len(script_alerts) == 3
+
+    def test_alert_retention_and_summary(tmp_path, monkeypatch):
+        import json
+        from datetime import datetime, timedelta
+        script_name = "test_script"
+        log_dir = tmp_path / "logs"
+        monkeypatch.setattr(
+            alerts, "get_config_value", lambda key, default=None: str(log_dir) if key == "paths.log_dir" else default
+        )
+        alerts_dir = log_dir / script_name / "alerts"
+        alerts_dir.mkdir(parents=True)
+        alert_log = alerts_dir / "alerts.jsonl"
+        now = datetime.now()
+        old_alert = {"severity": "critical", "timestamp": (now - timedelta(days=10)).isoformat(), "script_name": script_name}
+        new_alert = {"severity": "critical", "timestamp": now.isoformat(), "script_name": script_name}
+        with open(alert_log, "w") as f:
+            f.write(json.dumps(old_alert) + "\n")
+            f.write(json.dumps(new_alert) + "\n")
+        # Retain only alerts from last 5 days
+        alerts.retain_alerts(script_name, max_days=5)
+        with open(alert_log) as f:
+            lines = f.readlines()
+        assert len(lines) == 1
+        # Test summary
+        monkeypatch.setattr(alerts, 'load_alerts', lambda: [new_alert])
+        summary = alerts.get_alert_summary()
+        assert summary['total'] == 1
+        assert summary['by_severity']['critical'] == 1
+        assert summary['by_script'][script_name] == 1
