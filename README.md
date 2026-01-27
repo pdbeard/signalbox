@@ -14,6 +14,7 @@ signalbox is a CLI tool for managing, executing, and monitoring scripts with det
 
 ## Installation
 
+
 ### Quick Install (Recommended)
 
 For user-level installation (no root required):
@@ -46,6 +47,13 @@ If a previous user-level install created a conflicting symlink:
 rm ~/.local/bin/signalbox
 pipx install .
 ```
+
+**Note:** If you install with pipx and the `signalbox` command is not found, you may need to add pipx's bin directory to your PATH. By default, this is `~/.local/bin`. Add the following to your shell profile (e.g., `~/.bashrc`, `~/.zshrc`):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+Then restart your terminal or run `source ~/.bashrc` (or the relevant file for your shell).
 
 - breaking system protection (not recommended unless you understand the risks. But quick and easy!)
 ```bash
