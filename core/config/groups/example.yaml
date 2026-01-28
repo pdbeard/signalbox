@@ -1,0 +1,16 @@
+# User Groups Directory
+#
+# This directory is for YOUR custom groups.
+# The catalog/ directory contains curated groups maintained by the project.
+#
+# Example group format:
+#
+# groups:
+#   - name: my_group
+#     description: My custom group
+#     scripts:
+#       - my_script
+#     execution: serial
+#     schedule: "0 2 * * *"  # Optional cron expression
+#
+# You can delete this file once you add your own groups.
