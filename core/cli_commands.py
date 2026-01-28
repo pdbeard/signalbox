@@ -64,21 +64,19 @@ def init():
         click.echo(f"Backed up existing config to: {backup_dir}")
 
     # Find the installed package's config templates
-    # Try to locate the original config from the package installation
-    try:
-        import pkg_resources
-
-        package_path = pkg_resources.resource_filename("signalbox", "")
-        template_config = os.path.join(os.path.dirname(package_path), "config")
-
-        # If not found, try relative to this file (for development)
-        if not os.path.exists(template_config):
-            current_file_dir = os.path.dirname(os.path.abspath(__file__))
-            template_config = os.path.join(os.path.dirname(current_file_dir), "config")
-    except Exception:
-        # Fallback to relative path from current module
-        current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        template_config = os.path.join(os.path.dirname(current_file_dir), "config")
+    # The config directory is core/config, which is a sibling to this file's directory
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    template_config = os.path.join(current_file_dir, "config")
+    
+    # If not found there, try using pkg_resources (older installations)
+    if not os.path.exists(template_config):
+        try:
+            import pkg_resources
+            package_path = pkg_resources.resource_filename("core", "config")
+            if os.path.exists(package_path):
+                template_config = package_path
+        except Exception:
+            pass
 
     if os.path.exists(template_config):
         # Copy the entire config directory
@@ -86,41 +84,12 @@ def init():
         click.echo(f"✓ Created configuration directory: {config_dir}")
         click.echo(f"✓ Copied default config from: {template_config}")
     else:
-        # Create minimal structure if template not found
-        os.makedirs(config_dir, exist_ok=True)
-        os.makedirs(os.path.join(config_dir, "config/scripts"), exist_ok=True)
-        os.makedirs(os.path.join(config_dir, "config/groups"), exist_ok=True)
-
-        # Create minimal signalbox.yaml
-        default_config = {
-            "default_log_limit": {"type": "count", "value": 10},
-            "paths": {"log_dir": "logs", "scripts_file": "config/scripts", "groups_file": "config/groups"},
-            "execution": {
-                "default_timeout": 300,
-                "capture_stdout": True,
-                "capture_stderr": True,
-                "max_parallel_workers": 5,
-            },
-            "logging": {"timestamp_format": "%Y%m%d_%H%M%S_%f"},
-            "display": {"date_format": "%Y-%m-%d %H:%M:%S"},
-            "notifications": {
-                "enabled": True,
-                "on_failure_only": True,
-                "show_failed_names": True,
-            },
-        }
-
-        with open(os.path.join(config_dir, "config/signalbox.yaml"), "w") as f:
-            yaml.dump(default_config, f, default_flow_style=False, sort_keys=False)
-
-        # Create example script
-        example_script = {
-            "scripts": [{"name": "hello", "command": 'echo "Hello from signalbox!"', "description": "Example script"}]
-        }
-        with open(os.path.join(config_dir, "config/scripts/example.yaml"), "w") as f:
-            yaml.dump(example_script, f, default_flow_style=False, sort_keys=False)
-
-        click.echo(f"✓ Created minimal configuration: {config_dir}")
+        # Config directory not found - this should not happen in a proper installation
+        click.echo(f"ERROR: Could not find config templates at: {template_config}", err=True)
+        click.echo("This may indicate an incomplete package installation.", err=True)
+        click.echo("Please reinstall signalbox or file an issue at:", err=True)
+        click.echo("  https://github.com/pdbeard/signalbox/issues", err=True)
+        sys.exit(1)
 
     # Create logs and runtime directories
     os.makedirs(os.path.join(config_dir, "logs"), exist_ok=True)
