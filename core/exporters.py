@@ -66,10 +66,10 @@ def get_signalbox_command():
     return "signalbox"
 
 
-def get_script_dir():
-    """Get the absolute path to the script directory.
+def get_task_dir():
+    """Get the absolute path to the task directory.
 
-    Returns the directory where scripts should be executed from.
+    Returns the directory where tasks should be executed from.
     In production, this is typically the user's home or config directory.
     In development, this is the project root.
     """
@@ -95,7 +95,7 @@ def generate_systemd_service(group, group_name):
     Returns:
             str: Service file content
     """
-    script_dir = get_script_dir()
+    task_dir = get_task_dir()
     signalbox_cmd = get_signalbox_command()
 
     return f"""[Unit]
@@ -104,7 +104,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-WorkingDirectory={script_dir}
+WorkingDirectory={task_dir}
 ExecStart={signalbox_cmd} run-group {group_name}
 StandardOutput=journal
 StandardError=journal
@@ -234,10 +234,10 @@ def generate_cron_entry(group, group_name):
     Returns:
             str: Cron entry line
     """
-    script_dir = get_script_dir()
+    task_dir = get_task_dir()
     signalbox_cmd = get_signalbox_command()
 
-    return f"{group['schedule']} cd {script_dir} && {signalbox_cmd} run-group {group_name}"
+    return f"{group['schedule']} cd {task_dir} && {signalbox_cmd} run-group {group_name}"
 
 
 def export_cron(group, group_name):

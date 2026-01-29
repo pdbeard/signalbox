@@ -1,0 +1,16 @@
+# User Tasks Directory
+#
+# This directory is for YOUR custom tasks.
+# The catalog/ directory contains curated tasks maintained by the project.
+#
+# Example task format:
+#
+tasks:
+  - name: my_task
+    command: echo "Hello World"
+    description: My custom task
+    log_limit:
+      type: count
+      value: 10
+#
+# You can delete this file once you add your own tasks.

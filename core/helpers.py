@@ -30,7 +30,7 @@ def load_yaml_files_from_dir(
     
     Args:
         directory: Path to directory containing YAML files
-        key: Key to extract from each YAML file (e.g., 'scripts', 'groups')
+        key: Key to extract from each YAML file (e.g., 'tasks', 'groups')
         filter_func: Optional function to filter filenames (returns True to include)
         filename_prefix: Only process files starting with this prefix
         filename_suffix: Tuple of file extensions to process (default: .yaml, .yml)
@@ -42,17 +42,17 @@ def load_yaml_files_from_dir(
         If track_sources=False, returns flat list of items: [item1, item2, ...]
         
     Example:
-        # Load all scripts from config/scripts directory (flat list)
-        scripts = load_yaml_files_from_dir(
-            "config/scripts", 
-            "scripts",
+        # Load all tasks from config/tasks directory (flat list)
+        tasks = load_yaml_files_from_dir(
+            "config/tasks", 
+            "tasks",
             filter_func=lambda f: not f.startswith(".")
         )
-        
-        # Load scripts with source tracking
-        scripts = load_yaml_files_from_dir(
-            "config/scripts",
-            "scripts",
+
+        # Load tasks with source tracking
+        tasks = load_yaml_files_from_dir(
+            "config/tasks",
+            "tasks",
             track_sources=True
         )
         # Returns: [{"data": {...}, "source": "path/to/file.yaml"}, ...]
@@ -107,7 +107,7 @@ def load_yaml_dict_from_dir(
 
     Args:
         directory: Path to directory containing YAML files
-        key: Key to extract from each YAML file (e.g., 'scripts', 'groups')
+        key: Key to extract from each YAML file (e.g., 'tasks', 'groups')
         filter_func: Optional function to filter filenames
         filename_prefix: Only process files starting with this prefix
         filename_suffix: Tuple of file extensions to process
@@ -117,9 +117,9 @@ def load_yaml_dict_from_dir(
 
     Example:
         # Load runtime state
-        runtime_scripts = load_yaml_dict_from_dir(
-            "runtime/scripts",
-            "scripts",
+        runtime_tasks = load_yaml_dict_from_dir(
+            "runtime/tasks",
+            "tasks",
             filename_prefix="runtime_"
         )
     """

@@ -1,13 +1,13 @@
-def test_validate_duplicate_script_names(monkeypatch):
+def test_validate_duplicate_task_names(monkeypatch):
     monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
     monkeypatch.setattr(validator, 'resolve_path', lambda p: p)
-    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {'scripts': [
+    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {'tasks': [
         {'name': 'dup', 'command': 'echo 1'},
         {'name': 'dup', 'command': 'echo 2'}
     ], 'groups': []})
     monkeypatch.setattr(validator, 'load_global_config', lambda *a, **kw: {})
     import pytest
-    pytest.skip("Duplicate script name detection not implemented in validator")
+    pytest.skip("Duplicate task name detection not implemented in validator")
 
 def test_validate_invalid_yaml(monkeypatch):
     monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
@@ -24,20 +24,20 @@ def test_validate_invalid_yaml(monkeypatch):
 def test_validate_missing_required_fields(monkeypatch):
     monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
     monkeypatch.setattr(validator, 'resolve_path', lambda p: p)
-    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {'scripts': [{}], 'groups': [{}]})
+    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {'tasks': [{}], 'groups': [{}]})
     monkeypatch.setattr(validator, 'load_global_config', lambda *a, **kw: {})
     result = validator.validate_configuration()
     assert result.errors
 
-def test_validate_group_references_nonexistent_script(monkeypatch):
+def test_validate_group_references_nonexistent_task(monkeypatch):
     monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
     monkeypatch.setattr(validator, 'resolve_path', lambda p: p)
     monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {
-        'scripts': [{'name': 's1', 'command': 'echo 1'}],
-        'groups': [{'name': 'g1', 'scripts': ['s1', 'missing']}]})
+        'tasks': [{'name': 's1', 'command': 'echo 1'}],
+        'groups': [{'name': 'g1', 'tasks': ['s1', 'missing']}]})
     monkeypatch.setattr(validator, 'load_global_config', lambda *a, **kw: {})
     import pytest
-    pytest.skip("Missing script reference detection not implemented in validator")
+    pytest.skip("Missing task reference detection not implemented in validator")
 
 def test_validate_empty_file(monkeypatch):
     monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
@@ -52,8 +52,8 @@ def test_validate_empty_file(monkeypatch):
 def test_validate_catalog_edge_case(monkeypatch):
     monkeypatch.setattr(validator, 'get_config_value', lambda k, d=None: 'dummy')
     monkeypatch.setattr(validator, 'resolve_path', lambda p: p)
-    # Simulate catalog config with missing scripts key
-    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {'groups': [], 'catalog': {'scripts': [{}]}})
+    # Simulate catalog config with missing tasks key
+    monkeypatch.setattr(validator, 'load_config', lambda *a, **kw: {'groups': [], 'catalog': {'tasks': [{}]}})
     monkeypatch.setattr(validator, 'load_global_config', lambda *a, **kw: {})
     result = validator.validate_configuration()
     assert result.errors
@@ -61,8 +61,8 @@ import pytest
 from core import validator
 
 class DummyConfig:
-    def __init__(self, scripts=None, groups=None):
-        self.scripts = scripts or []
+    def __init__(self, tasks=None, groups=None):
+        self.tasks = tasks or []
         self.groups = groups or []
 
 def test_validation_result_properties(monkeypatch):

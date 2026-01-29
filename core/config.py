@@ -4,7 +4,7 @@ import yaml
 from .helpers import load_yaml_files_from_dir
 
 CONFIG_FILE = "config/signalbox.yaml"
-SCRIPTS_FILE = "scripts.yaml"
+TASKS_FILE = "tasks.yaml"
 GROUPS_FILE = "groups.yaml"
 
 
@@ -91,36 +91,37 @@ class ConfigManager:
         return value
 
     def load_config(self, suppress_warnings=False):
-        """Load configuration from scripts and groups directories."""
-        config = {"scripts": [], "groups": [], "_script_sources": {}, "_group_sources": {}}
 
-        # Load user scripts from directory
-        scripts_path = self.get_config_value("paths.scripts_file", SCRIPTS_FILE)
-        scripts_path = self.resolve_path(scripts_path)
-        if os.path.isdir(scripts_path):
-            scripts_list = load_yaml_files_from_dir(
-                scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings
+        """Load configuration from tasks and groups directories."""
+        config = {"tasks": [], "groups": [], "_task_sources": {}, "_group_sources": {}}
+
+        # Load user tasks from directory
+        tasks_path = self.get_config_value("paths.tasks_file", TASKS_FILE)
+        tasks_path = self.resolve_path(tasks_path)
+        if os.path.isdir(tasks_path):
+            tasks_list = load_yaml_files_from_dir(
+                tasks_path, key="tasks", track_sources=True, suppress_warnings=suppress_warnings
             )
-            for item in scripts_list:
-                script_name = item["data"].get("name")
-                if script_name:
-                    config["_script_sources"][script_name] = item["source"]
-                config["scripts"].append(item["data"])
+            for item in tasks_list:
+                task_name = item["data"].get("name")
+                if task_name:
+                    config["_task_sources"][task_name] = item["source"]
+                config["tasks"].append(item["data"])
 
-        # Load catalog scripts if enabled
+        # Load catalog tasks if enabled
         include_catalog = self.get_config_value("include_catalog", True)
         if include_catalog:
-            catalog_scripts_path = self.get_config_value("paths.catalog_scripts_file", "config/catalog/scripts")
-            catalog_scripts_path = self.resolve_path(catalog_scripts_path)
-            if os.path.isdir(catalog_scripts_path):
-                catalog_scripts_list = load_yaml_files_from_dir(
-                    catalog_scripts_path, key="scripts", track_sources=True, suppress_warnings=suppress_warnings
+            catalog_tasks_path = self.get_config_value("paths.catalog_tasks_file", "config/catalog/tasks")
+            catalog_tasks_path = self.resolve_path(catalog_tasks_path)
+            if os.path.isdir(catalog_tasks_path):
+                catalog_tasks_list = load_yaml_files_from_dir(
+                    catalog_tasks_path, key="tasks", track_sources=True, suppress_warnings=suppress_warnings
                 )
-                for item in catalog_scripts_list:
-                    script_name = item["data"].get("name")
-                    if script_name:
-                        config["_script_sources"][script_name] = item["source"]
-                    config["scripts"].append(item["data"])
+                for item in catalog_tasks_list:
+                    task_name = item["data"].get("name")
+                    if task_name:
+                        config["_task_sources"][task_name] = item["source"]
+                    config["tasks"].append(item["data"])
 
         # Load user groups from directory
         groups_path = self.get_config_value("paths.groups_file", GROUPS_FILE)

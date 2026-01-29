@@ -1,0 +1,26 @@
+tasks:
+  - name: disk_check_test
+    description: Test alert patterns with simulated disk check
+    command: |
+      echo 'Checking disk space...'
+      echo 'ALERT: Disk usage HIGH: 85% (/ 10G free)'
+    alerts:
+      - pattern: "ALERT: Disk usage HIGH"
+        message: "Disk usage is above 80%!"
+        severity: critical
+      - pattern: "Disk usage OK"
+        message: "Disk usage is normal."
+        severity: info
+  
+  - name: service_check_test
+    description: Test alert with warning severity
+    command: |
+      echo 'Checking service status...'
+      echo 'WARNING: Service response time is slow'
+    alerts:
+      - pattern: "WARNING: Service response time"
+        message: "Service is responding slowly"
+        severity: warning
+      - pattern: "Service OK"
+        message: "Service is responding normally"
+        severity: info

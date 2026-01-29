@@ -20,7 +20,7 @@ from . import alerts
 from .helpers import format_timestamp
 
 
-def run_script(name, config):
+def run_task(name, config):
     """Execute a single script and log the results.
 
     Args:
@@ -130,11 +130,11 @@ def run_group_parallel(script_names, config):
     """
     max_workers = get_config_value("execution.max_parallel_workers", 5)
 
-    def run_script_wrapper(script_name):
+    def run_task_wrapper(task_name):
         """Wrapper for parallel execution that catches exceptions."""
         try:
             click.echo(f"Running {script_name}...")
-            success = run_script(script_name, config)
+            success = run_task(task_name, config)
             return (script_name, success, None)
         except Exception as e:
             click.echo(f"Error: {e.message if hasattr(e, 'message') else str(e)}")
@@ -142,7 +142,7 @@ def run_group_parallel(script_names, config):
 
     # Execute scripts in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(run_script_wrapper, name): name for name in script_names}
+        futures = {executor.submit(run_task_wrapper, name): name for name in script_names}
         results = []
         for future in as_completed(futures):
             script_name, success, error = future.result()
@@ -190,7 +190,7 @@ def run_group_serial(script_names, config, stop_on_error):
     for script_name in script_names:
         try:
             click.echo(f"Running {script_name}...")
-            success = run_script(script_name, config)
+            success = run_task(script_name, config)
 
             if success:
                 success_count += 1

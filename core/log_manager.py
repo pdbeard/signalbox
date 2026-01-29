@@ -6,34 +6,37 @@ from .config import get_config_value
 from .helpers import format_timestamp
 
 
-def get_script_log_dir(script_name):
-    """Get the log directory path for a script."""
+
+def get_task_log_dir(task_name):
+    """Get the log directory path for a task."""
     log_dir = get_config_value("paths.log_dir", "logs")
-    return os.path.join(log_dir, script_name)
+    return os.path.join(log_dir, task_name)
 
 
-def ensure_log_dir(script_name):
-    """Ensure the log directory exists for a script."""
-    script_log_dir = get_script_log_dir(script_name)
-    if not os.path.exists(script_log_dir):
-        os.makedirs(script_log_dir)
+
+def ensure_log_dir(task_name):
+    """Ensure the log directory exists for a task."""
+    task_log_dir = get_task_log_dir(task_name)
+    if not os.path.exists(task_log_dir):
+        os.makedirs(task_log_dir)
 
 
-def get_log_path(script_name, timestamp=None):
+
+def get_log_path(task_name, timestamp=None):
     """Get the full path for a log file.
 
     Args:
-            script_name: Name of the script
-            timestamp: Optional timestamp string, defaults to current time
+        task_name: Name of the task
+        timestamp: Optional timestamp string, defaults to current time
 
     Returns:
-            str: Full path to the log file
+        str: Full path to the log file
     """
     if timestamp is None:
-        timestamp = format_timestamp(datetime.now())
+    timestamp = format_timestamp(datetime.now())
 
     log_dir = get_config_value("paths.log_dir", "logs")
-    return os.path.join(log_dir, script_name, f"{timestamp}.log")
+    return os.path.join(log_dir, task_name, f"{timestamp}.log")
 
 
 def write_execution_log(log_file, command, return_code, stdout, stderr):

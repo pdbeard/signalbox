@@ -76,25 +76,25 @@ import shutil
 import pytest
 from core import log_manager
 
-def test_get_script_log_dir(monkeypatch):
+def test_get_task_log_dir(monkeypatch):
     monkeypatch.setattr(log_manager, 'get_config_value', lambda k, d=None: 'logs')
-    path = log_manager.get_script_log_dir('myscript')
-    assert path.endswith('logs/myscript')
+    path = log_manager.get_task_log_dir('mytask')
+    assert path.endswith('logs/mytask')
 
 def test_ensure_log_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(log_manager, 'get_config_value', lambda k, d=None: str(tmp_path))
-    script_name = 'testscript'
-    log_dir = os.path.join(tmp_path, script_name)
+    task_name = 'testtask'
+    log_dir = os.path.join(tmp_path, task_name)
     if os.path.exists(log_dir):
         shutil.rmtree(log_dir)
-    log_manager.ensure_log_dir(script_name)
+    log_manager.ensure_log_dir(task_name)
     assert os.path.isdir(log_dir)
 
 def test_get_log_path(monkeypatch):
     monkeypatch.setattr(log_manager, 'get_config_value', lambda k, d=None: 'logs')
     monkeypatch.setattr(log_manager, 'format_timestamp', lambda dt: '20260126_120000')
-    path = log_manager.get_log_path('myscript', '20260126_120000')
-    assert path.endswith('logs/myscript/20260126_120000.log')
+    path = log_manager.get_log_path('mytask', '20260126_120000')
+    assert path.endswith('logs/mytask/20260126_120000.log')
 
 def test_write_execution_log(tmp_path, monkeypatch):
     monkeypatch.setattr(log_manager, 'get_config_value', lambda k, d=None: 1)  # 1MB

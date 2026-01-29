@@ -9,14 +9,14 @@ from functools import wraps
 import click
 
 from .config import load_config, get_config_value, load_global_config, _default_config_manager
-from .executor import run_script, run_group_parallel, run_group_serial
+from .executor import run_task, run_group_parallel, run_group_serial
 from .runtime import save_group_runtime_state, load_runtime_state, merge_config_with_runtime_state
 from . import log_manager
 from . import validator
 from . import exporters
 from . import notifications
 from . import alerts
-from .exceptions import SignalboxError, ScriptNotFoundError, GroupNotFoundError
+from .exceptions import SignalboxError, TaskNotFoundError, GroupNotFoundError
 from .helpers import format_timestamp, parse_timestamp
 def handle_exceptions(func):
     """Decorator to handle exceptions consistently across CLI commands."""
@@ -38,7 +38,7 @@ def handle_exceptions(func):
 @click.option("--config", "-c", "config_path", default=None, help="Path to custom signalbox.yaml config file")
 @click.version_option(importlib.metadata.version("signalbox"), "--version", "-V", message="%(version)s")
 def cli(config_path):
-    """signalbox - Script execution control and monitoring."""
+    """signalbox - Task execution control and monitoring."""
     if config_path:
         # Set config home to the directory containing the custom config file
         import os
@@ -93,7 +93,7 @@ def init():
 
     # Create logs and runtime directories
     os.makedirs(os.path.join(config_dir, "logs"), exist_ok=True)
-    os.makedirs(os.path.join(config_dir, "runtime/scripts"), exist_ok=True)
+    os.makedirs(os.path.join(config_dir, "runtime/tasks"), exist_ok=True)
     os.makedirs(os.path.join(config_dir, "runtime/groups"), exist_ok=True)
 
     click.echo(f"✓ Created logs directory: {config_dir}/logs")
@@ -103,7 +103,7 @@ def init():
     click.echo()
     click.echo("Next steps:")
     click.echo(f"  1. Review configuration: {config_dir}/config/signalbox.yaml")
-    click.echo(f"  2. Add your scripts: {config_dir}/config/scripts/")
+    click.echo(f"  2. Add your tasks: {config_dir}/config/tasks/")
     click.echo(f"  3. Run: signalbox list")
     click.echo("SECURITY: Signalbox executes commands with full shell access.")
     click.echo("   Only use trusted YAML files. See SECURITY.md for details.")
@@ -112,30 +112,30 @@ def init():
 
 @cli.command()
 def list():
-    """List all scripts and their status, grouped by config file."""
+    """List all tasks and their status, grouped by config file."""
     config = load_config()
     runtime_state = load_runtime_state()
     config = merge_config_with_runtime_state(config, runtime_state)
 
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-    # Group scripts by their source file
-    script_sources = config.get("_script_sources", {})
-    scripts_by_file = {}
-    for script in config["scripts"]:
-        source = script_sources.get(script.get("name"), "<unknown source>")
-        scripts_by_file.setdefault(source, []).append(script)
+    # Group tasks by their source file
+    task_sources = config.get("_task_sources", {})
+    tasks_by_file = {}
+    for task in config["tasks"]:
+        source = task_sources.get(task.get("name"), "<unknown source>")
+        tasks_by_file.setdefault(source, []).append(task)
 
     import os
 
-    for source_file, scripts in scripts_by_file.items():
+    for source_file, tasks in tasks_by_file.items():
         file_name = os.path.basename(source_file)
         click.echo(f"\n=== {file_name} ===")
-        for script in scripts:
+        for task in tasks:
             try:
-                status = script.get("last_status", "not run")
-                last_run = script.get("last_run", "")
-                name = script["name"]
-                description = script["description"]
+                status = task.get("last_status", "not run")
+                last_run = task.get("last_run", "")
+                name = task["name"]
+                description = task["description"]
                 # Color for status
                 if status.lower() in ("success", "ok"):
                     status_str = click.style(status, fg="green", bold=True)
@@ -155,11 +155,11 @@ def list():
                     click.echo(f"{name}: {status_str} - {description}")
             except KeyError as e:
                 label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-                msg = f" Script entry missing required field: {e}. Check your scripts YAML files. Offending script: {script}"
+                msg = f" Task entry missing required field: {e}. Check your tasks YAML files. Offending task: {task}"
                 click.echo(f"{label}{msg}", err=True)
             except Exception as e:
                 label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-                msg = f" Unexpected error in script config: {e}. Offending script: {script}"
+                msg = f" Unexpected error in task config: {e}. Offending task: {task}"
                 click.echo(f"{label}{msg}", err=True)
 
 
@@ -167,37 +167,37 @@ def list():
 @click.argument("name")
 @handle_exceptions
 def run(name):
-    """Run a specific script by name."""
+    """Run a specific task by name."""
     import os
 
     os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
     config = load_config(suppress_warnings=True)
-    run_script(name, config)
+    run_task(name, config)
 
 
 @cli.command()
 @handle_exceptions
 def run_all():
-    """Run all scripts."""
+    """Run all tasks."""
     import os
 
     os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
     config = load_config(suppress_warnings=True)
-    click.echo("Running all scripts...")
-    for script in config["scripts"]:
-        click.echo(f"Running {script['name']}...")
+    click.echo("Running all tasks...")
+    for task in config["tasks"]:
+        click.echo(f"Running {task['name']}...")
         try:
-            run_script(script["name"], config)
+            run_task(task["name"], config)
         except SignalboxError as e:
             click.echo(f"Error: {e.message}", err=True)
-    click.echo("All scripts executed.")
+    click.echo("All tasks executed.")
 
 
 @cli.command("run-group")
 @click.argument("name")
 @handle_exceptions
 def run_group(name):
-    """Run a group of scripts."""
+    """Run a group of tasks."""
     config = load_config()
     groups = config.get("groups", [])
     group = next((g for g in groups if g["name"] == name), None)
@@ -210,19 +210,19 @@ def run_group(name):
         click.echo(f"Execution mode: parallel")
     else:
         click.echo(f"Execution mode: serial (stop_on_error: {stop_on_error})")
-    script_names = group["scripts"]
+    task_names = group["tasks"]
     start_time = datetime.now()
     timestamp = format_timestamp(start_time)
     if execution_mode == "parallel":
-        scripts_successful = run_group_parallel(script_names, config)
+        tasks_successful = run_group_parallel(task_names, config)
     else:
-        scripts_successful = run_group_serial(script_names, config, stop_on_error)
+        tasks_successful = run_group_serial(task_names, config, stop_on_error)
     end_time = datetime.now()
     execution_time = (end_time - start_time).total_seconds()
-    scripts_total = len(script_names)
-    if scripts_successful == scripts_total:
+    tasks_total = len(task_names)
+    if tasks_successful == tasks_total:
         group_status = "success"
-    elif scripts_successful > 0:
+    elif tasks_successful > 0:
         group_status = "partial"
     else:
         group_status = "failed"
@@ -236,8 +236,8 @@ def run_group(name):
             last_run=timestamp,
             last_status=group_status,
             execution_time=execution_time,
-            scripts_total=scripts_total,
-            scripts_successful=scripts_successful,
+            tasks_total=tasks_total,
+            tasks_successful=tasks_successful,
         )
 
     click.echo(f"Group {name} executed.")
@@ -247,11 +247,11 @@ def run_group(name):
 @click.argument("name")
 @handle_exceptions
 def logs(name):
-    """Show the latest log for a script."""
+    """Show the latest log for a task."""
     config = load_config()
-    script = next((s for s in config["scripts"] if s["name"] == name), None)
-    if not script:
-        raise ScriptNotFoundError(name)
+    task = next((t for t in config["tasks"] if t["name"] == name), None)
+    if not task:
+        raise TaskNotFoundError(name)
 
     log_path, exists = log_manager.get_latest_log(name)
     if not exists:
@@ -280,11 +280,11 @@ def logs(name):
 @click.argument("name")
 @handle_exceptions
 def log_history(name):
-    """Show all historical log files for a script."""
+    """Show all historical log files for a task."""
     config = load_config()
-    script = next((s for s in config["scripts"] if s["name"] == name), None)
-    if not script:
-        raise ScriptNotFoundError(name)
+    task = next((t for t in config["tasks"] if t["name"] == name), None)
+    if not task:
+        raise TaskNotFoundError(name)
 
     log_info, exists = log_manager.get_log_history(name)
     if not exists:
@@ -295,8 +295,8 @@ def log_history(name):
     include_paths = get_config_value("display.include_paths", False)
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
 
-    script_log_dir = log_manager.get_script_log_dir(name)
-    path_info = f" ({script_log_dir})" if include_paths else ""
+    task_log_dir = log_manager.get_task_log_dir(name)
+    path_info = f" ({task_log_dir})" if include_paths else ""
     click.echo(f"Log history for {name}{path_info}:")
 
     for filename, mtime in log_info:
@@ -308,13 +308,13 @@ def log_history(name):
 @click.argument("name")
 @handle_exceptions
 def clear_logs(name):
-    """Clear all logs for a specific script."""
+    """Clear all logs for a specific task."""
     config = load_config()
-    script = next((s for s in config["scripts"] if s["name"] == name), None)
-    if not script:
-        raise ScriptNotFoundError(name)
+    task = next((t for t in config["tasks"] if t["name"] == name), None)
+    if not task:
+        raise TaskNotFoundError(name)
 
-    if log_manager.clear_script_logs(name):
+    if log_manager.clear_task_logs(name):
         click.echo(f"Cleared logs for {name}")
     else:
         click.echo(f"No logs found for {name}")
@@ -322,7 +322,7 @@ def clear_logs(name):
 
 @cli.command()
 def clear_all_logs():
-    """Clear all logs for all scripts."""
+    """Clear all logs for all tasks."""
     if log_manager.clear_all_logs():
         click.echo("Cleared all logs")
     else:
@@ -331,7 +331,7 @@ def clear_all_logs():
 
 @cli.command()
 def list_groups():
-    """List all available groups and their scripts."""
+    """List all available groups and their tasks."""
     config = load_config()
     groups = config.get("groups", [])
     if not groups:
@@ -350,9 +350,9 @@ def list_groups():
             exec_info += "]"
 
             click.echo(f"Group: {group['name']} - {group.get('description', '')}{schedule_info}{exec_info}")
-            click.echo("  Scripts:")
-            for script_name in group.get("scripts", []):
-                click.echo(f"    - {script_name}")
+            click.echo("  Tasks:")
+            for task_name in group.get("tasks", []):
+                click.echo(f"    - {task_name}")
             click.echo("")
         except KeyError as e:
             label = click.style("[CONFIG ERROR]", fg="red", bold=True)
@@ -401,13 +401,13 @@ def list_schedules():
 
     click.echo("Scheduled Groups:")
     for group in scheduled:
-        script_count = len(group.get("scripts", []))
+        task_count = len(group.get("tasks", []))
         click.echo(f"\n  {group['name']}")
         click.echo(f"    Schedule: {group['schedule']}")
         click.echo(f"    Description: {group.get('description', 'N/A')}")
-        click.echo(f"    Scripts: {script_count}")
-        for script_name in group.get("scripts", []):
-            click.echo(f"      - {script_name}")
+        click.echo(f"    Tasks: {task_count}")
+        for task_name in group.get("tasks", []):
+            click.echo(f"      - {task_name}")
 
 
 @cli.command()
