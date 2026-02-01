@@ -24,6 +24,14 @@ class ConfigurationError(SignalboxError):
 
 
 
+
+class ScriptNotFoundError(SignalboxError):
+    """Raised when a script is not found in configuration."""
+
+    def __init__(self, script_name):
+        message = f"Script '{script_name}' not found"
+        super().__init__(message, exit_code=3)
+
 class TaskNotFoundError(SignalboxError):
     """Raised when a task is not found in configuration."""
 

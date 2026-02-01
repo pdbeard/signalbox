@@ -78,15 +78,15 @@ def save_group_runtime_state(
 
 def merge_config_with_runtime_state(config, runtime_state):
     """Merge user configuration with runtime state."""
-    for script in config["scripts"]:
-        script_name = script["name"]
-        if script_name in runtime_state["scripts"]:
-            runtime_info = runtime_state["scripts"][script_name]
-            script["last_run"] = runtime_info.get("last_run", "")
-            script["last_status"] = runtime_info.get("last_status", "no logs")
+    for task in config["tasks"]:
+        task_name = task["name"]
+        if task_name in runtime_state["scripts"]:
+            runtime_info = runtime_state["scripts"][task_name]
+            task["last_run"] = runtime_info.get("last_run", "")
+            task["last_status"] = runtime_info.get("last_status", "no logs")
         else:
-            script["last_run"] = ""
-            script["last_status"] = "no logs"
+            task["last_run"] = ""
+            task["last_status"] = "no logs"
     for group in config["groups"]:
         group_name = group["name"]
         if group_name in runtime_state["groups"]:

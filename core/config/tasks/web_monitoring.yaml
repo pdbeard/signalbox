@@ -1,9 +1,0 @@
-# Web Monitoring Tasks Examples
-#
-# ⚠️  IMPORTANT: These are EXAMPLE tasks for learning and getting started.
-# These tasks are NOT meant for production use - they are educational tools!
-#
-tasks:
-- name: check_website_health
-  description: Check website status
-  command: curl -s -o /dev/null -w "%{http_code}" https://example.com

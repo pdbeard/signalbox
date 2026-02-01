@@ -33,7 +33,7 @@ def get_log_path(task_name, timestamp=None):
         str: Full path to the log file
     """
     if timestamp is None:
-    timestamp = format_timestamp(datetime.now())
+        timestamp = format_timestamp(datetime.now())
 
     log_dir = get_config_value("paths.log_dir", "logs")
     return os.path.join(log_dir, task_name, f"{timestamp}.log")
