@@ -2,31 +2,31 @@
 # Global Configuration for signalbox
 # ============================================================================
 
-# Default log rotation settings (applied to scripts without specific log_limit)
+# Default log rotation settings (applied to tasks without specific log_limit)
 default_log_limit:
   type: count
   value: 10
 
 # Global paths
-# - All .yaml/.yml files in script/group directory are loaded (appended together)
+# - All .yaml/.yml files in task/group directory are loaded (appended together)
 paths:
   log_dir: logs
-  scripts_file: config/scripts  # Directory containing user script YAML files
+  scripts_file: config/tasks  # Directory containing user task YAML files
   groups_file: config/groups    # Directory containing user group YAML files
-  catalog_scripts_file: config/catalog/scripts  # Directory containing catalog script YAML files
+  catalog_scripts_file: config/catalog/tasks  # Directory containing catalog task YAML files
   catalog_groups_file: config/catalog/groups    # Directory containing catalog group YAML files
 
 # Catalog settings
-include_catalog: true  # Set to false to disable loading catalog scripts/groups
+include_catalog: true  # Set to false to disable loading catalog tasks/groups
 
 # Execution settings
 execution:
-  # Default timeout for scripts (in seconds, 0 = no timeout)
+  # Default timeout for tasks (in seconds, 0 = no timeout)
   default_timeout: 300
   
   # Security: Minimum timeout to prevent DOS attacks (in seconds)
-  # Scripts with timeout below this value will use this minimum
-  # Set to 1 to allow very fast scripts while preventing infinite hangs
+  # Tasks with timeout below this value will use this minimum
+  # Set to 1 to allow very fast tasks while preventing infinite hangs
   min_timeout: 1
   
   # Capture output settings
@@ -48,7 +48,7 @@ alerts:
   # Alert retention policy
   retention:
     max_days: 30           # Keep alerts for 30 days
-    max_entries: 1000      # Keep at most 1000 alerts per script
+    max_entries: 1000      # Keep at most 1000 alerts per task
     per_severity:
       critical: 90         # Keep critical alerts for 90 days
       warning: 30          # Keep warning alerts for 30 days

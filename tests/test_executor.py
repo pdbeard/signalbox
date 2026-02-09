@@ -50,23 +50,23 @@ class TestRunTask:
         mock_subprocess.return_value = mock_result
 
         config = {
-            "tasks": [{"name": "test_script", "command": "echo 'hello'", "description": "Test"}],
-            "_task_sources": {"test_script": "scripts/test.yaml"},
+            "tasks": [{"name": "test_task", "command": "echo 'hello'", "description": "Test"}],
+            "_task_sources": {"test_task": "tasks/test.yaml"},
         }
         mock_load_config.side_effect = lambda *args, **kwargs: config
 
         # Execute
-        result = run_task("test_script", config)
+        result = run_task("test_task", config)
 
         # Verify
         assert result is True
-        mock_ensure_dir.assert_called_once_with("test_script")
+        mock_ensure_dir.assert_called_once_with("test_task")
         mock_subprocess.assert_called_once_with("echo 'hello'", shell=True, capture_output=True, text=True, timeout=300)
         mock_write_log.assert_called_once()
         mock_rotate.assert_called_once()
         mock_save_state.assert_called_once()
 
-        # Verify script was updated
+        # Verify task was updated
         assert config["tasks"][0]["last_status"] == "success"
         assert "last_run" in config["tasks"][0]
 
@@ -103,13 +103,13 @@ class TestRunTask:
         mock_subprocess.return_value = mock_result
 
         config = {
-            "tasks": [{"name": "failing_script", "command": "exit 1", "description": "Fails"}],
-            "_task_sources": {"failing_script": "scripts/fail.yaml"},
+            "tasks": [{"name": "failing_task", "command": "exit 1", "description": "Fails"}],
+            "_task_sources": {"failing_task": "tasks/fail.yaml"},
         }
         mock_load_config.side_effect = lambda *args, **kwargs: config
 
         # Execute
-        result = run_task("failing_script", config)
+        result = run_task("failing_task", config)
 
         # Verify
         assert result is False
@@ -119,14 +119,14 @@ class TestRunTask:
     def test_run_task_not_found(self):
         """Test running a script that doesn't exist."""
         config = {
-            "tasks": [{"name": "existing_script", "command": "echo test", "description": "Test"}],
+            "tasks": [{"name": "existing_task", "command": "echo test", "description": "Test"}],
             "_task_sources": {},
         }
 
         with pytest.raises(ScriptNotFoundError) as exc_info:
-            run_task("nonexistent_script", config)
+            run_task("nonexistent_task", config)
 
-        assert "nonexistent_script" in str(exc_info.value)
+        assert "nonexistent_task" in str(exc_info.value)
 
     @patch("core.config.load_config")
     @patch("core.executor.get_config_value")
@@ -145,14 +145,14 @@ class TestRunTask:
         mock_subprocess.side_effect = subprocess.TimeoutExpired("cmd", 5)
 
         config = {
-            "tasks": [{"name": "slow_script", "command": "sleep 100", "description": "Slow"}],
-            "_task_sources": {"slow_script": "scripts/slow.yaml"},
+            "tasks": [{"name": "slow_task", "command": "sleep 100", "description": "Slow"}],
+            "_task_sources": {"slow_task": "tasks/slow.yaml"},
         }
         mock_load_config.side_effect = lambda *args, **kwargs: config
         with pytest.raises(ExecutionTimeoutError) as exc_info:
-            run_task("slow_script", config)
+            run_task("slow_task", config)
 
-        assert "slow_script" in str(exc_info.value)
+        assert "slow_task" in str(exc_info.value)
         assert "5" in str(exc_info.value)
 
     @patch("core.config.load_config")

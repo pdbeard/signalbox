@@ -52,7 +52,7 @@ def test_clear_script_logs(tmp_path, monkeypatch):
     monkeypatch.setattr(log_manager, 'get_task_log_dir', lambda name: str(tmp_path))
     f1 = tmp_path / 'a.log'
     f1.write_text('x')
-    assert log_manager.clear_script_logs('foo')
+    assert log_manager.clear_task_logs('foo')
     assert not list(tmp_path.iterdir())
 
 def test_clear_all_logs(tmp_path, monkeypatch):

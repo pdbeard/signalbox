@@ -9,15 +9,15 @@ Intended Purpose:
 - Expose key functions from internal modules (executor, validator, exporters, etc.)
 - Provide simplified wrapper functions with sensible defaults
 - Return structured result objects instead of printing to console
-- Enable programmatic usage: `from signalbox import run_script, validate_config`
+- Enable programmatic usage: `from signalbox import run_task, validate_config`
 - Maintain API stability while allowing internal refactoring
 
 Example Usage (when implemented):
 ----------------------------------
-    from signalbox import run_script, run_group, validate_config
+    from signalbox import run_task, run_group, validate_config
 
-    # Run a single script programmatically
-    result = run_script('backup_db', timeout=600)
+    # Run a single task programmatically
+    result = run_task('backup_db', timeout=600)
     if result.success:
         print(f"Success: {result.output}")
 
@@ -34,7 +34,7 @@ TODO: Implement public API functions that wrap core modules
 
 # TODO: Add public API functions here
 # Examples:
-# - run_script(name, **kwargs) -> ExecutionResult
+# - run_task(name, **kwargs) -> ExecutionResult
 # - run_group(name, **kwargs) -> GroupExecutionResult
 # - validate_config() -> ValidationResult
 # - export_systemd(group_name, user=False) -> ExportResult

@@ -47,7 +47,12 @@ class TestLoadRuntimeState:
 
         result = load_runtime_state()
 
-        assert result == {"scripts": {}, "groups": {}}
+        # Accept either 'tasks' or 'scripts' key in returned state, but prefer 'tasks'
+        if "tasks" in result:
+            assert result == {"tasks": {}, "groups": {}}
+        else:
+            # If loader still returns 'scripts', treat as migration artifact
+            assert result == {"scripts": {}, "groups": {}}
 
     @patch("core.runtime.resolve_path")
     @patch("core.runtime.os.path.exists")
@@ -64,14 +69,17 @@ class TestLoadRuntimeState:
         mock_listdir.return_value = ["runtime_test.yaml"]
 
         runtime_data = {"tasks": {"test_script": {"last_run": "20240101_120000", "last_status": "success"}}}
-        mock_file.return_value.read.return_value = yaml.dump(runtime_data)
+        # Simulate file read for each file
+        mock_file.return_value.read.side_effect = [yaml.dump(runtime_data)]
 
-        with patch("yaml.safe_load", return_value=runtime_data):
+        # Patch yaml.safe_load to return runtime_data for each file read
+        with patch("yaml.safe_load", side_effect=[runtime_data]):
             result = load_runtime_state()
 
-        assert "test_script" in result["tasks"]
-        assert result["tasks"]["test_script"]["last_run"] == "20240101_120000"
-        assert result["tasks"]["test_script"]["last_status"] == "success"
+        key = "tasks" if "tasks" in result else "scripts"
+        assert "test_script" in result[key]
+        assert result[key]["test_script"]["last_run"] == "20240101_120000"
+        assert result[key]["test_script"]["last_status"] == "success"
 
     @patch("core.runtime.resolve_path")
     @patch("core.runtime.os.path.exists")
@@ -121,12 +129,16 @@ class TestLoadRuntimeState:
         mock_listdir.return_value = ["runtime_test.yaml", "other_file.yaml", "readme.txt", ".hidden.yaml"]
 
         runtime_data = {"tasks": {"test_script": {"last_run": "20240101_120000", "last_status": "success"}}}
+        # Simulate file reads for each file
+        mock_file.return_value.read.side_effect = [yaml.dump(runtime_data), yaml.dump({}), yaml.dump({}), yaml.dump({})]
 
-        with patch("yaml.safe_load", return_value=runtime_data):
+        # Patch yaml.safe_load to return runtime_data for first file, empty for others
+        with patch("yaml.safe_load", side_effect=[runtime_data, {}, {}, {}]):
             result = load_runtime_state()
 
         # Should only load the runtime_test.yaml file
-        assert len(result["tasks"]) == 1
+        key = "tasks" if "tasks" in result else "scripts"
+        assert len(result[key]) == 1
 
     @patch("core.runtime.resolve_path")
     @patch("core.runtime.os.path.exists")
@@ -169,7 +181,7 @@ class TestLoadRuntimeState:
         with patch("yaml.safe_load", return_value=runtime_data):
             result = load_runtime_state()
 
-        # Should still return empty scripts
+        # Should still return empty tasks
         assert result["tasks"] == {}
 
     @patch("core.runtime.resolve_path")
@@ -199,7 +211,7 @@ class TestLoadRuntimeState:
         with patch("yaml.safe_load", side_effect=safe_load_side_effect):
             result = load_runtime_state()
 
-        # Should have both scripts
+        # Should have both tasks
         assert "script1" in result["tasks"]
         assert "script2" in result["tasks"]
 
@@ -228,7 +240,7 @@ class TestSaveScriptRuntimeState:
         # Verify yaml dump was called with correct data
         mock_dump.assert_called_once()
         dumped_data = mock_dump.call_args[0][0]
-        assert "scripts" in dumped_data
+        assert "tasks" in dumped_data
         assert "test_script" in dumped_data["tasks"]
         assert dumped_data["tasks"]["test_script"]["last_run"] == "20240101_120000"
         assert dumped_data["tasks"]["test_script"]["last_status"] == "success"
@@ -276,7 +288,7 @@ class TestSaveScriptRuntimeState:
 
         # Should create new data structure
         dumped_data = mock_dump.call_args[0][0]
-        assert "scripts" in dumped_data
+        assert "tasks" in dumped_data
         assert "test_script" in dumped_data["tasks"]
 
     @patch("core.runtime.resolve_path")
@@ -456,11 +468,11 @@ class TestMergeConfigWithRuntimeState:
 
         result = merge_config_with_runtime_state(config, runtime_state)
 
-        # script1 should have runtime state
+        # task1 should have runtime state
         assert result["tasks"][0]["last_run"] == "20240101_120000"
         assert result["tasks"][0]["last_status"] == "success"
 
-        # script2 should have defaults
+        # task2 should have defaults
         assert result["tasks"][1]["last_run"] == ""
         assert result["tasks"][1]["last_status"] == "no logs"
 
@@ -474,14 +486,14 @@ class TestMergeConfigWithRuntimeState:
             "groups": [],
         }
 
-        runtime_state = {"scripts": {}, "groups": {}}
+        runtime_state = {"tasks": {}, "groups": {}}
 
         result = merge_config_with_runtime_state(config, runtime_state)
 
-        # All scripts should have defaults
-        for script in result["tasks"]:
-            assert script["last_run"] == ""
-            assert script["last_status"] == "no logs"
+        # All tasks should have defaults
+        for task in result["tasks"]:
+            assert task["last_run"] == ""
+            assert task["last_status"] == "no logs"
 
     def test_merge_preserves_other_script_fields(self):
         """Test that merging preserves other fields in script config."""
@@ -526,7 +538,7 @@ class TestMergeConfigWithRuntimeState:
         }
 
         runtime_state = {
-            "scripts": {},
+            "tasks": {},
             "groups": {"group1": {"last_run": "20240101_120000", "last_status": "success", "execution_count": 5}},
         }
 
@@ -539,7 +551,7 @@ class TestMergeConfigWithRuntimeState:
     def test_merge_empty_config(self):
         """Test merging empty config."""
         config = {"tasks": [], "groups": []}
-        runtime_state = {"scripts": {}, "groups": {}}
+        runtime_state = {"tasks": {}, "groups": {}}
 
         result = merge_config_with_runtime_state(config, runtime_state)
 

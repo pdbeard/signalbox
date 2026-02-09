@@ -39,11 +39,11 @@ def temp_config_dir(temp_dir):
 
     # Create directory structure
     (config_dir / "config").mkdir()
-    (config_dir / "config" / "scripts").mkdir()
+    (config_dir / "config" / "tasks").mkdir()
     (config_dir / "config" / "groups").mkdir()
     (config_dir / "logs").mkdir()
     (config_dir / "runtime").mkdir()
-    (config_dir / "runtime" / "scripts").mkdir()
+    (config_dir / "runtime" / "tasks").mkdir()
     (config_dir / "runtime" / "groups").mkdir()
 
     yield str(config_dir)
@@ -58,7 +58,7 @@ def sample_signalbox_yaml(temp_config_dir):
         "default_log_limit": {"type": "count", "value": 10},
         "paths": {
             "log_dir": "logs",
-            "scripts_file": "config/scripts",
+            "tasks_file": "config/tasks",
             "groups_file": "config/groups",
         },
         "execution": {
@@ -80,15 +80,15 @@ def sample_signalbox_yaml(temp_config_dir):
 @pytest.fixture
 def sample_scripts_yaml(temp_config_dir):
     """Create sample script YAML files."""
-    scripts_dir = Path(temp_config_dir) / "config" / "scripts"
+    tasks_dir = Path(temp_config_dir) / "config" / "tasks"
 
     # Create basic.yaml
-    basic_scripts = {
-        "scripts": [
+    basic_tasks = {
+        "tasks": [
             {
                 "name": "hello",
                 "command": 'echo "Hello World"',
-                "description": "Simple echo script",
+                "description": "Simple echo task",
                 "log_limit": {"type": "count", "value": 5},
             },
             {
@@ -99,13 +99,13 @@ def sample_scripts_yaml(temp_config_dir):
         ]
     }
 
-    basic_file = scripts_dir / "basic.yaml"
+    basic_file = tasks_dir / "basic.yaml"
     with open(basic_file, "w") as f:
-        yaml.dump(basic_scripts, f, default_flow_style=False, sort_keys=False)
+        yaml.dump(basic_tasks, f, default_flow_style=False, sort_keys=False)
 
     # Create system.yaml
-    system_scripts = {
-        "scripts": [
+    system_tasks = {
+        "tasks": [
             {
                 "name": "uptime",
                 "command": "uptime",
@@ -114,9 +114,9 @@ def sample_scripts_yaml(temp_config_dir):
         ]
     }
 
-    system_file = scripts_dir / "system.yaml"
+    system_file = tasks_dir / "system.yaml"
     with open(system_file, "w") as f:
-        yaml.dump(system_scripts, f, default_flow_style=False, sort_keys=False)
+        yaml.dump(system_tasks, f, default_flow_style=False, sort_keys=False)
 
     return [str(basic_file), str(system_file)]
 
@@ -131,13 +131,13 @@ def sample_groups_yaml(temp_config_dir):
             {
                 "name": "basic",
                 "description": "Basic test group",
-                "scripts": ["hello", "show_date"],
+                "tasks": ["hello", "show_date"],
                 "execution": {"mode": "serial"},
             },
             {
                 "name": "parallel_test",
                 "description": "Parallel execution test",
-                "scripts": ["hello", "uptime"],
+                "tasks": ["hello", "uptime"],
                 "execution": {"mode": "parallel"},
             },
         ]

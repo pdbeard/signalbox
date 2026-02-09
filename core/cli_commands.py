@@ -477,7 +477,7 @@ def validate():
             if not error.strip():
                 click.echo()
             elif error.strip().endswith(".yaml") or error.strip().startswith(
-                ("Script Config File", "Group Config File")
+                ("Task Config File", "Group Config File")
             ):
                 click.echo(error)
             else:
@@ -504,7 +504,7 @@ def validate():
     if result.config and not result.has_issues:
         summary = validator.get_validation_summary(result)
         click.echo(f"\nSummary:")
-        click.echo(f"  Scripts: {summary.get('scripts', 0)}")
+        click.echo(f"  Tasks: {summary.get('tasks', 0)}")
         click.echo(f"  Groups: {summary.get('groups', 0)}")
         click.echo(f"  Scheduled groups: {summary.get('scheduled_groups', 0)}")
 
@@ -549,19 +549,19 @@ def notify_test(title, message, urgency):
 
 
 @cli.command()
-@click.argument("script_name", required=False)
+@click.argument("task_name", required=False)
 @click.option("--severity", type=click.Choice(["info", "warning", "critical"]), help="Filter by severity")
 @click.option("--days", type=int, help="Show alerts from last N days")
 @handle_exceptions
-def alerts_cmd(script_name, severity, days):
-    """List recent alerts. Optionally filter by script name, severity, or time range."""
+def alerts_cmd(task_name, severity, days):
+    """List recent alerts. Optionally filter by task name, severity, or time range."""
 
     # Load alerts with filters
-    alert_list = alerts.load_alerts(script_name=script_name, severity=severity, max_days=days)
+    alert_list = alerts.load_alerts(task_name=task_name, severity=severity, max_days=days)
 
     if not alert_list:
-        if script_name:
-            click.echo(f"No alerts found for script '{script_name}'")
+        if task_name:
+            click.echo(f"No alerts found for task '{task_name}'")
         else:
             click.echo("No alerts found")
         return
@@ -578,7 +578,7 @@ def alerts_cmd(script_name, severity, days):
             human_date = timestamp_str
 
         severity_str = alert.get("severity", "info")
-        script = alert.get("script_name", "unknown")
+        task = alert.get("task_name", "unknown")
         message = alert.get("message", "")
 
         # Color code by severity
@@ -589,7 +589,7 @@ def alerts_cmd(script_name, severity, days):
         else:
             severity_label = click.style(severity_str, fg="blue")
 
-        click.echo(f"[{human_date}] [{severity_label}] {script}: {message}")
+        click.echo(f"[{human_date}] [{severity_label}] {task}: {message}")
 
     # Show summary
     click.echo(f"\nTotal alerts: {len(alert_list)}")

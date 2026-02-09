@@ -7,11 +7,11 @@ from .helpers import load_yaml_dict_from_dir
 
 def load_runtime_state():
     """Load runtime state (last_run, last_status) from runtime directory."""
-    runtime_state = {"scripts": {}, "groups": {}}
+    runtime_state = {"tasks": {}, "groups": {}}
 
-    # Load script runtime state
-    runtime_scripts_dir = resolve_path("runtime/scripts")
-    runtime_state["scripts"] = load_yaml_dict_from_dir(runtime_scripts_dir, "scripts", filename_prefix="runtime_")
+    # Load task runtime state
+    runtime_tasks_dir = resolve_path("runtime/tasks")
+    runtime_state["tasks"] = load_yaml_dict_from_dir(runtime_tasks_dir, "tasks", filename_prefix="runtime_")
 
     # Load group runtime state
     runtime_groups_dir = resolve_path("runtime/groups")
@@ -20,22 +20,22 @@ def load_runtime_state():
     return runtime_state
 
 
-def save_script_runtime_state(script_name, source_file, last_run, last_status):
-    """Save runtime state for a script to the appropriate runtime file."""
+def save_task_runtime_state(task_name, source_file, last_run, last_status):
+    """Save runtime state for a task to the appropriate runtime file."""
     config_filename = os.path.basename(source_file)
     config_basename = os.path.splitext(config_filename)[0]
     runtime_filename = f"runtime_{config_basename}.yaml"
-    runtime_filepath = resolve_path(os.path.join("runtime/scripts", runtime_filename))
-    runtime_data = {"scripts": {}}
+    runtime_filepath = resolve_path(os.path.join("runtime/tasks", runtime_filename))
+    runtime_data = {"tasks": {}}
     if os.path.exists(runtime_filepath):
         try:
             with open(runtime_filepath, "r") as f:
-                runtime_data = yaml.safe_load(f) or {"scripts": {}}
+                runtime_data = yaml.safe_load(f) or {"tasks": {}}
         except Exception:
-            runtime_data = {"scripts": {}}
-    if "scripts" not in runtime_data:
-        runtime_data["scripts"] = {}
-    runtime_data["scripts"][script_name] = {"last_run": last_run, "last_status": last_status}
+            runtime_data = {"tasks": {}}
+    if "tasks" not in runtime_data:
+        runtime_data["tasks"] = {}
+    runtime_data["tasks"][task_name] = {"last_run": last_run, "last_status": last_status}
     os.makedirs(os.path.dirname(runtime_filepath), exist_ok=True)
     with open(runtime_filepath, "w") as f:
         f.write(f"# Runtime state for {config_filename} - auto-generated, do not edit manually\n")
@@ -43,7 +43,7 @@ def save_script_runtime_state(script_name, source_file, last_run, last_status):
 
 
 def save_group_runtime_state(
-    group_name, source_file, last_run, last_status, execution_time, scripts_total, scripts_successful
+    group_name, source_file, last_run, last_status, execution_time, tasks_total, tasks_successful
 ):
     """Save runtime state for a group to the appropriate runtime file."""
     config_filename = os.path.basename(source_file)
@@ -66,9 +66,9 @@ def save_group_runtime_state(
         "last_status": last_status,
         "execution_time_seconds": execution_time,
         "execution_count": execution_count,
-        "scripts_total": scripts_total,
-        "scripts_successful": scripts_successful,
-        "success_rate": round((scripts_successful / scripts_total * 100), 1) if scripts_total > 0 else 0.0,
+        "tasks_total": tasks_total,
+        "tasks_successful": tasks_successful,
+        "success_rate": round((tasks_successful / tasks_total * 100), 1) if tasks_total > 0 else 0.0,
     }
     os.makedirs(os.path.dirname(runtime_filepath), exist_ok=True)
     with open(runtime_filepath, "w") as f:
@@ -80,8 +80,8 @@ def merge_config_with_runtime_state(config, runtime_state):
     """Merge user configuration with runtime state."""
     for task in config["tasks"]:
         task_name = task["name"]
-        if task_name in runtime_state["scripts"]:
-            runtime_info = runtime_state["scripts"][task_name]
+        if task_name in runtime_state["tasks"]:
+            runtime_info = runtime_state["tasks"][task_name]
             task["last_run"] = runtime_info.get("last_run", "")
             task["last_status"] = runtime_info.get("last_status", "no logs")
         else:

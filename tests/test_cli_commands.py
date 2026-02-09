@@ -45,16 +45,16 @@ def sample_config():
     return {
         "tasks": [
             {
-                "name": "test_script",
+                "name": "test_task",
                 "command": "echo test",
-                "description": "Test script",
+                "description": "Test task",
                 "last_run": "20240101_120000_000000",
                 "last_status": "success",
             },
             {
-                "name": "another_script",
+                "name": "another_task",
                 "command": "echo another",
-                "description": "Another script",
+                "description": "Another task",
                 "last_run": "",
                 "last_status": "no logs",
             },
@@ -63,12 +63,12 @@ def sample_config():
             {
                 "name": "test_group",
                 "description": "Test group",
-                "tasks": ["test_script", "another_script"],
+                "tasks": ["test_task", "another_task"],
                 "execution": "serial",
                 "stop_on_error": False,
             }
         ],
-        "_task_sources": {"test_script": "scripts/test.yaml"},
+        "_task_sources": {"test_task": "tasks/test.yaml"},
         "_group_sources": {"test_group": "groups/test.yaml"},
     }
 
@@ -173,8 +173,8 @@ class TestListCommand:
         result = runner.invoke(list_cmd)
 
         assert result.exit_code == 0
-        assert "test_script" in result.output
-        assert "another_script" in result.output
+        assert "test_task" in result.output
+        assert "another_task" in result.output
         assert "success" in result.output
         assert "no logs" in result.output
 
@@ -207,10 +207,10 @@ class TestRunCommand:
         mock_load.return_value = sample_config
         mock_run_script.return_value = True
 
-        result = runner.invoke(run, ["test_script"])
+        result = runner.invoke(run, ["test_task"])
 
         assert result.exit_code == 0
-        mock_run_script.assert_called_once_with("test_script", sample_config)
+        mock_run_script.assert_called_once_with("test_task", sample_config)
 
     @patch("core.cli_commands.load_config")
     @patch("core.cli_commands.run_task")
@@ -324,8 +324,8 @@ class TestRunGroupCommand:
             (0, "failed"),  # None succeeded
         ]
 
-        for scripts_successful, expected_status in scenarios:
-            mock_run_serial.return_value = scripts_successful
+        for tasks_successful, expected_status in scenarios:
+            mock_run_serial.return_value = tasks_successful
             runner.invoke(run_group, ["test_group"])
 
             # Verify save_group_runtime_state was called with correct status
@@ -351,7 +351,7 @@ class TestLogsCommand:
         mock_format.return_value = [("Log content", None)]
         mock_get_config.return_value = False
 
-        result = runner.invoke(logs, ["test_script"])
+        result = runner.invoke(logs, ["test_task"])
 
         assert result.exit_code == 0
         assert "Log content" in result.output
@@ -363,7 +363,7 @@ class TestLogsCommand:
         mock_load.return_value = sample_config
         mock_get_log.return_value = (None, False)
 
-        result = runner.invoke(logs, ["test_script"])
+        result = runner.invoke(logs, ["test_task"])
 
         assert result.exit_code == 0
         assert "No logs found" in result.output
@@ -421,28 +421,28 @@ class TestClearLogsCommand:
     """Tests for clear_logs command."""
 
     @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.clear_script_logs")
+    @patch("core.cli_commands.log_manager.clear_task_logs")
     def test_clear_logs_removes_logs(self, mock_clear, mock_load, runner, sample_config):
-        """Test clear_logs removes logs for a script."""
+        """Test clear_logs removes logs for a task."""
         mock_load.return_value = sample_config
         mock_clear.return_value = True
 
-        result = runner.invoke(clear_logs, ["test_script"])
+        result = runner.invoke(clear_logs, ["test_task"])
 
         assert result.exit_code == 0
-        assert "Cleared logs for test_script" in result.output
+        assert "Cleared logs for test_task" in result.output
 
     @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.clear_script_logs")
+    @patch("core.cli_commands.log_manager.clear_task_logs")
     def test_clear_logs_handles_no_logs(self, mock_clear, mock_load, runner, sample_config):
         """Test clear_logs handles no logs found."""
         mock_load.return_value = sample_config
         mock_clear.return_value = False
 
-        result = runner.invoke(clear_logs, ["test_script"])
+        result = runner.invoke(clear_logs, ["test_task"])
 
         assert result.exit_code == 0
-        assert "No logs found for test_script" in result.output
+        assert "No logs found for test_task" in result.output
 
 
 class TestClearAllLogsCommand:
@@ -481,8 +481,8 @@ class TestListGroupsCommand:
 
         assert result.exit_code == 0
         assert "Group: test_group" in result.output
-        assert "test_script" in result.output
-        assert "another_script" in result.output
+        assert "test_task" in result.output
+        assert "another_task" in result.output
 
     @patch("core.cli_commands.load_config")
     def test_list_groups_handles_no_groups(self, mock_load, runner):

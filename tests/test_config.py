@@ -64,8 +64,6 @@ class TestFindConfigHome:
         with patch.dict(os.environ, {"SIGNALBOX_HOME": temp_config_dir}):
             result = manager.find_config_home()
             assert result == temp_config_dir
-
-    def test_env_var_expands_tilde(self, temp_config_dir):
         """Test that ~ is expanded in SIGNALBOX_HOME."""
         manager = ConfigManager()
 
@@ -73,19 +71,17 @@ class TestFindConfigHome:
             with patch("os.path.isdir", return_value=True):
                 result = manager.find_config_home()
                 assert result == os.path.expanduser("~/test")
-
-    def test_user_config_dir_priority(self, full_config):
         """Test that ~/.config/signalbox is checked if env var not set."""
         manager = ConfigManager()
 
         # Mock the user config directory to point to our test config
         with patch.dict(os.environ, {}, clear=True):
             with patch("os.path.expanduser") as mock_expand:
-                mock_expand.return_value = full_config
+                mock_expand.return_value = os.path.expanduser("~/.config/signalbox")
                 with patch("os.path.isdir", return_value=True):
                     with patch("os.path.exists", return_value=True):
                         result = manager.find_config_home()
-                        assert result == full_config
+                        assert result == os.path.expanduser("~/.config/signalbox")
 
     def test_current_dir_fallback(self):
         """Test fallback to current working directory."""
@@ -325,7 +321,7 @@ class TestLoadConfig:
 
     def test_load_ignores_hidden_files(self, temp_config_dir):
         """Test that hidden files (starting with .) are ignored."""
-        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "tasks"
 
         # Create a hidden file
         hidden_file = tasks_dir / ".hidden.yaml"
@@ -340,10 +336,11 @@ class TestLoadConfig:
 
     def test_load_ignores_non_yaml_files(self, temp_config_dir):
         """Test that non-YAML files are ignored."""
-        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "tasks"
 
         # Create a text file
         text_file = tasks_dir / "readme.txt"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
         with open(text_file, "w") as f:
             f.write("This is not YAML")
 
@@ -355,10 +352,11 @@ class TestLoadConfig:
 
     def test_load_handles_invalid_yaml_gracefully(self, temp_config_dir):
         """Test that invalid YAML files are handled gracefully."""
-        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "tasks"
 
         # Create invalid YAML file
         bad_file = tasks_dir / "bad.yaml"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
         with open(bad_file, "w") as f:
             f.write("invalid:\n  - yaml:\n  content")
 
@@ -377,14 +375,19 @@ class TestLoadConfig:
 
     def test_load_sorts_files_alphabetically(self, temp_config_dir, sample_signalbox_yaml):
         """Test that files are loaded in alphabetical order."""
-        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "tasks"
 
         # Create files in reverse alphabetical order
+        tasks_dir.mkdir(parents=True, exist_ok=True)
         for name in ["z_last.yaml", "a_first.yaml", "m_middle.yaml"]:
             file_path = tasks_dir / name
-            script_name = name.replace(".yaml", "")
+            task_name = name.replace(".yaml", "")
             with open(file_path, "w") as f:
-                yaml.dump({"tasks": [{"name": script_name, "command": "echo", "description": "test"}]}, f)
+                yaml.dump({"tasks": [{"name": task_name, "command": "echo", "description": "test"}]}, f)
+        manager = ConfigManager(config_home=temp_config_dir)
+        config = manager.load_config()
+        task_names = [s["name"] for s in config["tasks"]]
+        assert task_names == ["a_first", "m_middle", "z_last"]
 
         manager = ConfigManager(config_home=temp_config_dir)
         config = manager.load_config()
@@ -428,7 +431,7 @@ class TestSaveConfig:
         manager.save_config(config)
 
         # Check that _new.yaml was created
-        new_file = Path(full_config) / "config" / "scripts" / "_new.yaml"
+        new_file = Path(full_config) / "config" / "tasks" / "_new.yaml"
         assert new_file.exists()
 
 
@@ -515,24 +518,24 @@ class TestConfigIntegration:
 
         for cfg_dir in [config1, config2]:
             (cfg_dir / "config").mkdir(parents=True)
-            (cfg_dir / "config" / "scripts").mkdir()
+            (cfg_dir / "config" / "tasks").mkdir()
 
             # Create different configs
             with open(cfg_dir / "config" / "signalbox.yaml", "w") as f:
-                yaml.dump({"paths": {"scripts_file": "config/tasks"}}, f)
+                yaml.dump({"paths": {"tasks_file": "config/tasks"}}, f)
 
-        # Add different scripts to each
-        scripts1 = config1 / "config" / "scripts" / "test.yaml"
-        with open(scripts1, "w") as f:
-            yaml.dump({"tasks": [{"name": "script1", "command": "echo 1", "description": "test"}]}, f)
+        # Add different tasks to each
+        tasks1 = config1 / "config" / "tasks" / "test.yaml"
+        with open(tasks1, "w") as f:
+            yaml.dump({"tasks": [{"name": "task1", "command": "echo 1", "description": "test"}]}, f)
 
-        scripts2 = config2 / "config" / "scripts" / "test.yaml"
-        with open(scripts2, "w") as f:
+        tasks2 = config2 / "config" / "tasks" / "test.yaml"
+        with open(tasks2, "w") as f:
             yaml.dump(
                 {
                     "tasks": [
-                        {"name": "script2a", "command": "echo 2a", "description": "test"},
-                        {"name": "script2b", "command": "echo 2b", "description": "test"},
+                        {"name": "task2a", "command": "echo 2a", "description": "test"},
+                        {"name": "task2b", "command": "echo 2b", "description": "test"},
                     ]
                 },
                 f,
@@ -547,5 +550,5 @@ class TestConfigIntegration:
         # Should have different results
         assert len(config1_data["tasks"]) == 1
         assert len(config2_data["tasks"]) == 2
-        assert config1_data["tasks"][0]["name"] == "script1"
-        assert config2_data["tasks"][0]["name"] == "script2a"
+        assert config1_data["tasks"][0]["name"] == "task1"
+        assert config2_data["tasks"][0]["name"] == "task2a"

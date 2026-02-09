@@ -73,16 +73,16 @@ def _send_linux_notification(title, message, urgency="normal"):
     return True
 
 
-def format_summary(total, passed, failed, context="scripts", failed_names=None):
+def format_summary(total, passed, failed, context="tasks", failed_names=None):
     """
-    Format a summary message for script/group execution results.
+    Format a summary message for task/group execution results.
 
     Args:
-        total: Total number of scripts/groups executed
+        total: Total number of tasks/groups executed
         passed: Number that passed
         failed: Number that failed
-        context: "scripts" or "groups"
-        failed_names: Optional list of failed script/group names
+        context: "tasks" or "groups"
+        failed_names: Optional list of failed task/group names
 
     Returns:
         str: Formatted message
@@ -100,7 +100,7 @@ def format_summary(total, passed, failed, context="scripts", failed_names=None):
     return message
 
 
-def notify_execution_result(total, passed, failed, context="scripts", failed_names=None, config=None):
+def notify_execution_result(total, passed, failed, context="tasks", failed_names=None, config=None):
     """
     Send a notification summarizing execution results.
 
@@ -108,7 +108,7 @@ def notify_execution_result(total, passed, failed, context="scripts", failed_nam
         total: Total number executed
         passed: Number that passed
         failed: Number that failed
-        context: "scripts" or "groups"
+        context: "tasks" or "groups"
         failed_names: Optional list of failed names
         config: Config dict with notification settings
 

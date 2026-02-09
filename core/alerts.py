@@ -7,8 +7,8 @@ from .config import get_config_value
 from .helpers import format_timestamp, parse_timestamp
 
 
-def get_alerts_dir(script_name):
-    """Get the alerts directory for a script."""
+def get_alerts_dir(task_name):
+    """Get the alerts directory for a task."""
     log_dir = get_config_value("paths.log_dir", "logs")
     # Expand ~ to home directory
     if log_dir.startswith("~"):
@@ -18,28 +18,28 @@ def get_alerts_dir(script_name):
         config_dir = os.path.expanduser("~/.config/signalbox")
         log_dir = os.path.join(config_dir, log_dir)
 
-    return os.path.join(log_dir, script_name, "alerts")
+    return os.path.join(log_dir, task_name, "alerts")
 
 
-def ensure_alerts_dir(script_name):
-    """Ensure the alerts directory exists for a script."""
-    alerts_dir = get_alerts_dir(script_name)
+def ensure_alerts_dir(task_name):
+    """Ensure the alerts directory exists for a task."""
+    alerts_dir = get_alerts_dir(task_name)
     os.makedirs(alerts_dir, exist_ok=True)
     return alerts_dir
 
 
-def check_alert_patterns(script_name, script_config, output):
-    """Check script output against alert patterns and record any matches.
+def check_alert_patterns(task_name, task_config, output):
+    """Check task output against alert patterns and record any matches.
 
     Args:
-        script_name: Name of the script
-        script_config: Script configuration dict
+        task_name: Name of the task
+        task_config: Task configuration dict
         output: The stdout/stderr output to check
 
     Returns:
         list: List of triggered alerts (dicts with pattern, message, severity)
     """
-    alerts = script_config.get("alerts", [])
+    alerts = task_config.get("alerts", [])
     if not alerts:
         return []
 
@@ -60,21 +60,21 @@ def check_alert_patterns(script_name, script_config, output):
                     "notify": alert.get("notify"),  # Per-alert override for notification
                     "on_failure_only": alert.get("on_failure_only"),  # Per-alert override
                     "timestamp": format_timestamp(datetime.now()),
-                    "script_name": script_name,
+                    "task_name": task_name,
                 }
             )
 
     return triggered
 
 
-def save_alert(script_name, alert_data):
+def save_alert(task_name, alert_data):
     """Save an alert record to the alerts log.
 
     Args:
-        script_name: Name of the script that triggered the alert
+        task_name: Name of the task that triggered the alert
         alert_data: Dict with alert information (message, severity, timestamp, etc.)
     """
-    alerts_dir = ensure_alerts_dir(script_name)
+    alerts_dir = ensure_alerts_dir(task_name)
     alert_log = os.path.join(alerts_dir, "alerts.jsonl")
 
     # Append alert as JSON line
@@ -82,11 +82,11 @@ def save_alert(script_name, alert_data):
         f.write(json.dumps(alert_data) + "\n")
 
 
-def load_alerts(script_name=None, severity=None, max_days=None):
+def load_alerts(task_name=None, severity=None, max_days=None):
     """Load alerts from storage, optionally filtered.
 
     Args:
-        script_name: If specified, only load alerts for this script
+        task_name: If specified, only load alerts for this task
         severity: If specified, only load alerts with this severity
         max_days: If specified, only load alerts from last N days
 
@@ -95,7 +95,7 @@ def load_alerts(script_name=None, severity=None, max_days=None):
     """
     alerts = []
 
-    # Determine which script directories to check
+    # Determine which task directories to check
     log_dir = get_config_value("paths.log_dir", "logs")
     if log_dir.startswith("~"):
         log_dir = os.path.expanduser(log_dir)
@@ -103,17 +103,17 @@ def load_alerts(script_name=None, severity=None, max_days=None):
         config_dir = os.path.expanduser("~/.config/signalbox")
         log_dir = os.path.join(config_dir, log_dir)
 
-    if script_name:
-        script_dirs = [script_name]
+    if task_name:
+        task_dirs = [task_name]
     else:
-        # Get all script directories
+        # Get all task directories
         if not os.path.exists(log_dir):
             return []
-        script_dirs = [d for d in os.listdir(log_dir) if os.path.isdir(os.path.join(log_dir, d))]
+        task_dirs = [d for d in os.listdir(log_dir) if os.path.isdir(os.path.join(log_dir, d))]
 
-    # Load alerts from each script
-    for sname in script_dirs:
-        alert_log = os.path.join(log_dir, sname, "alerts", "alerts.jsonl")
+    # Load alerts from each task
+    for tname in task_dirs:
+        alert_log = os.path.join(log_dir, tname, "alerts", "alerts.jsonl")
         if not os.path.exists(alert_log):
             continue
 
@@ -145,16 +145,16 @@ def load_alerts(script_name=None, severity=None, max_days=None):
     return alerts
 
 
-def prune_alerts(script_name, max_days=None, max_entries=None, per_severity=None):
+def prune_alerts(task_name, max_days=None, max_entries=None, per_severity=None):
     """Remove old alerts based on retention policy.
 
     Args:
-        script_name: Script to prune alerts for
+        task_name: Task to prune alerts for
         max_days: Keep alerts from last N days
         max_entries: Keep at most N alerts
         per_severity: Dict of severity -> max_days overrides
     """
-    alerts_dir = get_alerts_dir(script_name)
+    alerts_dir = get_alerts_dir(task_name)
     alert_log = os.path.join(alerts_dir, "alerts.jsonl")
 
     if not os.path.exists(alert_log):
@@ -209,20 +209,20 @@ def prune_alerts(script_name, max_days=None, max_entries=None, per_severity=None
 
 
 def get_alert_summary():
-    """Get a summary of all alerts across all scripts.
+    """Get a summary of all alerts across all tasks.
 
     Returns:
         dict: Summary with total count, counts by severity, etc.
     """
     alerts = load_alerts()
 
-    summary = {"total": len(alerts), "by_severity": {}, "by_script": {}}
+    summary = {"total": len(alerts), "by_severity": {}, "by_task": {}}
 
     for alert in alerts:
         severity = alert.get("severity", "info")
-        script = alert.get("script_name", "unknown")
+        task = alert.get("task_name", "unknown")
 
         summary["by_severity"][severity] = summary["by_severity"].get(severity, 0) + 1
-        summary["by_script"][script] = summary["by_script"].get(script, 0) + 1
+        summary["by_task"][task] = summary["by_task"].get(task, 0) + 1
 
     return summary

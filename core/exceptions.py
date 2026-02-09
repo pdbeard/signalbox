@@ -25,13 +25,6 @@ class ConfigurationError(SignalboxError):
 
 
 
-class ScriptNotFoundError(SignalboxError):
-    """Raised when a script is not found in configuration."""
-
-    def __init__(self, script_name):
-        message = f"Script '{script_name}' not found"
-        super().__init__(message, exit_code=3)
-
 class TaskNotFoundError(SignalboxError):
     """Raised when a task is not found in configuration."""
 
@@ -49,19 +42,19 @@ class GroupNotFoundError(SignalboxError):
 
 
 class ExecutionError(SignalboxError):
-    """Raised when script execution fails."""
+    """Raised when task execution fails."""
 
-    def __init__(self, script_name, reason):
-        message = f"Execution failed for '{script_name}': {reason}"
+    def __init__(self, task_name, reason):
+        message = f"Execution failed for '{task_name}': {reason}"
         super().__init__(message, exit_code=4)
 
 
 class ExecutionTimeoutError(ExecutionError):
-    """Raised when script execution times out."""
+    """Raised when task execution times out."""
 
-    def __init__(self, script_name, timeout):
-        message = f"Script '{script_name}' timed out after {timeout} seconds"
-        super().__init__(script_name, message)
+    def __init__(self, task_name, timeout):
+        message = f"Task '{task_name}' timed out after {timeout} seconds"
+        super().__init__(task_name, message)
 
 
 class ValidationError(SignalboxError):

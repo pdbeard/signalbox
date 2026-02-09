@@ -1,4 +1,4 @@
-# Script and group execution logic for signalbox
+# Task and group execution logic for signalbox
 #
 # SECURITY NOTE: This module executes shell commands with shell=True to support
 # pipes, redirection, and complex bash scripts. Commands are executed with the
@@ -12,43 +12,43 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import click
 
 from .config import get_config_value
-from .runtime import save_script_runtime_state
+from .runtime import save_task_runtime_state
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
-from .exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeoutError
+from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError
 from . import notifications
 from . import alerts
 from .helpers import format_timestamp
 
 
 def run_task(name, config):
-    """Execute a single script and log the results.
+    """Execute a single task and log the results.
 
     Args:
-            name: Name of the script to run
-            config: Full configuration dict containing scripts
+            name: Name of the task to run
+            config: Full configuration dict containing tasks
 
     Returns:
-            bool: True if script executed successfully (exit code 0), False otherwise
+            bool: True if task executed successfully (exit code 0), False otherwise
 
     Raises:
-            ScriptNotFoundError: If script not found in configuration
-            ExecutionTimeoutError: If script execution times out
-            ExecutionError: If script execution fails for any other reason
+            TaskNotFoundError: If task not found in configuration
+            ExecutionTimeoutError: If task execution times out
+            ExecutionError: If task execution fails for any other reason
     """
 
-    # Validate configuration before running script
+    # Validate configuration before running task
     from . import validator, config as config_mod
 
     validation_result = validator.validate_configuration()
     if validation_result.errors or validation_result.warnings:
         click.echo("Some configuration errors or warnings were found. Please run 'signalbox validate' for details.")
 
-    # Reload config with warnings suppressed for script execution
+    # Reload config with warnings suppressed for task execution
     config = config_mod.load_config(suppress_warnings=True)
 
-    script = next((s for s in config["tasks"] if s["name"] == name), None)
-    if not script:
-        raise ScriptNotFoundError(name)
+    task = next((s for s in config["tasks"] if s["name"] == name), None)
+    if not task:
+        raise TaskNotFoundError(name)
 
     # Prepare logging
     ensure_log_dir(name)
@@ -67,15 +67,15 @@ def run_task(name, config):
         timeout = min_timeout
 
     try:
-        # Execute the script
-        result = subprocess.run(script["command"], shell=True, capture_output=True, text=True, timeout=timeout)
+        # Execute the task
+        result = subprocess.run(task["command"], shell=True, capture_output=True, text=True, timeout=timeout)
 
         # Write log file
-        write_execution_log(log_file, script["command"], result.returncode, result.stdout, result.stderr)
+        write_execution_log(log_file, task["command"], result.returncode, result.stdout, result.stderr)
 
         # Check for alert patterns in output
         combined_output = result.stdout + "\n" + result.stderr
-        triggered_alerts = alerts.check_alert_patterns(name, script, combined_output)
+        triggered_alerts = alerts.check_alert_patterns(name, task, combined_output)
 
         # Save and optionally notify for each triggered alert
         if triggered_alerts:
@@ -114,19 +114,19 @@ def run_task(name, config):
                     )
 
         # Rotate old logs
-        rotate_logs(script)
+        rotate_logs(task)
 
         # Determine status and save runtime state
         status = "success" if result.returncode == 0 else "failed"
-        click.echo(f"Script {name} {status}. Log: {log_file}")
+        click.echo(f"Task {name} {status}. Log: {log_file}")
 
-        script_source_file = config["_task_sources"].get(name)
-        if script_source_file:
-            save_script_runtime_state(name, script_source_file, timestamp, status)
+        task_source_file = config["_task_sources"].get(name)
+        if task_source_file:
+            save_task_runtime_state(name, task_source_file, timestamp, status)
 
         # Update in-memory config
-        script["last_status"] = status
-        script["last_run"] = timestamp
+        task["last_status"] = status
+        task["last_run"] = timestamp
 
         return result.returncode == 0
 
@@ -136,15 +136,15 @@ def run_task(name, config):
         raise ExecutionError(name, str(e))
 
 
-def run_group_parallel(script_names, config):
-    """Execute multiple scripts in parallel.
+def run_group_parallel(task_names, config):
+    """Execute multiple tasks in parallel.
 
     Args:
-            script_names: List of script names to execute
+            task_names: List of task names to execute
             config: Full configuration dict
 
     Returns:
-            int: Number of scripts that executed successfully
+            int: Number of tasks that executed successfully
     """
     max_workers = get_config_value("execution.max_parallel_workers", 5)
 
@@ -158,18 +158,18 @@ def run_group_parallel(script_names, config):
             click.echo(f"Error: {e.message if hasattr(e, 'message') else str(e)}")
             return (task_name, False, str(e))
 
-    # Execute scripts in parallel
+    # Execute tasks in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(run_task_wrapper, name): name for name in script_names}
+        futures = {executor.submit(run_task_wrapper, name): name for name in task_names}
         results = []
         for future in as_completed(futures):
-            script_name, success, error = future.result()
-            results.append((script_name, success, error))
+            task_name, success, error = future.result()
+            results.append((task_name, success, error))
 
     # Print summary
     click.echo("\nParallel execution summary:")
     success_count = sum(1 for _, success, _ in results if success)
-    click.echo(f"  Completed: {len(results)}/{len(script_names)}")
+    click.echo(f"  Completed: {len(results)}/{len(task_names)}")
     click.echo(f"  Successful: {success_count}/{len(results)}")
 
     failed_names = None
@@ -183,7 +183,7 @@ def run_group_parallel(script_names, config):
         total=len(results),
         passed=success_count,
         failed=failed_count,
-        context="scripts",
+        context="tasks",
         failed_names=failed_names,
         config=config,
     )
@@ -191,35 +191,35 @@ def run_group_parallel(script_names, config):
     return success_count
 
 
-def run_group_serial(script_names, config, stop_on_error):
-    """Execute multiple scripts sequentially.
+def run_group_serial(task_names, config, stop_on_error):
+    """Execute multiple tasks sequentially.
 
     Args:
-            script_names: List of script names to execute
+            task_names: List of task names to execute
             config: Full configuration dict
-            stop_on_error: If True, stop execution when a script fails
+            stop_on_error: If True, stop execution when a task fails
 
     Returns:
-            int: Number of scripts that executed successfully
+            int: Number of tasks that executed successfully
     """
     success_count = 0
     failed_names = []
 
-    for script_name in script_names:
+    for task_name in task_names:
         try:
-            click.echo(f"Running {script_name}...")
-            success = run_task(script_name, config)
+            click.echo(f"Running {task_name}...")
+            success = run_task(task_name, config)
 
             if success:
                 success_count += 1
             else:
-                failed_names.append(script_name)
+                failed_names.append(task_name)
                 if stop_on_error:
-                    click.echo(f"⚠️  Script {script_name} failed. Stopping group execution (stop_on_error=true)")
+                    click.echo(f"⚠️  Task {task_name} failed. Stopping group execution (stop_on_error=true)")
                     break
         except Exception as e:
             click.echo(f"Error: {e.message if hasattr(e, 'message') else str(e)}")
-            failed_names.append(script_name)
+            failed_names.append(task_name)
             if stop_on_error:
                 click.echo(f"⚠️  Stopping group execution (stop_on_error=true)")
                 break
@@ -227,10 +227,10 @@ def run_group_serial(script_names, config, stop_on_error):
     # Send notification
     failed_count = len(failed_names)
     notifications.notify_execution_result(
-        total=len(script_names),
+        total=len(task_names),
         passed=success_count,
         failed=failed_count,
-        context="scripts",
+        context="tasks",
         failed_names=failed_names if failed_names else None,
         config=config,
     )

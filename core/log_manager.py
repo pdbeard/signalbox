@@ -82,23 +82,23 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
     os.chmod(log_file, 0o600)
 
 
-def rotate_logs(script):
-    """Rotate logs for a script based on configured limits.
+def rotate_logs(task):
+    """Rotate logs for a task based on configured limits.
 
     Supports two rotation types:
     - 'count': Keep only the N most recent log files
     - 'age': Delete log files older than N days
 
     Args:
-            script: Script configuration dict with optional 'log_limit' setting
+            task: Task configuration dict with optional 'log_limit' setting
     """
     import fcntl
     import tempfile
 
-    name = script["name"]
-    script_log_dir = get_task_log_dir(name)
+    name = task["name"]
+    task_log_dir = get_task_log_dir(name)
 
-    if not os.path.exists(script_log_dir):
+    if not os.path.exists(task_log_dir):
         return
 
     # Security: Use file locking to prevent race conditions
@@ -116,28 +116,28 @@ def rotate_logs(script):
 
             # Get log limit settings
             default_limit = get_config_value("default_log_limit", {"type": "count", "value": 10})
-            log_limit = script.get("log_limit", default_limit)
+            log_limit = task.get("log_limit", default_limit)
 
-            log_files = os.listdir(script_log_dir)
+            log_files = os.listdir(task_log_dir)
 
             if log_limit["type"] == "count":
-                _rotate_by_count(script_log_dir, log_files, log_limit["value"])
+                _rotate_by_count(task_log_dir, log_files, log_limit["value"])
             elif log_limit["type"] == "age":
-                _rotate_by_age(script_log_dir, log_files, log_limit["value"])
+                _rotate_by_age(task_log_dir, log_files, log_limit["value"])
 
             # Lock is automatically released when file is closed
     except Exception as e:
-        # Don't fail the entire script execution if rotation fails
+        # Don't fail the entire task execution if rotation fails
         import click
 
         click.echo(f"Warning: Log rotation failed for {name}: {e}", err=True)
 
 
-def _rotate_by_count(script_log_dir, log_files, max_count):
+def _rotate_by_count(task_log_dir, log_files, max_count):
     """Keep only the most recent N log files.
 
     Args:
-            script_log_dir: Directory containing log files
+            task_log_dir: Directory containing log files
             log_files: List of log filenames
             max_count: Maximum number of log files to keep
     """
@@ -145,50 +145,50 @@ def _rotate_by_count(script_log_dir, log_files, max_count):
         return
 
     # Sort by modification time (oldest first)
-    log_files.sort(key=lambda x: os.path.getmtime(os.path.join(script_log_dir, x)))
+    log_files.sort(key=lambda x: os.path.getmtime(os.path.join(task_log_dir, x)))
 
     # Delete oldest files to keep only max_count
     to_delete = log_files[:-max_count]
     for filename in to_delete:
-        os.remove(os.path.join(script_log_dir, filename))
+        os.remove(os.path.join(task_log_dir, filename))
 
 
-def _rotate_by_age(script_log_dir, log_files, max_age_days):
+def _rotate_by_age(task_log_dir, log_files, max_age_days):
     """Delete log files older than N days.
 
     Args:
-            script_log_dir: Directory containing log files
+            task_log_dir: Directory containing log files
             log_files: List of log filenames
             max_age_days: Maximum age of log files in days
     """
     cutoff = datetime.now() - timedelta(days=max_age_days)
 
     for filename in log_files:
-        filepath = os.path.join(script_log_dir, filename)
+        filepath = os.path.join(task_log_dir, filename)
         file_time = datetime.fromtimestamp(os.path.getmtime(filepath))
 
         if file_time < cutoff:
             os.remove(filepath)
 
 
-def get_latest_log(script_name):
-    """Get the path to the latest log file for a script.
+def get_latest_log(task_name):
+    """Get the path to the latest log file for a task.
 
     Returns:
             tuple: (log_path, log_exists) where log_path is the path to the latest log
                    and log_exists is True if logs were found
     """
-    script_log_dir = get_task_log_dir(script_name)
+    task_log_dir = get_task_log_dir(task_name)
 
-    if not os.path.exists(script_log_dir):
+    if not os.path.exists(task_log_dir):
         return None, False
 
-    log_files = os.listdir(script_log_dir)
+    log_files = os.listdir(task_log_dir)
     if not log_files:
         return None, False
 
-    latest = max(log_files, key=lambda x: os.path.getmtime(os.path.join(script_log_dir, x)))
-    return os.path.join(script_log_dir, latest), True
+    latest = max(log_files, key=lambda x: os.path.getmtime(os.path.join(task_log_dir, x)))
+    return os.path.join(task_log_dir, latest), True
 
 
 def read_log_content(log_path):
@@ -220,47 +220,47 @@ def format_log_with_colors(content, show_colors=True):
     return formatted_lines
 
 
-def get_log_history(script_name):
-    """Get a list of all log files for a script with their timestamps.
+def get_log_history(task_name):
+    """Get a list of all log files for a task with their timestamps.
 
     Returns:
             tuple: (log_files_info, history_exists) where log_files_info is a list of
                    tuples (filename, timestamp) sorted newest first
     """
-    script_log_dir = get_task_log_dir(script_name)
+    task_log_dir = get_task_log_dir(task_name)
 
-    if not os.path.exists(script_log_dir):
+    if not os.path.exists(task_log_dir):
         return [], False
 
-    log_files = os.listdir(script_log_dir)
+    log_files = os.listdir(task_log_dir)
     if not log_files:
         return [], False
 
     # Sort by time, newest first
-    log_files.sort(key=lambda x: os.path.getmtime(os.path.join(script_log_dir, x)), reverse=True)
+    log_files.sort(key=lambda x: os.path.getmtime(os.path.join(task_log_dir, x)), reverse=True)
 
     log_info = []
     for filename in log_files:
-        mtime = os.path.getmtime(os.path.join(script_log_dir, filename))
+        mtime = os.path.getmtime(os.path.join(task_log_dir, filename))
         log_info.append((filename, mtime))
 
     return log_info, True
 
 
-def clear_script_logs(script_name):
-    """Clear all log files for a specific script.
+def clear_task_logs(task_name):
+    """Clear all log files for a specific task.
 
     Returns:
             bool: True if logs were found and cleared, False otherwise
     """
-    script_log_dir = get_task_log_dir(script_name)
+    task_log_dir = get_task_log_dir(task_name)
 
-    if not os.path.exists(script_log_dir):
+    if not os.path.exists(task_log_dir):
         return False
 
     # Delete files but keep directory
-    for filename in os.listdir(script_log_dir):
-        filepath = os.path.join(script_log_dir, filename)
+    for filename in os.listdir(task_log_dir):
+        filepath = os.path.join(task_log_dir, filename)
         if os.path.isfile(filepath):
             os.remove(filepath)
 
@@ -268,7 +268,7 @@ def clear_script_logs(script_name):
 
 
 def clear_all_logs():
-    """Clear all log files for all scripts.
+    """Clear all log files for all tasks.
 
     Returns:
             bool: True if log directory was found and cleared, False otherwise

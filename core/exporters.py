@@ -29,7 +29,7 @@ def validate_group_for_export(group, group_name):
 
 
 def get_python_executable():
-    """Determine the Python executable to use for exported scripts.
+    """Determine the Python executable to use for exported tasks.
 
     Returns:
             str: Path to Python executable
@@ -40,10 +40,10 @@ def get_python_executable():
 
 
 def get_signalbox_command():
-    """Determine the signalbox command to use for exported scripts.
+    """Determine the signalbox command to use for exported tasks.
 
     Returns:
-            str: Command to invoke signalbox (either CLI entry point or script path)
+            str: Command to invoke signalbox (either CLI entry point or task path)
     """
     import shutil
 
