@@ -68,10 +68,6 @@ export SIGNALBOX_HOME=/path/to/your/config
 signalbox list  # Uses config from custom location
 ```
 
-### Development Install
-
-
-
 ## DEMO VID? 
 
 ## Commands
@@ -281,32 +277,41 @@ crontab -e
 
 ## Alerting
 
-Signalbox supports script output pattern alerts for monitoring and notification.
+Signalbox supports task output pattern alerts for monitoring and notification.
 
-### Defining Alerts in Scripts
+### Defining Alerts in Tasks
 
-Add an `alerts` section to any script definition:
+Add an `alerts` section to any task definition:
 
 ```yaml
-scripts:
+tasks:
   - name: disk_check_test
     command: ./check_disk.sh
     description: Check disk usage
     alerts:
       - pattern: "Disk usage is above 80%"
-        message: "[CRITICAL] Disk usage is above 80%!"
+        title: "Disk Space Critical"
+        message: "Disk usage is above 80%!"
         severity: critical
       - pattern: "Disk usage is above 60%"
-        message: "[Warning] Disk usage is above 60%"
+        title: "Disk Space Warning"
+        message: "Disk usage is above 60%"
         severity: warning
+      - pattern: "Disk OK"
+        message: "Disk usage is normal"
+        severity: info
+        notify: false  # Don't send notification for this alert
 ```
 
 **Alert fields:**
-- `pattern` (required): Regex or substring to match in script output (stdout or stderr)
+- `pattern` (required): Regex or substring to match in task output (stdout or stderr)
 - `message` (required): Message to log and notify if pattern is matched
-- `severity` (optional): `info`, `warning`, or `critical` (default: info)
+- `severity` (optional): `info`, `warning`, or `critical` (default: `info`)
+- `title` (optional): Custom notification title (default: `"Alert: {task_name}"`)
+- `notify` (optional): Override global notification setting for this alert
+- `on_failure_only` (optional): If true, only send notification for warning/critical severity
 
-When a script runs, if any alert pattern matches the output, the alert is logged and (optionally) a notification is sent.
+When a task runs, if any alert pattern matches the output, the alert is logged and (optionally) a desktop notification is sent based on your configuration.
 
 ### Viewing Alerts
 
@@ -314,12 +319,14 @@ List recent alerts:
 ```bash
 signalbox alerts
 ```
-Filter by script or severity:
+Filter by task name or severity:
 ```bash
-signalbox alerts --script disk_check_test --severity critical
+signalbox alerts disk_check_test --severity critical
 ```
 
-Alerts are stored in `logs/alerts.jsonl`.
+Alerts are stored in `logs/<task_name>/alerts/alerts.jsonl`.
+
+See [documentation/NOTIFICATIONS.md](documentation/NOTIFICATIONS.md) for full alert notification configuration options.
 
 ---
 ## Validation

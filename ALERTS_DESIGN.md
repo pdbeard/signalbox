@@ -18,7 +18,7 @@ The Signalbox Alerts feature enables users to receive actionable notifications b
 
 ## YAML Configuration Example
 ```yaml
-scripts:
+tasks:
   - name: check_disk_space
     description: Monitor disk usage and warn if > 80%
     command: |
@@ -26,12 +26,25 @@ scripts:
       df -h / | awk 'NR==2 { usage = $5; gsub(/%/, "", usage); if(usage > 80) print "ALERT: Disk usage HIGH: " usage "% (/ " $4 " free)"; else print "Disk usage OK: " usage "% (/ " $4 " free)" }'
     alerts:
       - pattern: "ALERT: Disk usage HIGH"
+        title: "Disk Space Alert"
         message: "Disk usage is above 80%!"
         severity: critical
       - pattern: "Disk usage OK"
+        title: "Disk Space Check"
         message: "Disk usage is normal."
         severity: info
+        notify: false          # Per-alert override: don't send notifications
+        on_failure_only: false # Per-alert override
 ```
+
+## Alert Configuration Fields
+
+- **`pattern`** (required): String or regex to match in script output
+- **`message`** (required): The notification text shown to the user
+- **`severity`** (optional): `info`, `warning`, `critical` (default: `info`)
+- **`title`** (optional): Custom notification title (default: `"Alert: {task_name}"`)
+- **`notify`** (optional): Override global `alerts.notifications.enabled` setting
+- **`on_failure_only`** (optional): Override global `alerts.notifications.on_failure_only` setting
 
 ## Implementation Steps
 1. **Extend Script YAML Schema**
@@ -60,6 +73,9 @@ scripts:
 $ signalbox alerts
 [2026-01-15 14:05] [critical] check_disk_space: Disk usage is above 80%!
 [2026-01-15 13:55] [info] check_disk_space: Disk usage is normal.
+
+$ signalbox alerts check_disk_space --severity critical
+[2026-01-15 14:05] [critical] check_disk_space: Disk usage is above 80%!
 ```
 
 ## Open Questions
@@ -67,74 +83,100 @@ $ signalbox alerts
 - How long should alert history be retained?
 - What notification channels are most useful for users?
 
-## Configuration Suggestions
-### v1 Configuration Approach
+## Configuration (Implemented)
 
-- **Retention Policy:**
-   - Support both `max_days` (e.g., keep alerts for 30 days) and `max_entries` (e.g., keep last 1000 alerts).
-   - Allow special cases for severity (e.g., keep critical alerts longer).
-   - Example:
-      ```yaml
-      alerts:
-         retention:
-            max_days: 30
-            max_entries: 1000
-            per_severity:
-               critical: 90
-               warning: 30
-               info: 7
-      ```
+### Global Configuration in signalbox.yaml
 
-- **Notification Settings:**
-   - Simple enable/disable option at both global (signalbox.yaml) and local (script YAML) level.
-   - Notifications will use the existing `notifications.py` module.
-   - Example:
-      ```yaml
-      alerts:
-         notifications:
-            enabled: true
-      ```
+```yaml
+alerts:
+  # Alert retention policy
+  retention:
+    max_days: 30           # Keep alerts for 30 days
+    max_entries: 1000      # Keep at most 1000 alerts per task
+    per_severity:
+      critical: 90         # Keep critical alerts for 90 days
+      warning: 30          # Keep warning alerts for 30 days
+      info: 7              # Keep info alerts for 7 days
+  
+  # Alert notification settings (when task output matches alert patterns)
+  notifications:
+    enabled: true          # Enable/disable alert notifications globally
+    on_failure_only: true  # Only send notifications for critical/warning alerts (not info)
+                           # Can be overridden per-alert with "notify" or "on_failure_only" fields
 
-- **Storage:**
-   - Store alert logs in a simple file-based structure, similar to existing logs and runtime data.
-   - Alert logs can be placed in `logs/<script>/alerts`.
+# Group notification settings (summary notifications after running groups)
+group_notifications:
+  enabled: true            # Enable/disable group execution summary notifications
+  on_failure_only: true    # Only send notifications when tasks in the group fail
+  show_failed_names: true  # Include failed task names in notifications
+```
 
-- **Filtering & Suppression:**
-   - Filtering and suppression will be handled at the CLI level for v1 (e.g., `signalbox alerts --critical`, `signalbox alerts script-name --info`).
+### Per-Alert Overrides
 
-- **UI/GUI:**
-   - No UI commands or controls for v1; focus is on CLI and config-driven management.
+You can override notification settings for individual alerts:
+
+```yaml
+tasks:
+  - name: my_task
+    alerts:
+      # This info alert will send notifications (overriding global on_failure_only)
+      - pattern: "Success"
+        message: "Task completed successfully"
+        severity: info
+        title: "Task Success"
+        notify: true           # Force notification
+        on_failure_only: false # Always notify
+      
+      # This critical alert won't send notifications
+      - pattern: "ERROR"
+        message: "Critical error detected"
+        severity: critical
+        notify: false  # Disable notification (still logged to console and storage)
+```
+
+**Override precedence:**
+1. Per-alert setting (`notify`, `on_failure_only`) - highest priority
+2. Global setting (`alerts.notifications.*`) - fallback
+
+## Implementation Status
+
+### ✅ Completed (v1)
+
+1. **Alert Pattern Matching**
+   - Tasks can define multiple alert conditions using regex patterns
+   - Alerts are checked after task execution against stdout/stderr output
+
+2. **Alert Storage**
+   - Alerts are stored in `logs/<task_name>/alerts/alerts.jsonl`
+   - Each alert includes: pattern, message, severity, title, timestamp, task name
+
+3. **Alert Notifications**
+   - Integrated with existing `notifications.py` module
+   - Global configuration via `alerts.notifications` in signalbox.yaml
+   - Per-alert overrides with `notify` and `on_failure_only` fields
+   - Custom notification titles with `title` field
+
+4. **Retention Policy**
+   - Configurable retention by days, entry count, and per-severity
+   - Automatic pruning of old alerts
+
+5. **CLI Command**
+   - `signalbox alerts` - List recent alerts
+   - Filtering by task name and severity
+
+6. **Notification Types**
+   - **Alert notifications**: When task output matches alert patterns
+   - **Group notifications**: Summary after running groups of tasks
+   - Clear separation in configuration (alerts vs group_notifications)
+
+### 🔄 Future Enhancements
+
+- Alert deduplication and grouping
+- Additional notification channels (email, Slack, webhooks)
+- Alert suppression rules
+- Alert escalation based on repeated occurrences
+- Web dashboard for alert history
+- Alert acknowledgment system
 
 ---
-This design doc provides a foundation for implementing robust, user-driven alerts in Signalbox. Feedback and suggestions are welcome.
-
----
-
-## Step-by-Step Implementation Plan (v1)
-
-1. **Update Configuration Schema**
-   - Add `alerts.retention` and `alerts.notifications.enabled` options to both global (signalbox.yaml) and local script YAML schemas.
-   - Support `max_days`, `max_entries`, and `per_severity` for retention.
-
-2. **Alert Logging Structure**
-   - Create a directory structure for alert logs: `logs/<script>/alerts`.
-   - Store each alert as a line or record (e.g., JSON or plain text) with timestamp, severity, message, and script name.
-
-3. **Retention Enforcement**
-   - On alert log write or periodically, prune old alerts based on `max_days`, `max_entries`, and `per_severity` settings.
-
-4. **Notification Logic**
-   - Check the `enabled` flag (global and local) before sending notifications.
-   - Use the existing `notifications.py` module to send notifications for new alerts.
-
-5. **CLI Filtering**
-   - Update the `signalbox alerts` CLI to support filtering by severity (`--critical`, `--info`, etc.) and by script name (`signalbox alerts <script_name>`).
-
-6. **Documentation**
-   - Update user documentation and config guides to explain new alert retention and notification options.
-
-7. **Testing**
-   - Add tests for retention logic, notification enable/disable, and CLI filtering.
-
-8. **Review and Iterate**
-   - Gather feedback from users and refine retention, notification, and filtering features as needed.
+This design doc reflects the implemented alert system in Signalbox. Feedback and suggestions for future enhancements are welcome.
