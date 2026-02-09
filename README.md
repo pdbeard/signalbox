@@ -14,51 +14,32 @@ signalbox is a CLI tool for managing, executing, and monitoring scripts with det
 
 ## Installation
 
+### Recommended: Global Install with pipx
 
-### Quick Install (Recommended)
+Install pipx if you don't have it:
 
-For user-level installation (no root required):
+    python3 -m pip install --user pipx
+    python3 -m pipx ensurepath
 
+Then install signalbox globally from your local source:
+
+    pipx install .
+
+This makes the `signalbox` command available globally, in an isolated environment.
+
+### Local Development Install
+
+If you want to develop or test signalbox locally, you can also use a virtual environment:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -e .[dev]
+
+When developing, you can run directly from the project directory without `signalbox init`:
 ```bash
-pip install . --user
+python signalbox.py list  # Uses config/ in current directory
 ```
-
-This installs signalbox and all dependencies, making the `signalbox` command available in your PATH.
-
-Notes for Arch Linux (PEP 668)
-- Arch and similar distros may block pip installs.
-
-Recommended alternatives
-- Using a virtual environment:
-```bash
-python -m venv ~/venvs/signalbox
-source ~/venvs/signalbox/bin/activate
-pip install .
-```
-
-- Using pipx:
-```bash
-# Install pipx if needed
-sudo pacman -S python-pipx
-pipx install .
-```
-If a previous user-level install created a conflicting symlink:
-```bash
-rm ~/.local/bin/signalbox
-pipx install .
-```
-
-**Note:** If you install with pipx and the `signalbox` command is not found, you may need to add pipx's bin directory to your PATH. By default, this is `~/.local/bin`. Add the following to your shell profile (e.g., `~/.bashrc`, `~/.zshrc`):
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-Then restart your terminal or run `source ~/.bashrc` (or the relevant file for your shell).
-
-- breaking system protection (not recommended unless you understand the risks. But quick and easy!)
-```bash
-pip install . --user --break-system-packages
-```
+This does not install globally.
 
 ### Initialize Configuration
 After installation, set up your configuration directory:
@@ -88,16 +69,8 @@ signalbox list  # Uses config from custom location
 ```
 
 ### Development Install
-For development with editable install and dev tools:
-```bash
-pip install -e ".[dev]"
-```
 
-When developing, you can run directly from the project directory without `signalbox init`:
-```bash
-cd /path/to/signalbox
-python signalbox.py list  # Uses config/ in current directory
-```
+
 
 ## DEMO VID? 
 

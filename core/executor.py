@@ -46,7 +46,7 @@ def run_task(name, config):
     # Reload config with warnings suppressed for script execution
     config = config_mod.load_config(suppress_warnings=True)
 
-    script = next((s for s in config["scripts"] if s["name"] == name), None)
+    script = next((s for s in config["tasks"] if s["name"] == name), None)
     if not script:
         raise ScriptNotFoundError(name)
 
@@ -102,7 +102,7 @@ def run_task(name, config):
         status = "success" if result.returncode == 0 else "failed"
         click.echo(f"Script {name} {status}. Log: {log_file}")
 
-        script_source_file = config["_script_sources"].get(name)
+        script_source_file = config["_task_sources"].get(name)
         if script_source_file:
             save_script_runtime_state(name, script_source_file, timestamp, status)
 
@@ -133,12 +133,12 @@ def run_group_parallel(script_names, config):
     def run_task_wrapper(task_name):
         """Wrapper for parallel execution that catches exceptions."""
         try:
-            click.echo(f"Running {script_name}...")
+            click.echo(f"Running {task_name}...")
             success = run_task(task_name, config)
-            return (script_name, success, None)
+            return (task_name, success, None)
         except Exception as e:
             click.echo(f"Error: {e.message if hasattr(e, 'message') else str(e)}")
-            return (script_name, False, str(e))
+            return (task_name, False, str(e))
 
     # Execute scripts in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

@@ -14,3 +14,5 @@
 #     schedule: "0 2 * * *"  # Optional cron expression
 #
 # You can delete this file once you add your own groups.
+
+groups: []

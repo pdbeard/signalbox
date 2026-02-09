@@ -96,7 +96,7 @@ def rotate_logs(script):
     import tempfile
 
     name = script["name"]
-    script_log_dir = get_script_log_dir(name)
+    script_log_dir = get_task_log_dir(name)
 
     if not os.path.exists(script_log_dir):
         return
@@ -178,7 +178,7 @@ def get_latest_log(script_name):
             tuple: (log_path, log_exists) where log_path is the path to the latest log
                    and log_exists is True if logs were found
     """
-    script_log_dir = get_script_log_dir(script_name)
+    script_log_dir = get_task_log_dir(script_name)
 
     if not os.path.exists(script_log_dir):
         return None, False
@@ -227,7 +227,7 @@ def get_log_history(script_name):
             tuple: (log_files_info, history_exists) where log_files_info is a list of
                    tuples (filename, timestamp) sorted newest first
     """
-    script_log_dir = get_script_log_dir(script_name)
+    script_log_dir = get_task_log_dir(script_name)
 
     if not os.path.exists(script_log_dir):
         return [], False
@@ -253,7 +253,7 @@ def clear_script_logs(script_name):
     Returns:
             bool: True if logs were found and cleared, False otherwise
     """
-    script_log_dir = get_script_log_dir(script_name)
+    script_log_dir = get_task_log_dir(script_name)
 
     if not os.path.exists(script_log_dir):
         return False

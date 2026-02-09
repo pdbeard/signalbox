@@ -1,0 +1,15 @@
+# Basic Tasks Examples
+#
+# ⚠️  IMPORTANT: These are EXAMPLE tasks for learning and getting started.
+# These tasks are NOT meant for production use - they are educational tools!
+
+tasks:
+- name: hello
+  description: Print hello message
+  command: echo "Hello from signalbox!"
+- name: show_date
+  description: Show the current date
+  command: date
+- name: current_dir
+  description: Show current directory
+  command: pwd

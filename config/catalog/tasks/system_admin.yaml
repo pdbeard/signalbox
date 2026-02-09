@@ -1,0 +1,12 @@
+# System Admin Tasks Examples
+#
+# ⚠️  IMPORTANT: These are EXAMPLE tasks for learning and getting started.
+# These tasks are NOT meant for production use - they are educational tools!
+#
+tasks:
+- name: check_ssl_certificate
+  description: Check SSL certificate expiration
+  command: openssl s_client -connect example.com:443 -servername example.com < /dev/null 2>/dev/null | openssl x509 -noout -dates
+- name: check_dns_resolution
+  description: Check DNS resolution
+  command: nslookup example.com

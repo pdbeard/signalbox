@@ -155,26 +155,26 @@ class ConfigManager:
 
     def save_config(self, config):
         """Save configuration back to original source files."""
-        scripts_path = self.get_config_value("paths.scripts_file", SCRIPTS_FILE)
-        scripts_path = self.resolve_path(scripts_path)
-        script_sources = config.get("_script_sources", {})
-        if "scripts" in config and os.path.isdir(scripts_path):
+        tasks_path = self.get_config_value("paths.tasks_file", TASKS_FILE)
+        tasks_path = self.resolve_path(tasks_path)
+        task_sources = config.get("_task_sources", {})
+        if "tasks" in config and os.path.isdir(tasks_path):
             files_to_save = {}
-            for script in config["scripts"]:
-                script_name = script.get("name")
-                source_file = script_sources.get(script_name)
+            for task in config["tasks"]:
+                task_name = task.get("name")
+                source_file = task_sources.get(task_name)
                 if source_file and os.path.exists(source_file):
                     if source_file not in files_to_save:
                         files_to_save[source_file] = []
-                    files_to_save[source_file].append(script)
+                    files_to_save[source_file].append(task)
                 else:
-                    new_file = os.path.join(scripts_path, "_new.yaml")
+                    new_file = os.path.join(tasks_path, "_new.yaml")
                     if new_file not in files_to_save:
                         files_to_save[new_file] = []
-                    files_to_save[new_file].append(script)
-            for filepath, scripts in files_to_save.items():
+                    files_to_save[new_file].append(task)
+            for filepath, tasks in files_to_save.items():
                 with open(filepath, "w") as f:
-                    yaml.dump({"scripts": scripts}, f, default_flow_style=False, sort_keys=False)
+                    yaml.dump({"tasks": tasks}, f, default_flow_style=False, sort_keys=False)
         if "groups" in config:
             groups_path = self.get_config_value("paths.groups_file", GROUPS_FILE)
             groups_path = self.resolve_path(groups_path)
@@ -231,7 +231,7 @@ def get_config_value(path, default=None):
 
 
 def load_config(suppress_warnings=False):
-    """Load configuration from scripts and groups directories."""
+    """Load configuration from tasks and groups directories."""
     return _default_config_manager.load_config(suppress_warnings=suppress_warnings)
 
 

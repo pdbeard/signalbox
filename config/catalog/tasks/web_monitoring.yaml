@@ -4,14 +4,9 @@
 # These tasks are NOT meant for production use - they are educational tools!
 #
 tasks:
-- name: check_website_health
-  description: Check website status
-  command: curl -s -o /dev/null -w "%{http_code}" https://example.com
-
-
-- name: check_website_health2
+- name: google_status
   description: Check if main website is responding
-  command: "URL=https://httpbin.org/status/200; if curl -f -s -o /dev/null $URL; then echo OK $URL; else echo DOWN $URL; fi"
+  command: "URL=https://google.com; if curl -f -s -o /dev/null $URL; then echo OK $URL; else echo DOWN $URL; fi"
   log_limit:
     type: count
     value: 5
