@@ -115,17 +115,15 @@ def notify_execution_result(total, passed, failed, context="scripts", failed_nam
     Returns:
         bool: True if notification sent successfully
     """
-    # Default config
-    enabled = True
-    on_failure_only = True
-    show_failed_names = True
-
-    # Override with config if provided
-    if config and "notifications" in config:
-        notif_config = config["notifications"]
-        enabled = notif_config.get("enabled", True)
-        on_failure_only = notif_config.get("on_failure_only", True)
-        show_failed_names = notif_config.get("show_failed_names", True)
+    from .config import get_config_value
+    
+    # Get settings from global config (use new key group_notifications, fallback to old notifications key)
+    enabled = get_config_value("group_notifications.enabled", 
+                              get_config_value("notifications.enabled", True))
+    on_failure_only = get_config_value("group_notifications.on_failure_only", 
+                                       get_config_value("notifications.on_failure_only", True))
+    show_failed_names = get_config_value("group_notifications.show_failed_names", 
+                                         get_config_value("notifications.show_failed_names", True))
 
     # Check if we should send notification
     if not enabled:

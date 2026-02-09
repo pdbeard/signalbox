@@ -186,32 +186,65 @@ main();
 ```
 
 
-## Adding Alerts to Scripts
+## Adding Alerts to Tasks
 
-You can define alerts in your script YAML to monitor for specific output patterns and trigger notifications.
+You can define alerts in your task YAML to monitor for specific output patterns and trigger notifications.
 
 ### Example
 
 ```yaml
-scripts:
+tasks:
     - name: check_website_health
         command: ./check_website.sh
         description: Check website status
         alerts:
             - pattern: "HTTP 5.."
+                title: "Website Error"
                 message: "[CRITICAL] Website returned 5xx error!"
                 severity: critical
             - pattern: "timeout"
+                title: "Connection Timeout"
                 message: "[Warning] Website check timed out"
                 severity: warning
+            - pattern: "^OK"
+                title: "Website Status"
+                message: "Website is healthy"
+                severity: info
+                notify: true           # Override: send notification for info alert
+                on_failure_only: false # Override: always notify
 ```
 
 **Alert fields:**
 - `pattern` (required): Regex or substring to match in output
 - `message` (required): Message to log/notify
-- `severity` (optional): `info`, `warning`, `critical` (default: info)
+- `severity` (optional): `info`, `warning`, `critical` (default: `info`)
+- `title` (optional): Custom notification title (default: `"Alert: {task_name}"`)
+- `notify` (optional): Override global `alerts.notifications.enabled` setting
+- `on_failure_only` (optional): Override global `alerts.notifications.on_failure_only` setting
 
-Alerts are checked after script execution. If a pattern matches, the alert is logged and (if enabled) a notification is sent.
+Alerts are checked after task execution. If a pattern matches, the alert is:
+1. Always logged to console and alert storage
+2. Optionally sends a notification (based on global config and per-alert overrides)
+
+### Per-Alert Notification Control
+
+You can control notifications for individual alerts:
+
+```yaml
+alerts:
+  # This info alert will send notifications (overriding global on_failure_only)
+  - pattern: "Backup complete"
+    message: "Daily backup successful"
+    severity: info
+    notify: true           # Force notification
+    on_failure_only: false # Always notify, even for info
+  
+  # This critical alert won't send notifications
+  - pattern: "ERROR"
+    message: "Error detected"
+    severity: critical
+    notify: false  # Disable notification (still logged)
+```
 
 ### Viewing Alerts
 

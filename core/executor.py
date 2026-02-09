@@ -79,23 +79,39 @@ def run_task(name, config):
 
         # Save and optionally notify for each triggered alert
         if triggered_alerts:
-            alerts_enabled = get_config_value("alerts.notifications.enabled", True)
+            global_alerts_enabled = get_config_value("alerts.notifications.enabled", True)
+            global_on_failure_only = get_config_value("alerts.notifications.on_failure_only", True)
+            
             for alert in triggered_alerts:
                 alerts.save_alert(name, alert)
 
-                # Send notification if alerts are enabled
+                # Always log to console
+                severity_label = alert["severity"].upper()
+                click.echo(f"  [{severity_label}] {alert['message']}")
+
+                # Check if notifications are enabled (global or per-alert override)
+                alert_notify = alert.get("notify")
+                if alert_notify is False:
+                    continue  # Skip notification but alert was already logged
+                alerts_enabled = alert_notify if alert_notify is not None else global_alerts_enabled
+                
                 if alerts_enabled:
+                    # Check on_failure_only setting (global or per-alert override)
+                    alert_on_failure_only = alert.get("on_failure_only")
+                    on_failure_only = alert_on_failure_only if alert_on_failure_only is not None else global_on_failure_only
+                    
+                    alert_severity = alert.get("severity", "info")
+                    if on_failure_only and alert_severity == "info":
+                        # Skip notification for info-level alerts when on_failure_only is enabled
+                        continue
+                    
                     # Use custom title if provided, otherwise default to "Alert: {task_name}"
                     alert_title = alert.get("title") or f"Alert: {name}"
                     notifications.send_notification(
                         title=alert_title,
                         message=alert["message"],
-                        urgency="critical" if alert["severity"] == "critical" else "normal",
+                        urgency="critical" if alert_severity == "critical" else "normal",
                     )
-
-                # Log to console
-                severity_label = alert["severity"].upper()
-                click.echo(f"  [{severity_label}] {alert['message']}")
 
         # Rotate old logs
         rotate_logs(script)

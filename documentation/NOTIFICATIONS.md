@@ -1,31 +1,47 @@
 # Notifications Guide
 
-Signalbox includes a cross-platform desktop notification system that can alert you when scripts complete, especially useful for monitoring scheduled executions.
+Signalbox includes a cross-platform desktop notification system with two types of notifications:
+1. **Alert notifications** - When task output matches alert patterns
+2. **Group notifications** - Summary after running groups of tasks
 
 ## Features
 
 - **Cross-platform support:** Works on macOS and Linux
 - **Smart notifications:** Only notify on failures by default (configurable)
-- **Summary messages:** Shows pass/fail counts and failed script names
+- **Per-alert overrides:** Control notifications at the alert level
+- **Custom titles:** Set custom notification titles for alerts
+- **Summary messages:** Shows pass/fail counts and failed task names
 - **Urgency levels:** Critical notifications for failures (Linux)
 - **Zero dependencies:** Uses native OS tools (osascript on macOS, notify-send on Linux)
 
 ## Configuration
 
-Add a `notifications` section to your `~/.config/signalbox/config/signalbox.yaml`:
+Add these sections to your `~/.config/signalbox/config/signalbox.yaml`:
 
 ```yaml
-notifications:
-  enabled: true              # Enable/disable notifications
-  on_failure_only: true      # Only notify when scripts fail (recommended)
-  show_failed_names: true    # Include names of failed scripts (up to 3)
+# Alert notifications (when task output matches alert patterns)
+alerts:
+  notifications:
+    enabled: true          # Enable/disable alert notifications
+    on_failure_only: true  # Only notify for critical/warning (not info)
+
+# Group notifications (summary after running groups)
+group_notifications:
+  enabled: true            # Enable/disable group summary notifications
+  on_failure_only: true    # Only notify when tasks in the group fail
+  show_failed_names: true  # Include failed task names
 ```
 
-### Configuration Options
+### Alert Notification Options
 
-- **`enabled`** (default: `true`): Master switch for notifications
-- **`on_failure_only`** (default: `true`): If true, only send notifications when scripts fail; if false, always notify
-- **`show_failed_names`** (default: `true`): If true and ≤3 scripts failed, include their names in the notification message
+- **`alerts.notifications.enabled`** (default: `true`): Enable/disable alert notifications globally
+- **`alerts.notifications.on_failure_only`** (default: `true`): If true, only send notifications for critical/warning alerts (not info severity)
+
+### Group Notification Options
+
+- **`group_notifications.enabled`** (default: `true`): Enable/disable group execution summary notifications
+- **`group_notifications.on_failure_only`** (default: `true`): If true, only send notifications when tasks fail; if false, always notify
+- **`group_notifications.show_failed_names`** (default: `true`): If true and ≤3 tasks failed, include their names in the notification message
 
 ## Testing Notifications
 
@@ -113,27 +129,67 @@ If notifications aren't appearing, check:
 ### Silent Failures
 Signalbox will log warnings if notifications fail but won't crash script execution. Check logs at `~/.config/signalbox/logs/` for details.
 
+## Per-Alert Overrides
+
+You can override notification settings for individual alerts in your task configuration:
+
+```yaml
+tasks:
+  - name: check_website
+    command: ./check.sh
+    alerts:
+      - pattern: "^OK"
+        message: "Website is up"
+        severity: info
+        notify: true           # Override: send notification even for info
+        on_failure_only: false # Override: always notify for this alert
+      - pattern: "^DOWN"
+        message: "Website is down!"
+        severity: critical
+        notify: false          # Override: disable notification for this alert
+```
+
+**Override precedence:**
+1. Per-alert setting (`notify`, `on_failure_only`) - highest priority
+2. Global setting (`alerts.notifications.*`) - fallback
+
 ## Examples
 
-### Notify only on critical failures
+### Alert notifications only for critical/warning
 ```yaml
-notifications:
+alerts:
+  notifications:
+    enabled: true
+    on_failure_only: true  # Skip info alerts
+```
+
+### Group notifications only on failures
+```yaml
+group_notifications:
   enabled: true
   on_failure_only: true
   show_failed_names: true
 ```
 
-### Always notify (useful for important scheduled tasks)
+### Always notify for both alerts and groups
 ```yaml
-notifications:
+alerts:
+  notifications:
+    enabled: true
+    on_failure_only: false  # Notify for all severities
+
+group_notifications:
   enabled: true
-  on_failure_only: false
-  show_failed_names: true
+  on_failure_only: false  # Notify on success too
 ```
 
-### Disable notifications
+### Disable all notifications
 ```yaml
-notifications:
+alerts:
+  notifications:
+    enabled: false
+
+group_notifications:
   enabled: false
 ```
 

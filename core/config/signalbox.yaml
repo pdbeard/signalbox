@@ -54,15 +54,17 @@ alerts:
       warning: 30          # Keep warning alerts for 30 days
       info: 7              # Keep info alerts for 7 days
   
-  # Notification settings for alerts
+  # Alert notification settings (when task output matches alert patterns)
   notifications:
     enabled: true          # Enable/disable alert notifications globally
+    on_failure_only: true  # Only send notifications for critical/warning alerts (not info)
+                           # Can be overridden per-alert with "notify: true/false" or "on_failure_only: true/false"
 
-# Notification settings
-notifications:
-  enabled: true            # Enable/disable all notifications
-  on_failure_only: true    # Only send notifications on failures
-  show_failed_names: true  # Include failed script/group names in notifications
+# Group notification settings (summary notifications after running groups)
+group_notifications:
+  enabled: true            # Enable/disable group execution summary notifications
+  on_failure_only: true    # Only send notifications when tasks in the group fail
+  show_failed_names: true  # Include failed task names in notifications
 
 # Display settings
 display:

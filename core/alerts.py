@@ -57,6 +57,8 @@ def check_alert_patterns(script_name, script_config, output):
                     "message": alert.get("message", pattern),
                     "severity": alert.get("severity", "info"),
                     "title": alert.get("title"),
+                    "notify": alert.get("notify"),  # Per-alert override for notification
+                    "on_failure_only": alert.get("on_failure_only"),  # Per-alert override
                     "timestamp": format_timestamp(datetime.now()),
                     "script_name": script_name,
                 }
