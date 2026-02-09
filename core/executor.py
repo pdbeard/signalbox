@@ -85,8 +85,10 @@ def run_task(name, config):
 
                 # Send notification if alerts are enabled
                 if alerts_enabled:
+                    # Use custom title if provided, otherwise default to "Alert: {task_name}"
+                    alert_title = alert.get("title") or f"Alert: {name}"
                     notifications.send_notification(
-                        title=f"Alert: {name}",
+                        title=alert_title,
                         message=alert["message"],
                         urgency="critical" if alert["severity"] == "critical" else "normal",
                     )

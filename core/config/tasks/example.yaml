@@ -12,5 +12,10 @@ tasks:
     log_limit:
       type: count
       value: 10
+    alerts:
+      - pattern: "Error"
+        title: "My Task Error Alert"  # Optional: custom title for notifications
+        message: "An error occurred"
+        severity: critical
 #
 # You can delete this file once you add your own tasks.

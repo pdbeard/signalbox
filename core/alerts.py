@@ -56,6 +56,7 @@ def check_alert_patterns(script_name, script_config, output):
                     "pattern": pattern,
                     "message": alert.get("message", pattern),
                     "severity": alert.get("severity", "info"),
+                    "title": alert.get("title"),
                     "timestamp": format_timestamp(datetime.now()),
                     "script_name": script_name,
                 }

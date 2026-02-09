@@ -12,8 +12,10 @@ tasks:
     value: 5
   alerts:
     - pattern: "^OK "
+      title: "Google Status Check"
       message: "Website is up."
       severity: info
     - pattern: "^DOWN "
+      title: "Google Outage Alert"
       message: "Website is down!"
       severity: critical
