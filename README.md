@@ -58,14 +58,29 @@ This creates `~/.config/signalbox/` with:
 
 ### Configuration Location
 Signalbox looks for configuration in the following order:
-1. **`$SIGNALBOX_HOME`** - Custom location via environment variable
-2. **`~/.config/signalbox/`** - User configuration directory (created by `signalbox init`)
-3. **Current directory** - For development or project-specific configurations
+1. **`$SIGNALBOX_HOME`** - Custom location via environment variable (highest priority)
+2. **`$XDG_CONFIG_HOME/signalbox`** - XDG Base Directory specification (if XDG_CONFIG_HOME is set)
+3. **`~/.config/signalbox/`** - User configuration directory (created by `signalbox init`)
+4. **Current directory** - For development or project-specific configurations (if `config/signalbox.yaml` exists)
 
-**Custom location example:**
+**Custom location examples:**
 ```bash
+# Explicit override
 export SIGNALBOX_HOME=/path/to/your/config
 signalbox list  # Uses config from custom location
+
+# XDG Base Directory support
+export XDG_CONFIG_HOME=~/.local/config
+signalbox init  # Creates config in ~/.local/config/signalbox
+
+# Development/local config
+cd /path/to/project
+signalbox list  # Uses ./config/signalbox.yaml if it exists
+```
+
+**Note:** If you have `XDG_CONFIG_HOME` set from testing, you can clear it with:
+```bash
+unset XDG_CONFIG_HOME
 ```
 
 ## DEMO VID? 

@@ -37,8 +37,9 @@ class ConfigManager:
         1. Constructor override (if provided)
         2. SIGNALBOX_HOME environment variable
         3. XDG_CONFIG_HOME/signalbox if XDG_CONFIG_HOME is set
-        4. ~/.config/signalbox (default fallback)
-        5. Current working directory (last resort)
+        4. ~/.config/signalbox (if it exists and has config)
+        5. Current working directory (if config/signalbox.yaml exists locally)
+        6. ~/.config/signalbox (final fallback for init)
         """
         if self._config_home is not None:
             return self._config_home
@@ -61,13 +62,19 @@ class ConfigManager:
             self._config_home = xdg_path
             return self._config_home
 
-        # 3. ~/.config/signalbox
+        # 3. ~/.config/signalbox (if it exists with config)
         user_config = os.path.expanduser("~/.config/signalbox")
         if os.path.isdir(user_config) and os.path.exists(os.path.join(user_config, "config/signalbox.yaml")):
             self._config_home = user_config
             return self._config_home
 
-        # 4. Fallback: use ~/.config/signalbox as preferred location for init
+        # 4. Current directory (for development/project-specific configs)
+        cwd = os.getcwd()
+        if os.path.exists(os.path.join(cwd, "config/signalbox.yaml")):
+            self._config_home = cwd
+            return self._config_home
+
+        # 5. Final fallback: use ~/.config/signalbox (for init command)
         self._config_home = user_config
         return self._config_home
 
