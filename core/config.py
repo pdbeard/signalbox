@@ -36,28 +36,39 @@ class ConfigManager:
         Priority order:
         1. Constructor override (if provided)
         2. SIGNALBOX_HOME environment variable
-        3. ~/.config/signalbox/ if it exists
-        4. Current working directory
+        3. XDG_CONFIG_HOME/signalbox if XDG_CONFIG_HOME is set
+        4. ~/.config/signalbox (default fallback)
+        5. Current working directory (last resort)
         """
         if self._config_home is not None:
             return self._config_home
 
-        # Check SIGNALBOX_HOME environment variable
+        # 1. SIGNALBOX_HOME
         env_home = os.environ.get("SIGNALBOX_HOME")
         if env_home:
             env_home = os.path.expanduser(env_home)
-            if os.path.isdir(env_home):
-                self._config_home = env_home
-                return self._config_home
+            self._config_home = env_home
+            return self._config_home
 
-        # Check ~/.config/signalbox/
+        # 2. XDG_CONFIG_HOME
+        xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+        if xdg_config_home:
+            xdg_path = os.path.expanduser(os.path.join(xdg_config_home, "signalbox"))
+            if os.path.isdir(xdg_path) and os.path.exists(os.path.join(xdg_path, "config/signalbox.yaml")):
+                self._config_home = xdg_path
+                return self._config_home
+            # If directory doesn't exist, still use as preferred location for init
+            self._config_home = xdg_path
+            return self._config_home
+
+        # 3. ~/.config/signalbox
         user_config = os.path.expanduser("~/.config/signalbox")
         if os.path.isdir(user_config) and os.path.exists(os.path.join(user_config, "config/signalbox.yaml")):
             self._config_home = user_config
             return self._config_home
 
-        # Fall back to current working directory
-        self._config_home = os.getcwd()
+        # 4. Fallback: use ~/.config/signalbox as preferred location for init
+        self._config_home = user_config
         return self._config_home
 
     def resolve_path(self, path):

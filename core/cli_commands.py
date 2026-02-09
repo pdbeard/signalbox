@@ -16,29 +16,61 @@ from . import validator
 from . import exporters
 from . import notifications
 from . import alerts
-from .exceptions import SignalboxError, TaskNotFoundError, GroupNotFoundError
+from .exceptions import SignalboxError, TaskNotFoundError, GroupNotFoundError, ValidationError, ConfigurationError
 from .helpers import format_timestamp, parse_timestamp
 def handle_exceptions(func):
-    """Decorator to handle exceptions consistently across CLI commands."""
+    """Decorator to handle exceptions consistently across CLI commands with proper exit codes."""
 
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except KeyboardInterrupt:
+            click.echo("\nInterrupted by user", err=True)
+            sys.exit(130)
+        except (ValidationError, ConfigurationError, FileNotFoundError) as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(2)
+        except PermissionError as e:
+            click.echo(f"Permission Denied: {e}", err=True)
+            sys.exit(126)
         except SignalboxError as e:
             click.echo(f"Error: {e.message}", err=True)
             sys.exit(e.exit_code)
         except Exception as e:
             click.echo(f"Unexpected error: {str(e)}", err=True)
+            if os.getenv("DEBUG"):
+                import traceback
+                traceback.print_exc()
             sys.exit(1)
 
     return wrapper
 
-@click.group()
+@click.group(
+    help="""
+Signalbox - Task automation and monitoring.
+
+\b
+PRIMARY COMMANDS:
+  task            Manage and run tasks (run, list)
+  group           Manage and run task groups
+  log             View and manage execution logs
+  config          Configuration management
+  
+\b
+QUICK COMMANDS (shortcuts):
+  run NAME        Run a task
+  list            List all tasks
+  validate        Validate configuration
+
+\b
+Run 'signalbox COMMAND --help' for more information on a command.
+"""
+)
 @click.option("--config", "-c", "config_path", default=None, help="Path to custom signalbox.yaml config file")
 @click.version_option(importlib.metadata.version("signalbox"), "--version", "-V", message="%(version)s")
 def cli(config_path):
-    """signalbox - Task execution control and monitoring."""
+    """Signalbox - Task execution control and monitoring."""
     if config_path:
         # Set config home to the directory containing the custom config file
         import os
@@ -49,10 +81,82 @@ def cli(config_path):
         _default_config_manager._global_config = None
 
 
+# ============================================================================
+# Command Groups
+# ============================================================================
+
+@cli.group()
+def task():
+    """
+    Manage and run tasks.
+    
+    \b
+    Commands:
+      run [NAME|--all]   Run a single task or all tasks
+      list               List all configured tasks with status
+    """
+    pass
+
+
+@cli.group()
+def group():
+    """
+    Manage and run task groups.
+    
+    \b
+    Commands:
+      run NAME    Run a group of tasks
+      list        List all configured groups
+    """
+    pass
+
+
+@cli.group()
+def log():
+    """
+    View and manage execution logs.
+    
+    \b
+    Commands:
+      list [OPTIONS]     List all task execution logs with filters
+      show TASK          Show the latest log for a task
+      tail TASK          Follow log output in real-time
+      history TASK       Show all historical logs for a task
+      clear [OPTIONS]    Clear logs for tasks
+    """
+    pass
+
+
+@cli.group()
+def config():
+    """
+    Configuration management.
+    
+    \b
+    Commands:
+      show [KEY]    Show configuration (all or specific setting)
+      validate      Validate configuration files
+      path          Show configuration directory path
+    """
+    pass
+
+
+@cli.group()
+def runtime():
+    """Runtime state management commands."""
+    pass
+
+
+# ============================================================================
+# Root-Level Commands
+# ============================================================================
+
+
 @cli.command()
 def init():
-    """Initialize signalbox configuration in ~/.config/signalbox/"""
-    config_dir = os.path.expanduser("~/.config/signalbox")
+    """Initialize signalbox configuration in the appropriate config directory (XDG/SIGNALBOX_HOME supported)"""
+    from .config import find_config_home
+    config_dir = find_config_home()
 
     if os.path.exists(config_dir):
         click.echo(f"Configuration directory already exists: {config_dir}")
@@ -110,8 +214,41 @@ def init():
     click.echo("   You can now run signalbox from any directory!")
 
 
-@cli.command()
-def list():
+# Root-level shortcuts for frequently used commands
+@cli.command(name="run")
+@click.argument("name")
+@handle_exceptions
+def run_shortcut(name):
+    """Run a task (shortcut to 'task run <name>')."""
+    os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
+    config = load_config(suppress_warnings=True)
+    run_task(name, config)
+
+
+@cli.command(name="list")
+def list_shortcut():
+    """List all tasks (shortcut to 'task list')."""
+    from click import Context
+    ctx = Context(task_list)
+    ctx.invoke(task_list)
+
+
+@cli.command(name="validate")
+@handle_exceptions
+def validate_shortcut():
+    """Validate configuration (shortcut to 'config validate')."""
+    # Will be defined later in the file, so we import it dynamically
+    from click import Context
+    ctx = Context(config_validate)
+    ctx.invoke(config_validate)
+
+
+# ============================================================================
+# Task Commands
+# ============================================================================
+
+@task.command(name="list")
+def task_list():
     """List all tasks and their status, grouped by config file."""
     config = load_config()
     runtime_state = load_runtime_state()
@@ -163,40 +300,60 @@ def list():
                 click.echo(f"{label}{msg}", err=True)
 
 
-@cli.command()
+@task.command(name="run")
+@click.argument("name", required=False)
+@click.option("--all", "run_all_tasks", is_flag=True, help="Run all tasks")
+@handle_exceptions
+def task_run(name, run_all_tasks):
+    """Run a single task or all tasks."""
+    if run_all_tasks:
+        import os
+        os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
+        config = load_config(suppress_warnings=True)
+        click.echo("Running all tasks...")
+        failed_tasks = []
+        
+        for task_item in config["tasks"]:
+            click.echo(f"Running {task_item['name']}...")
+            try:
+                success = run_task(task_item["name"], config)
+                if not success:
+                    failed_tasks.append(task_item['name'])
+            except SignalboxError as e:
+                click.echo(f"Error: {e.message}", err=True)
+                failed_tasks.append(task_item['name'])
+            except Exception as e:
+                click.echo(f"Error: {str(e)}", err=True)
+                failed_tasks.append(task_item['name'])
+        
+        # Report results and exit with appropriate code
+        if failed_tasks:
+            click.echo(f"\n{len(failed_tasks)} task(s) failed: {', '.join(failed_tasks)}", err=True)
+            sys.exit(1)
+        else:
+            click.echo("\nAll tasks completed successfully")
+            sys.exit(0)
+    elif name:
+        import os
+        os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
+        config = load_config(suppress_warnings=True)
+        success = run_task(name, config)
+        if not success:
+            sys.exit(1)
+    else:
+        click.echo("Error: Provide task name or use --all", err=True)
+        sys.exit(2)
+
+
+# ============================================================================
+# Group Commands
+# ============================================================================
+
+
+@group.command(name="run")
 @click.argument("name")
 @handle_exceptions
-def run(name):
-    """Run a specific task by name."""
-    import os
-
-    os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
-    config = load_config(suppress_warnings=True)
-    run_task(name, config)
-
-
-@cli.command()
-@handle_exceptions
-def run_all():
-    """Run all tasks."""
-    import os
-
-    os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
-    config = load_config(suppress_warnings=True)
-    click.echo("Running all tasks...")
-    for task in config["tasks"]:
-        click.echo(f"Running {task['name']}...")
-        try:
-            run_task(task["name"], config)
-        except SignalboxError as e:
-            click.echo(f"Error: {e.message}", err=True)
-    click.echo("All tasks executed.")
-
-
-@cli.command("run-group")
-@click.argument("name")
-@handle_exceptions
-def run_group(name):
+def group_run(name):
     """Run a group of tasks."""
     config = load_config()
     groups = config.get("groups", [])
@@ -243,10 +400,14 @@ def run_group(name):
     click.echo(f"Group {name} executed.")
 
 
-@cli.command()
+# ============================================================================
+# Log Commands
+# ============================================================================
+
+@log.command(name="show")
 @click.argument("name")
 @handle_exceptions
-def logs(name):
+def log_show(name):
     """Show the latest log for a task."""
     config = load_config()
     task = next((t for t in config["tasks"] if t["name"] == name), None)
@@ -276,10 +437,10 @@ def logs(name):
             click.echo(line)
 
 
-@cli.command("log-history")
+@log.command(name="history")
 @click.argument("name")
 @handle_exceptions
-def log_history(name):
+def log_history_cmd(name):
     """Show all historical log files for a task."""
     config = load_config()
     task = next((t for t in config["tasks"] if t["name"] == name), None)
@@ -304,33 +465,196 @@ def log_history(name):
         click.echo(f"  {filename} - {time_str}")
 
 
-@cli.command()
-@click.argument("name")
+@log.command(name="list")
+@click.option("--task", help="Filter to specific task")
+@click.option("--status", type=click.Choice(["success", "failed"]), help="Filter by status")
+@click.option("--failed", is_flag=True, help="Shortcut for --status failed")
+@click.option("--success", is_flag=True, help="Shortcut for --status success")
+@click.option("--since", help="Show logs since date (YYYY-MM-DD)")
+@click.option("--until", help="Show logs until date (YYYY-MM-DD)")
+@click.option("--today", is_flag=True, help="Show only today's logs")
+@click.option("--last", "limit", type=int, default=50, help="Show last N runs (default: 50)")
 @handle_exceptions
-def clear_logs(name):
-    """Clear all logs for a specific task."""
+def log_list_cmd(task, status, failed, success, since, until, today, limit):
+    """List all task execution logs with filters."""
+    from datetime import datetime, timedelta
+    
+    # Get all logs
+    logs = log_manager.get_all_log_files()
+    
+    if not logs:
+        click.echo("No logs found")
+        return
+    
+    # Apply status shortcuts
+    if failed:
+        status = "failed"
+    elif success:
+        status = "success"
+    
+    # Parse date filters
+    since_dt = None
+    until_dt = None
+    
+    if today:
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        since_dt = today_start
+    elif since:
+        try:
+            since_dt = datetime.strptime(since, "%Y-%m-%d")
+        except ValueError:
+            click.echo(f"Error: Invalid date format for --since: {since}. Use YYYY-MM-DD", err=True)
+            sys.exit(2)
+    
+    if until:
+        try:
+            until_dt = datetime.strptime(until, "%Y-%m-%d")
+            until_dt = until_dt.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            click.echo(f"Error: Invalid date format for --until: {until}. Use YYYY-MM-DD", err=True)
+            sys.exit(2)
+    
+    # Filter logs
+    filtered_logs = log_manager.filter_logs(
+        logs, 
+        task=task, 
+        status=status, 
+        since=since_dt, 
+        until=until_dt,
+        limit=limit
+    )
+    
+    if not filtered_logs:
+        click.echo("No logs found matching filters")
+        return
+    
+    # Table output
+    date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
+    
+    # Column widths
+    max_task_len = max(len(log["task"]) for log in filtered_logs)
+    max_task_len = min(max_task_len, 30)  # Cap at 30 chars
+    
+    # Header
+    header = f"{'TASK':<{max_task_len}}  {'STATUS':<8}  {'TIMESTAMP':<19}  LOG FILE"
+    click.echo(header)
+    click.echo("─" * len(header))
+    
+    # Rows
+    for log in filtered_logs:
+        task_name = log["task"][:max_task_len]
+        status_str = log["metadata"]["status"]
+        timestamp_str = log["timestamp"].strftime(date_format)
+        log_file = log["log_file"]
+        
+        # Color code status
+        if status_str == "success":
+            status_display = click.style(status_str.ljust(8), fg="green")
+        elif status_str == "failed":
+            status_display = click.style(status_str.ljust(8), fg="red")
+        else:
+            status_display = status_str.ljust(8)
+        
+        click.echo(f"{task_name:<{max_task_len}}  {status_display}  {timestamp_str}  {log_file}")
+    
+    # Summary
+    click.echo()
+    click.echo(f"Total: {len(filtered_logs)} log(s)")
+
+
+@log.command(name="tail")
+@click.argument("name")
+@click.option("-f", "--follow", is_flag=True, default=True, help="Follow log output (default)")
+@click.option("-n", "--lines", type=int, default=10, help="Number of lines to show initially (default: 10)")
+@handle_exceptions
+def log_tail_cmd(name, follow, lines):
+    """Follow log output in real-time (like tail -f)."""
+    import time
+    import subprocess
+    
     config = load_config()
     task = next((t for t in config["tasks"] if t["name"] == name), None)
     if not task:
         raise TaskNotFoundError(name)
-
-    if log_manager.clear_task_logs(name):
-        click.echo(f"Cleared logs for {name}")
+    
+    log_path, exists = log_manager.get_latest_log(name)
+    if not exists:
+        click.echo(f"No logs found for task '{name}'")
+        click.echo("Waiting for new logs...")
+        
+        # Wait for log file to appear
+        task_log_dir = log_manager.get_task_log_dir(name)
+        while not exists:
+            time.sleep(0.5)
+            log_path, exists = log_manager.get_latest_log(name)
+    
+    click.echo(f"Following log: {log_path}")
+    click.echo("─" * 50)
+    
+    # Use tail -f on Unix-like systems
+    if os.name != 'nt':  # Not Windows
+        try:
+            subprocess.run(["tail", f"-n{lines}", "-f", log_path])
+        except KeyboardInterrupt:
+            click.echo("\nStopped following log")
     else:
-        click.echo(f"No logs found for {name}")
+        # Simple Python implementation for cross-platform
+        try:
+            with open(log_path, 'r') as f:
+                # Show last N lines
+                lines_buffer = []
+                for line in f:
+                    lines_buffer.append(line)
+                    if len(lines_buffer) > lines:
+                        lines_buffer.pop(0)
+                
+                for line in lines_buffer:
+                    click.echo(line, nl=False)
+                
+                # Follow new content
+                if follow:
+                    while True:
+                        line = f.readline()
+                        if line:
+                            click.echo(line, nl=False)
+                        else:
+                            time.sleep(0.1)
+        except KeyboardInterrupt:
+            click.echo("\nStopped following log")
 
 
-@cli.command()
-def clear_all_logs():
-    """Clear all logs for all tasks."""
-    if log_manager.clear_all_logs():
-        click.echo("Cleared all logs")
+@log.command(name="clear")
+@click.option("--task", "task_name", help="Clear logs for specific task")
+@click.option("--all", "clear_all", is_flag=True, help="Clear all logs for all tasks")
+@handle_exceptions
+def log_clear(task_name, clear_all):
+    """Clear logs for a specific task or all tasks."""
+    if clear_all:
+        if log_manager.clear_all_logs():
+            click.echo("Cleared all logs")
+        else:
+            click.echo("No logs directory found")
+    elif task_name:
+        config = load_config()
+        task = next((t for t in config["tasks"] if t["name"] == task_name), None)
+        if not task:
+            raise TaskNotFoundError(task_name)
+        if log_manager.clear_task_logs(task_name):
+            click.echo(f"Cleared logs for {task_name}")
+        else:
+            click.echo(f"No logs found for {task_name}")
     else:
-        click.echo("No logs directory found")
+        click.echo("Error: Provide --task NAME or --all", err=True)
+        sys.exit(2)
 
 
-@cli.command()
-def list_groups():
+# ============================================================================
+# Config Commands
+# ============================================================================
+
+
+@group.command(name="list")
+def group_list():
     """List all available groups and their tasks."""
     config = load_config()
     groups = config.get("groups", [])
@@ -364,28 +688,35 @@ def list_groups():
             click.echo(f"{label}{msg}", err=True)
 
 
-@cli.command()
-def show_config():
-    """Show global configuration settings."""
-    global_config = load_global_config()
-
-    if not global_config:
-        click.echo("No global configuration found (config/signalbox.yaml)")
-        return
-
-    click.echo("Global Configuration (config/signalbox.yaml):\n")
-    click.echo(yaml.dump(global_config, default_flow_style=False, sort_keys=False))
-
-
-@cli.command()
-@click.argument("key")
-def get_setting(key):
-    """Get a specific configuration value (use dot notation, e.g., 'execution.default_timeout')."""
-    value = get_config_value(key)
-    if value is None:
-        click.echo(f"Setting '{key}' not found")
+@config.command(name="show")
+@click.argument("key", required=False)
+def config_show(key):
+    """Show global configuration or specific setting (use dot notation)."""
+    if key:
+        # Show specific setting
+        value = get_config_value(key)
+        if value is None:
+            click.echo(f"Setting '{key}' not found")
+        else:
+            click.echo(f"{key}: {value}")
     else:
-        click.echo(f"{key}: {value}")
+        # Show all config
+        global_config = load_global_config()
+
+        if not global_config:
+            click.echo("No global configuration found (config/signalbox.yaml)")
+            return
+
+        click.echo("Global Configuration (config/signalbox.yaml):\n")
+        click.echo(yaml.dump(global_config, default_flow_style=False, sort_keys=False))
+
+
+@config.command(name="path")
+def config_path():
+    """Show the configuration directory path."""
+    from .config import find_config_home
+    config_dir = find_config_home()
+    click.echo(config_dir)
 
 
 @cli.command()
@@ -460,9 +791,9 @@ def export_cron(group_name):
         click.echo(instruction)
 
 
-@cli.command()
+@config.command(name="validate")
 @handle_exceptions
-def validate():
+def config_validate():
     """Validate configuration files for errors."""
     result = validator.validate_configuration()
 
@@ -492,7 +823,7 @@ def validate():
         strict_mode = get_config_value("validation.strict", False)
         if strict_mode:
             click.echo("\nValidation failed (strict mode enabled)")
-            sys.exit(5)
+            sys.exit(2)
 
     # Show success message
     if not result.has_issues:
@@ -515,7 +846,7 @@ def validate():
 
     # Exit with appropriate code if validation failed
     if not result.is_valid:
-        sys.exit(5)
+        sys.exit(2)
 
 
 @cli.command()

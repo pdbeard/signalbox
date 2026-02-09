@@ -358,6 +358,21 @@ Comprehensive guides are available in the `documentation/` directory:
 - **[Scheduling Examples](documentation/SCHEDULING_EXAMPLES.md)** - Real-world scheduling patterns and examples
 
 
+## Exit Codes
+
+Signalbox follows POSIX conventions for exit codes:
+
+| Code | Meaning | Example |
+|------|---------|---------|
+| 0 | Success | All tasks completed successfully |
+| 1 | Task execution failure | One or more tasks failed (for `task run --all`) |
+| 2 | Usage/configuration error | Invalid config, bad arguments, validation failed |
+| 126 | Permission denied | Cannot execute command due to permissions |
+| 130 | Interrupted | User pressed Ctrl+C |
+
+**Important:** When running multiple tasks with `signalbox task run --all`, all tasks will be attempted even if some fail. The command exits with code 1 only after all tasks have been attempted.
+
+
 ## Troubleshooting
 
 ### Scripts not running via scheduler

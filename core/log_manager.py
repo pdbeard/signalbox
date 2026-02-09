@@ -284,3 +284,140 @@ def clear_all_logs():
             os.remove(os.path.join(root, filename))
 
     return True
+
+
+def get_all_log_files():
+    """Get all log files from all tasks with metadata.
+    
+    Returns:
+        list: List of dicts with task, log_file, timestamp, path
+    """
+    from .helpers import parse_timestamp
+    log_dir = get_config_value("paths.log_dir", "logs")
+    
+    if not os.path.exists(log_dir):
+        return []
+    
+    logs = []
+    for task_name in os.listdir(log_dir):
+        task_log_dir = os.path.join(log_dir, task_name)
+        if not os.path.isdir(task_log_dir):
+            continue
+            
+        for log_file in os.listdir(task_log_dir):
+            if not log_file.endswith('.log'):
+                continue
+                
+            log_path = os.path.join(task_log_dir, log_file)
+            timestamp_str = log_file.replace('.log', '')
+            
+            try:
+                timestamp = parse_timestamp(timestamp_str)
+            except:
+                timestamp = datetime.fromtimestamp(os.path.getmtime(log_path))
+            
+            logs.append({
+                'task': task_name,
+                'log_file': log_file,
+                'timestamp': timestamp,
+                'timestamp_str': timestamp_str,
+                'path': log_path,
+                'mtime': os.path.getmtime(log_path)
+            })
+    
+    return logs
+
+
+def parse_log_metadata(log_path):
+    """Parse log file to extract status and metadata.
+    
+    Args:
+        log_path: Path to log file
+        
+    Returns:
+        dict: Metadata including status, return_code, duration (if available)
+    """
+    metadata = {
+        'status': 'unknown',
+        'return_code': None,
+        'duration': None,
+        'command': None
+    }
+    
+    if not os.path.exists(log_path):
+        return metadata
+    
+    try:
+        with open(log_path, 'r') as f:
+            content = f.read()
+            
+        # Parse return code
+        if 'Return code: ' in content:
+            for line in content.split('\n'):
+                if line.startswith('Return code: '):
+                    try:
+                        metadata['return_code'] = int(line.split(': ')[1])
+                        metadata['status'] = 'success' if metadata['return_code'] == 0 else 'failed'
+                    except:
+                        pass
+                    break
+        
+        # Parse command
+        if 'Command: ' in content:
+            for line in content.split('\n'):
+                if line.startswith('Command: '):
+                    metadata['command'] = line.split(': ', 1)[1]
+                    break
+                    
+    except Exception:
+        pass
+    
+    return metadata
+
+
+def filter_logs(logs, task=None, status=None, since=None, until=None, limit=None):
+    """Filter log entries based on criteria.
+    
+    Args:
+        logs: List of log entries
+        task: Filter to specific task name
+        status: Filter by status (success, failed)
+        since: datetime - show logs since this time
+        until: datetime - show logs until this time
+        limit: Maximum number of logs to return
+        
+    Returns:
+        list: Filtered log entries
+    """
+    filtered = logs
+    
+    if task:
+        filtered = [l for l in filtered if l['task'] == task]
+    
+    if since:
+        filtered = [l for l in filtered if l['timestamp'] >= since]
+    
+    if until:
+        filtered = [l for l in filtered if l['timestamp'] <= until]
+    
+    if status:
+        # Need to parse each log to check status
+        filtered_with_status = []
+        for log_entry in filtered:
+            metadata = parse_log_metadata(log_entry['path'])
+            log_entry['metadata'] = metadata
+            if metadata['status'] == status:
+                filtered_with_status.append(log_entry)
+        filtered = filtered_with_status
+    else:
+        # Add metadata to all logs
+        for log_entry in filtered:
+            log_entry['metadata'] = parse_log_metadata(log_entry['path'])
+    
+    # Sort by timestamp descending (newest first)
+    filtered.sort(key=lambda x: x['timestamp'], reverse=True)
+    
+    if limit:
+        filtered = filtered[:limit]
+    
+    return filtered

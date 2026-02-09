@@ -1,0 +1,7 @@
+tasks:
+  - name: exit_code_success
+    command: echo "Success"
+    description: Task that succeeds
+  - name: exit_code_fail
+    command: exit 1
+    description: Task that always fails
