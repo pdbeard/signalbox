@@ -17,7 +17,7 @@ from core.cli_commands import (
     run_all,
     run_group,
     logs,
-    history,
+    # history,  # Command removed
     clear_logs,
     clear_all_logs,
     list_groups,
@@ -30,7 +30,7 @@ from core.cli_commands import (
     notify_test,
     handle_exceptions,
 )
-from core.exceptions import ScriptNotFoundError
+from core.exceptions import TaskNotFoundError
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def runner():
 def sample_config():
     """Provide sample configuration for testing."""
     return {
-        "scripts": [
+        "tasks": [
             {
                 "name": "test_script",
                 "command": "echo test",
@@ -63,12 +63,12 @@ def sample_config():
             {
                 "name": "test_group",
                 "description": "Test group",
-                "scripts": ["test_script", "another_script"],
+                "tasks": ["test_script", "another_script"],
                 "execution": "serial",
                 "stop_on_error": False,
             }
         ],
-        "_script_sources": {"test_script": "scripts/test.yaml"},
+        "_task_sources": {"test_script": "scripts/test.yaml"},
         "_group_sources": {"test_group": "groups/test.yaml"},
     }
 
@@ -81,7 +81,7 @@ class TestHandleExceptions:
 
         @handle_exceptions
         def failing_command():
-            raise ScriptNotFoundError("test_script")
+            raise TaskNotFoundError("test_script")
 
         with pytest.raises(SystemExit) as exc_info:
             failing_command()
@@ -166,7 +166,7 @@ class TestListCommand:
     def test_list_displays_scripts(self, mock_get_config, mock_merge, mock_runtime, mock_load, runner, sample_config):
         """Test list command displays all scripts."""
         mock_load.return_value = sample_config
-        mock_runtime.return_value = {"scripts": {}, "groups": {}}
+        mock_runtime.return_value = {"tasks": {}, "groups": {}}
         mock_merge.return_value = sample_config
         mock_get_config.return_value = "%Y-%m-%d %H:%M:%S"
 
@@ -187,7 +187,7 @@ class TestListCommand:
     ):
         """Test list command formats timestamps correctly."""
         mock_load.return_value = sample_config
-        mock_runtime.return_value = {"scripts": {}, "groups": {}}
+        mock_runtime.return_value = {"tasks": {}, "groups": {}}
         mock_merge.return_value = sample_config
         mock_get_config.return_value = "%Y-%m-%d"
 
@@ -201,7 +201,7 @@ class TestRunCommand:
     """Tests for run command."""
 
     @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_script")
+    @patch("core.cli_commands.run_task")
     def test_run_executes_script(self, mock_run_script, mock_load, runner, sample_config):
         """Test run command executes a script."""
         mock_load.return_value = sample_config
@@ -213,11 +213,11 @@ class TestRunCommand:
         mock_run_script.assert_called_once_with("test_script", sample_config)
 
     @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_script")
+    @patch("core.cli_commands.run_task")
     def test_run_handles_script_not_found(self, mock_run_script, mock_load, runner, sample_config):
         """Test run command handles script not found error."""
         mock_load.return_value = sample_config
-        mock_run_script.side_effect = ScriptNotFoundError("nonexistent")
+        mock_run_script.side_effect = TaskNotFoundError("nonexistent")
 
         result = runner.invoke(run, ["nonexistent"])
 
@@ -229,7 +229,7 @@ class TestRunAllCommand:
     """Tests for run_all command."""
 
     @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_script")
+    @patch("core.cli_commands.run_task")
     def test_run_all_executes_all_scripts(self, mock_run_script, mock_load, runner, sample_config):
         """Test run_all executes all scripts."""
         mock_load.return_value = sample_config
@@ -238,20 +238,20 @@ class TestRunAllCommand:
         result = runner.invoke(run_all)
 
         assert result.exit_code == 0
-        assert "Running all scripts" in result.output
+        assert "Running all tasks" in result.output
         assert mock_run_script.call_count == 2
 
     @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_script")
+    @patch("core.cli_commands.run_task")
     def test_run_all_continues_on_error(self, mock_run_script, mock_load, runner, sample_config):
         """Test run_all continues even if one script fails."""
         mock_load.return_value = sample_config
-        mock_run_script.side_effect = [True, ScriptNotFoundError("test")]
+        mock_run_script.side_effect = [True, TaskNotFoundError("test")]
 
         result = runner.invoke(run_all)
 
         assert result.exit_code == 0
-        assert "All scripts executed" in result.output
+        assert "All tasks executed" in result.output
 
 
 class TestRunGroupCommand:
@@ -378,43 +378,43 @@ class TestLogsCommand:
         assert result.exit_code == 3
 
 
-class TestHistoryCommand:
-    """Tests for history command."""
-
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.get_log_history")
-    @patch("core.cli_commands.log_manager.get_script_log_dir")
-    @patch("core.cli_commands.get_config_value")
-    def test_history_displays_log_files(
-        self, mock_get_config, mock_get_dir, mock_get_history, mock_load, runner, sample_config
-    ):
-        """Test history command displays log history."""
-        mock_load.return_value = sample_config
-        mock_get_history.return_value = ([("log1.txt", 1704110400), ("log2.txt", 1704196800)], True)
-        mock_get_dir.return_value = "/logs/test_script"
-        mock_get_config.side_effect = lambda key, default: {
-            "display.include_paths": False,
-            "display.date_format": "%Y-%m-%d",
-        }.get(key, default)
-
-        result = runner.invoke(history, ["test_script"])
-
-        assert result.exit_code == 0
-        assert "History for test_script" in result.output
-        assert "log1.txt" in result.output
-        assert "log2.txt" in result.output
-
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.get_log_history")
-    def test_history_handles_no_history(self, mock_get_history, mock_load, runner, sample_config):
-        """Test history command handles no history."""
-        mock_load.return_value = sample_config
-        mock_get_history.return_value = ([], False)
-
-        result = runner.invoke(history, ["test_script"])
-
-        assert result.exit_code == 0
-        assert "No history found" in result.output
+# class TestHistoryCommand:
+#     """Tests for history command."""
+# 
+#     @patch("core.cli_commands.load_config")
+#     @patch("core.cli_commands.log_manager.get_log_history")
+#     @patch("core.cli_commands.log_manager.get_script_log_dir")
+#     @patch("core.cli_commands.get_config_value")
+#     def test_history_displays_log_files(
+#         self, mock_get_config, mock_get_dir, mock_get_history, mock_load, runner, sample_config
+#     ):
+#         """Test history command displays log history."""
+#         mock_load.return_value = sample_config
+#         mock_get_history.return_value = ([("log1.txt", 1704110400), ("log2.txt", 1704196800)], True)
+#         mock_get_dir.return_value = "/logs/test_script"
+#         mock_get_config.side_effect = lambda key, default: {
+#             "display.include_paths": False,
+#             "display.date_format": "%Y-%m-%d",
+#         }.get(key, default)
+# 
+#         result = runner.invoke(history, ["test_script"])
+# 
+#         assert result.exit_code == 0
+#         assert "History for test_script" in result.output
+#         assert "log1.txt" in result.output
+#         assert "log2.txt" in result.output
+# 
+#     @patch("core.cli_commands.load_config")
+#     @patch("core.cli_commands.log_manager.get_log_history")
+#     def test_history_handles_no_history(self, mock_get_history, mock_load, runner, sample_config):
+#         """Test history command handles no history."""
+#         mock_load.return_value = sample_config
+#         mock_get_history.return_value = ([], False)
+# 
+#         result = runner.invoke(history, ["test_script"])
+# 
+#         assert result.exit_code == 0
+#         assert "No history found" in result.output
 
 
 class TestClearLogsCommand:
@@ -487,7 +487,7 @@ class TestListGroupsCommand:
     @patch("core.cli_commands.load_config")
     def test_list_groups_handles_no_groups(self, mock_load, runner):
         """Test list_groups handles no groups defined."""
-        mock_load.return_value = {"scripts": [], "groups": []}
+        mock_load.return_value = {"tasks": [], "groups": []}
 
         result = runner.invoke(list_groups)
 
@@ -657,9 +657,9 @@ class TestValidateCommand:
         mock_result.has_issues = False
         mock_result.is_valid = True
         mock_result.files_used = ["config.yaml"]
-        mock_result.config = {"scripts": [], "groups": []}
+        mock_result.config = {"tasks": [], "groups": []}
         mock_validate.return_value = mock_result
-        mock_summary.return_value = {"scripts": 5, "groups": 2, "scheduled_groups": 1}
+        mock_summary.return_value = {"tasks": 5, "groups": 2, "scheduled_groups": 1}
         mock_get_config.return_value = False
 
         result = runner.invoke(validate)
@@ -765,7 +765,7 @@ class TestCLIIntegration:
             "run-all",
             "run-group",
             "logs",
-            "history",
+            # "history",  # Command removed
             "clear-logs",
             "clear-all-logs",
             "list-groups",

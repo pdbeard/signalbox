@@ -133,7 +133,7 @@ class TestResolvePath:
         """Test that relative paths are resolved to config home."""
         manager = ConfigManager(config_home=temp_config_dir)
 
-        relative_path = "config/scripts"
+        relative_path = "config/tasks"
         result = manager.resolve_path(relative_path)
         expected = os.path.join(temp_config_dir, relative_path)
         assert result == expected
@@ -142,7 +142,7 @@ class TestResolvePath:
         """Test resolving paths with . and .. components."""
         manager = ConfigManager(config_home=temp_config_dir)
 
-        path = "./config/../config/scripts"
+        path = "./config/../config/tasks"
         result = manager.resolve_path(path)
         expected = os.path.join(temp_config_dir, path)
         assert result == expected
@@ -269,10 +269,10 @@ class TestLoadConfig:
 
         config = manager.load_config()
 
-        assert "scripts" in config
-        assert len(config["scripts"]) == 3  # hello, show_date, uptime
+        assert "tasks" in config
+        assert len(config["tasks"]) == 3  # hello, show_date, uptime
 
-        script_names = [s["name"] for s in config["scripts"]]
+        script_names = [s["name"] for s in config["tasks"]]
         assert "hello" in script_names
         assert "show_date" in script_names
         assert "uptime" in script_names
@@ -290,19 +290,19 @@ class TestLoadConfig:
         assert "basic" in group_names
         assert "parallel_test" in group_names
 
-    def test_load_tracks_script_sources(self, full_config):
+    def test_load_tracks_task_sources(self, full_config):
         """Test that script source files are tracked."""
         manager = ConfigManager(config_home=full_config)
 
         config = manager.load_config()
 
-        assert "_script_sources" in config
-        assert "hello" in config["_script_sources"]
-        assert "show_date" in config["_script_sources"]
-        assert "uptime" in config["_script_sources"]
+        assert "_task_sources" in config
+        assert "hello" in config["_task_sources"]
+        assert "show_date" in config["_task_sources"]
+        assert "uptime" in config["_task_sources"]
 
         # Check that sources are file paths
-        assert config["_script_sources"]["hello"].endswith(".yaml")
+        assert config["_task_sources"]["hello"].endswith(".yaml")
 
     def test_load_tracks_group_sources(self, full_config):
         """Test that group source files are tracked."""
@@ -320,30 +320,30 @@ class TestLoadConfig:
 
         config = manager.load_config()
 
-        assert config["scripts"] == []
+        assert config["tasks"] == []
         assert config["groups"] == []
 
     def test_load_ignores_hidden_files(self, temp_config_dir):
         """Test that hidden files (starting with .) are ignored."""
-        scripts_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
 
         # Create a hidden file
-        hidden_file = scripts_dir / ".hidden.yaml"
+        hidden_file = tasks_dir / ".hidden.yaml"
         with open(hidden_file, "w") as f:
-            yaml.dump({"scripts": [{"name": "hidden", "command": "echo hidden"}]}, f)
+            yaml.dump({"tasks": [{"name": "hidden", "command": "echo hidden"}]}, f)
 
         manager = ConfigManager(config_home=temp_config_dir)
         config = manager.load_config()
 
-        script_names = [s["name"] for s in config["scripts"]]
+        script_names = [s["name"] for s in config["tasks"]]
         assert "hidden" not in script_names
 
     def test_load_ignores_non_yaml_files(self, temp_config_dir):
         """Test that non-YAML files are ignored."""
-        scripts_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
 
         # Create a text file
-        text_file = scripts_dir / "readme.txt"
+        text_file = tasks_dir / "readme.txt"
         with open(text_file, "w") as f:
             f.write("This is not YAML")
 
@@ -351,14 +351,14 @@ class TestLoadConfig:
         config = manager.load_config()
 
         # Should not error, just ignore the file
-        assert isinstance(config["scripts"], list)
+        assert isinstance(config["tasks"], list)
 
     def test_load_handles_invalid_yaml_gracefully(self, temp_config_dir):
         """Test that invalid YAML files are handled gracefully."""
-        scripts_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
 
         # Create invalid YAML file
-        bad_file = scripts_dir / "bad.yaml"
+        bad_file = tasks_dir / "bad.yaml"
         with open(bad_file, "w") as f:
             f.write("invalid:\n  - yaml:\n  content")
 
@@ -370,27 +370,27 @@ class TestLoadConfig:
         try:
             config = manager.load_config()
             # If it doesn't raise, that's fine - it skipped the bad file
-            assert isinstance(config["scripts"], list)
+            assert isinstance(config["tasks"], list)
         except yaml.YAMLError:
             # If it raises, that's also acceptable behavior
             pass
 
     def test_load_sorts_files_alphabetically(self, temp_config_dir, sample_signalbox_yaml):
         """Test that files are loaded in alphabetical order."""
-        scripts_dir = Path(temp_config_dir) / "config" / "scripts"
+        tasks_dir = Path(temp_config_dir) / "config" / "scripts"
 
         # Create files in reverse alphabetical order
         for name in ["z_last.yaml", "a_first.yaml", "m_middle.yaml"]:
-            file_path = scripts_dir / name
+            file_path = tasks_dir / name
             script_name = name.replace(".yaml", "")
             with open(file_path, "w") as f:
-                yaml.dump({"scripts": [{"name": script_name, "command": "echo", "description": "test"}]}, f)
+                yaml.dump({"tasks": [{"name": script_name, "command": "echo", "description": "test"}]}, f)
 
         manager = ConfigManager(config_home=temp_config_dir)
         config = manager.load_config()
 
         # Scripts should be in order: a_first, m_middle, z_last
-        script_names = [s["name"] for s in config["scripts"]]
+        script_names = [s["name"] for s in config["tasks"]]
         assert script_names == ["a_first", "m_middle", "z_last"]
 
 
@@ -404,7 +404,7 @@ class TestSaveConfig:
         config = manager.load_config()
 
         # Modify a script
-        for script in config["scripts"]:
+        for script in config["tasks"]:
             if script["name"] == "hello":
                 script["description"] = "Modified description"
                 break
@@ -423,7 +423,7 @@ class TestSaveConfig:
         config = manager.load_config()
 
         # Add a new script without source
-        config["scripts"].append({"name": "brand_new", "command": "echo new", "description": "New script"})
+        config["tasks"].append({"name": "brand_new", "command": "echo new", "description": "New script"})
 
         manager.save_config(config)
 
@@ -443,7 +443,7 @@ class TestModuleFunctions:
 
     def test_resolve_path_uses_default_manager(self):
         """Test that resolve_path uses the default manager."""
-        result = resolve_path("config/scripts")
+        result = resolve_path("config/tasks")
         assert isinstance(result, str)
 
     def test_get_config_value_uses_default_manager(self, full_config):
@@ -473,13 +473,13 @@ class TestConfigIntegration:
 
         # Verify structure
         assert "default_log_limit" in global_config
-        assert "scripts" in full_config_data
+        assert "tasks" in full_config_data
         assert "groups" in full_config_data
-        assert "_script_sources" in full_config_data
+        assert "_task_sources" in full_config_data
         assert "_group_sources" in full_config_data
 
         # Verify content
-        assert len(full_config_data["scripts"]) > 0
+        assert len(full_config_data["tasks"]) > 0
         assert len(full_config_data["groups"]) > 0
 
     def test_modify_and_save_cycle(self, full_config):
@@ -488,11 +488,11 @@ class TestConfigIntegration:
 
         # Load
         config = manager.load_config()
-        original_count = len(config["scripts"])
+        original_count = len(config["tasks"])
 
         # Modify
         if original_count > 0:
-            config["scripts"][0]["description"] = "Test modification"
+            config["tasks"][0]["description"] = "Test modification"
 
         # Save (may or may not be fully implemented)
         try:
@@ -503,7 +503,7 @@ class TestConfigIntegration:
             new_config = manager.load_config()
 
             # Just verify it loads without error
-            assert isinstance(new_config["scripts"], list)
+            assert isinstance(new_config["tasks"], list)
         except Exception:
             pytest.skip("Save/reload cycle not fully implemented")
 
@@ -519,18 +519,18 @@ class TestConfigIntegration:
 
             # Create different configs
             with open(cfg_dir / "config" / "signalbox.yaml", "w") as f:
-                yaml.dump({"paths": {"scripts_file": "config/scripts"}}, f)
+                yaml.dump({"paths": {"scripts_file": "config/tasks"}}, f)
 
         # Add different scripts to each
         scripts1 = config1 / "config" / "scripts" / "test.yaml"
         with open(scripts1, "w") as f:
-            yaml.dump({"scripts": [{"name": "script1", "command": "echo 1", "description": "test"}]}, f)
+            yaml.dump({"tasks": [{"name": "script1", "command": "echo 1", "description": "test"}]}, f)
 
         scripts2 = config2 / "config" / "scripts" / "test.yaml"
         with open(scripts2, "w") as f:
             yaml.dump(
                 {
-                    "scripts": [
+                    "tasks": [
                         {"name": "script2a", "command": "echo 2a", "description": "test"},
                         {"name": "script2b", "command": "echo 2b", "description": "test"},
                     ]
@@ -545,7 +545,7 @@ class TestConfigIntegration:
         config2_data = manager2.load_config()
 
         # Should have different results
-        assert len(config1_data["scripts"]) == 1
-        assert len(config2_data["scripts"]) == 2
-        assert config1_data["scripts"][0]["name"] == "script1"
-        assert config2_data["scripts"][0]["name"] == "script2a"
+        assert len(config1_data["tasks"]) == 1
+        assert len(config2_data["tasks"]) == 2
+        assert config1_data["tasks"][0]["name"] == "script1"
+        assert config2_data["tasks"][0]["name"] == "script2a"

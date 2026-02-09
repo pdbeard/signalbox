@@ -27,7 +27,7 @@ def test_rotate_by_age(tmp_path):
     assert new in files and old not in files
 
 def test_get_latest_log(tmp_path, monkeypatch):
-    monkeypatch.setattr(log_manager, 'get_script_log_dir', lambda name: str(tmp_path))
+    monkeypatch.setattr(log_manager, 'get_task_log_dir', lambda name: str(tmp_path))
     f1 = tmp_path / 'a.log'
     f2 = tmp_path / 'b.log'
     f1.write_text('x')
@@ -38,7 +38,7 @@ def test_get_latest_log(tmp_path, monkeypatch):
     assert exists and path.endswith('b.log')
 
 def test_get_log_history(tmp_path, monkeypatch):
-    monkeypatch.setattr(log_manager, 'get_script_log_dir', lambda name: str(tmp_path))
+    monkeypatch.setattr(log_manager, 'get_task_log_dir', lambda name: str(tmp_path))
     f1 = tmp_path / 'a.log'
     f2 = tmp_path / 'b.log'
     f1.write_text('x')
@@ -49,7 +49,7 @@ def test_get_log_history(tmp_path, monkeypatch):
     assert exists and info[0][0] == 'b.log'
 
 def test_clear_script_logs(tmp_path, monkeypatch):
-    monkeypatch.setattr(log_manager, 'get_script_log_dir', lambda name: str(tmp_path))
+    monkeypatch.setattr(log_manager, 'get_task_log_dir', lambda name: str(tmp_path))
     f1 = tmp_path / 'a.log'
     f1.write_text('x')
     assert log_manager.clear_script_logs('foo')

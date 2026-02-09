@@ -43,14 +43,14 @@ def test_get_signalbox_command_cli(monkeypatch):
     cmd = exporters.get_signalbox_command()
     assert cmd == "signalbox"
 
-def test_get_script_dir_cli(monkeypatch):
+def test_get_task_dir_cli(monkeypatch):
     monkeypatch.setattr('shutil.which', lambda name: '/usr/local/bin/signalbox')
-    path = exporters.get_script_dir()
+    path = exporters.get_task_dir()
     assert path.endswith('signalbox')
 
-def test_get_script_dir_dev(monkeypatch):
+def test_get_task_dir_dev(monkeypatch):
     monkeypatch.setattr('shutil.which', lambda name: None)
-    path = exporters.get_script_dir()
+    path = exporters.get_task_dir()
     assert os.path.isdir(path)
 
 def test_generate_systemd_service():
