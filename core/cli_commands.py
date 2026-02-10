@@ -264,40 +264,64 @@ def task_list():
 
     import os
 
+    # Flatten all tasks with their source file for a single table
+    all_rows = []
     for source_file, tasks in tasks_by_file.items():
         file_name = os.path.basename(source_file)
-        click.echo(f"\n=== {file_name} ===")
         for task in tasks:
-            try:
-                status = task.get("last_status", "not run")
-                last_run = task.get("last_run", "")
-                name = task["name"]
-                description = task["description"]
-                # Color for status
-                if status.lower() in ("success", "ok"):
-                    status_str = click.style(status, fg="green", bold=True)
-                elif status.lower() in ("failed", "fail", "error"):
-                    status_str = click.style(status, fg="red", bold=True)
-                else:
-                    status_str = click.style(status, fg="yellow")
-                if last_run:
-                    try:
-                        timestamp_str = last_run.replace(".log", "")
-                        dt = parse_timestamp(timestamp_str)
-                        human_date = dt.strftime(date_format)
-                        click.echo(f"{name}: {status_str} ({human_date}) - {description}")
-                    except Exception:
-                        click.echo(f"{name}: {status_str} ({last_run}) - {description}")
-                else:
-                    click.echo(f"{name}: {status_str} - {description}")
-            except KeyError as e:
-                label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-                msg = f" Task entry missing required field: {e}. Check your tasks YAML files. Offending task: {task}"
-                click.echo(f"{label}{msg}", err=True)
-            except Exception as e:
-                label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-                msg = f" Unexpected error in task config: {e}. Offending task: {task}"
-                click.echo(f"{label}{msg}", err=True)
+            all_rows.append((task, file_name))
+
+    # Prepare table columns
+    max_name_len = max((len(task.get("name", "")) for task, _ in all_rows), default=4)
+    max_name_len = min(max_name_len, 30)
+    max_status_len = 8
+    max_last_run_len = 19  # date format length
+    max_desc_len = max((len(task.get("description", "")) for task, _ in all_rows), default=11)
+    max_desc_len = min(max_desc_len, 40)
+    max_source_len = max((len(source) for _, source in all_rows), default=6)
+    max_source_len = min(max_source_len, 30)
+
+    # Header
+    header = f"{'TASK':<{max_name_len}}  {'STATUS':<{max_status_len}}  {'LAST RUN':<{max_last_run_len}}  {'DESCRIPTION':<{max_desc_len}}  {'SOURCE':<{max_source_len}}"
+    click.echo(header)
+    click.echo("─" * len(header))
+
+    for task, file_name in all_rows:
+        try:
+            name = task.get("name", "")[:max_name_len]
+            status = task.get("last_status", "not run")
+            last_run = task.get("last_run", "")
+            description = task.get("description", "")[:max_desc_len]
+            source = file_name[:max_source_len]
+
+            # Color for status
+            if status.lower() in ("success", "ok"):
+                status_str = click.style(status.ljust(max_status_len), fg="green", bold=True)
+            elif status.lower() in ("failed", "fail", "error"):
+                status_str = click.style(status.ljust(max_status_len), fg="red", bold=True)
+            else:
+                status_str = click.style(status.ljust(max_status_len), fg="yellow")
+
+            # Format last run
+            if last_run:
+                try:
+                    timestamp_str = last_run.replace(".log", "")
+                    dt = parse_timestamp(timestamp_str)
+                    last_run_str = dt.strftime(date_format)
+                except Exception:
+                    last_run_str = last_run
+            else:
+                last_run_str = ""
+
+            click.echo(f"{name:<{max_name_len}}  {status_str}  {last_run_str:<{max_last_run_len}}  {description:<{max_desc_len}}  {source:<{max_source_len}}")
+        except KeyError as e:
+            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
+            msg = f" Task entry missing required field: {e}. Check your tasks YAML files. Offending task: {task}"
+            click.echo(f"{label}{msg}", err=True)
+        except Exception as e:
+            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
+            msg = f" Unexpected error in task config: {e}. Offending task: {task}"
+            click.echo(f"{label}{msg}", err=True)
 
 
 @task.command(name="run")
@@ -730,15 +754,30 @@ def list_schedules():
         click.echo("No scheduled groups defined.")
         return
 
-    click.echo("Scheduled Groups:")
+    # Prepare table columns
+    max_group_len = max((len(g.get('name', '')) for g in scheduled), default=5)
+    max_group_len = min(max_group_len, 25)
+    max_sched_len = max((len(g.get('schedule', '')) for g in scheduled), default=8)
+    max_sched_len = min(max_sched_len, 20)
+    max_desc_len = max((len(g.get('description', 'N/A')) for g in scheduled), default=11)
+    max_desc_len = min(max_desc_len, 40)
+    max_task_count_len = max((len(str(len(g.get('tasks', [])))) for g in scheduled), default=1)
+    max_task_count_len = max(max_task_count_len, 5)
+    max_tasks_len = max((len(", ".join(g.get('tasks', []))) for g in scheduled), default=5)
+    max_tasks_len = min(max_tasks_len, 40)
+
+    # Header
+    header = f"{'GROUP':<{max_group_len}}  {'SCHEDULE':<{max_sched_len}}  {'DESCRIPTION':<{max_desc_len}}  {'TASKS':<{max_task_count_len}}  {'TASK NAMES':<{max_tasks_len}}"
+    click.echo(header)
+    click.echo("─" * len(header))
+
     for group in scheduled:
-        task_count = len(group.get("tasks", []))
-        click.echo(f"\n  {group['name']}")
-        click.echo(f"    Schedule: {group['schedule']}")
-        click.echo(f"    Description: {group.get('description', 'N/A')}")
-        click.echo(f"    Tasks: {task_count}")
-        for task_name in group.get("tasks", []):
-            click.echo(f"      - {task_name}")
+        group_name = group.get('name', '')[:max_group_len]
+        schedule = group.get('schedule', '')[:max_sched_len]
+        description = group.get('description', 'N/A')[:max_desc_len]
+        task_count = str(len(group.get('tasks', []))).ljust(max_task_count_len)
+        tasks = ", ".join(group.get('tasks', []))[:max_tasks_len]
+        click.echo(f"{group_name:<{max_group_len}}  {schedule:<{max_sched_len}}  {description:<{max_desc_len}}  {task_count:<{max_task_count_len}}  {tasks:<{max_tasks_len}}")
 
 
 @cli.command()
