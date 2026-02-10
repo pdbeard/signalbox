@@ -142,21 +142,28 @@ class SignalboxTray:
         
         Green = all recent tasks successful
         Red = one or more tasks failed
+        Yellow = loading/in-progress
         """
+        # Don't update if we're in loading state
+        if getattr(self, '_is_loading', False):
+            return
+        
         try:
             runtime_state = load_runtime_state()
             
-            # Check if any tasks have failed
+            # Check if any scripts have failed (runtime stores 'scripts', not 'tasks')
             has_failures = False
             task_count = 0
             success_count = 0
             
-            if "tasks" in runtime_state:
-                for task_name, task_data in runtime_state["tasks"].items():
+            if "scripts" in runtime_state:
+                for script_name, script_data in runtime_state["scripts"].items():
                     task_count += 1
-                    if task_data.get("status") == "failed":
+                    # Runtime uses 'last_status' not 'status'
+                    last_status = script_data.get("last_status", "")
+                    if last_status == "failed":
                         has_failures = True
-                    elif task_data.get("status") == "success":
+                    elif last_status == "success":
                         success_count += 1
             
             if self.verbose:
@@ -232,31 +239,65 @@ class SignalboxTray:
             if self.verbose:
                 print(f"[VERBOSE] {error_msg}", file=sys.stderr)
 
+    def set_loading_state(self, loading):
+        """Set loading state and update icon to yellow."""
+        self._is_loading = loading
+        if loading:
+            icon_path = self.get_icon_path("yellow")
+            if icon_path and icon_path.exists():
+                self.tray_icon.setIcon(QIcon(str(icon_path)))
+            self.tray_icon.setToolTip("Signalbox - Running tasks...")
+            if self.verbose:
+                print("[VERBOSE] Set loading state (yellow icon)")
+        else:
+            # Trigger status update to restore proper icon
+            self.update_status()
+            if self.verbose:
+                print("[VERBOSE] Cleared loading state")
+
     def run_all_tasks(self):
-        """Run all tasks."""
+        """Run all tasks in background (no terminal)."""
         import subprocess
-        terminal = self.find_terminal()
-        if not terminal:
-            error_msg = "No terminal emulator found"
-            self.tray_icon.showMessage("Error", error_msg)
-            if self.verbose:
-                print(f"[VERBOSE] {error_msg}", file=sys.stderr)
-            return
+        import threading
         
-        try:
-            if self.verbose:
-                print(f"[VERBOSE] Running tasks in terminal: {terminal}")
-            # Handle different terminal command formats
-            if terminal in ["gnome-terminal", "xfce4-terminal"]:
-                subprocess.Popen([terminal, "--", "signalbox", "task", "run", "--all"])
-            else:
-                subprocess.Popen([terminal, "-e", "signalbox", "task", "run", "--all"])
-            self.tray_icon.showMessage("Signalbox", "Running all tasks...")
-        except Exception as e:
-            error_msg = f"Could not run tasks: {e}"
-            self.tray_icon.showMessage("Error", error_msg)
-            if self.verbose:
-                print(f"[VERBOSE] {error_msg}", file=sys.stderr)
+        def run_tasks_background():
+            try:
+                if self.verbose:
+                    print("[VERBOSE] Running all tasks in background...")
+                
+                # Run signalbox task run --all in background
+                result = subprocess.run(
+                    ["signalbox", "task", "run", "--all"],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if self.verbose:
+                    print(f"[VERBOSE] Task run completed with return code: {result.returncode}")
+                    if result.stdout:
+                        print(f"[VERBOSE] stdout: {result.stdout[:500]}")
+                    if result.stderr:
+                        print(f"[VERBOSE] stderr: {result.stderr[:500]}")
+                
+                # Clear loading state and update status
+                self.set_loading_state(False)
+                
+                if result.returncode == 0:
+                    self.tray_icon.showMessage("Signalbox", "All tasks completed successfully")
+                else:
+                    self.tray_icon.showMessage("Signalbox", "Some tasks failed - check logs")
+            except Exception as e:
+                error_msg = f"Could not run tasks: {e}"
+                self.tray_icon.showMessage("Error", error_msg)
+                if self.verbose:
+                    print(f"[VERBOSE] {error_msg}", file=sys.stderr)
+                self.set_loading_state(False)
+        
+        # Set loading state and start background thread
+        self.set_loading_state(True)
+        self.tray_icon.showMessage("Signalbox", "Running all tasks...")
+        thread = threading.Thread(target=run_tasks_background, daemon=True)
+        thread.start()
 
     def open_config(self):
         """Open config file in default editor."""
