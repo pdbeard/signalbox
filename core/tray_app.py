@@ -8,13 +8,97 @@ import os
 import argparse
 import shutil
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QDialog, QVBoxLayout, QLabel, QTextEdit, QPushButton
 from PyQt6.QtGui import QIcon, QAction
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, pyqtSignal, QObject
 
 from .config import load_config, get_config_value
 from .runtime import load_runtime_state
 from .exceptions import SignalboxError
+
+
+class WorkerSignals(QObject):
+    """Signals for thread-safe communication from background threads to Qt main thread."""
+    finished = pyqtSignal(bool)  # Success status
+    status_update = pyqtSignal()  # Trigger status update
+    show_message = pyqtSignal(str, str)  # Title, message
+
+
+class StatusDialog(QDialog):
+    """Dialog window to display task status."""
+    
+    def __init__(self, runtime_state, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Signalbox Status")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(400)
+        
+        layout = QVBoxLayout()
+        
+        # Add summary label
+        task_count = 0
+        success_count = 0
+        failed_count = 0
+        failed_tasks = []
+        
+        if "tasks" in runtime_state:
+            for task_name, task_data in runtime_state["tasks"].items():
+                task_count += 1
+                last_status = task_data.get("last_status", "unknown")
+                if last_status == "success":
+                    success_count += 1
+                elif last_status == "failed":
+                    failed_count += 1
+                    failed_tasks.append(task_name)
+        
+        summary = f"Tasks: {task_count} total, {success_count} successful, {failed_count} failed"
+        summary_label = QLabel(summary)
+        summary_label.setStyleSheet("font-weight: bold; font-size: 14px; padding: 10px;")
+        layout.addWidget(summary_label)
+        
+        # Add detailed status text
+        status_text = QTextEdit()
+        status_text.setReadOnly(True)
+        
+        # Build detailed status text
+        text_content = []
+        text_content.append("TASK STATUS\n" + "=" * 60 + "\n")
+        
+        if "tasks" in runtime_state and runtime_state["tasks"]:
+            for task_name, task_data in sorted(runtime_state["tasks"].items()):
+                last_run = task_data.get("last_run", "Never")
+                last_status = task_data.get("last_status", "unknown")
+                status_icon = "✓" if last_status == "success" else "✗" if last_status == "failed" else "?"
+                text_content.append(f"{status_icon} {task_name}")
+                text_content.append(f"  Status: {last_status}")
+                text_content.append(f"  Last Run: {last_run}\n")
+        else:
+            text_content.append("No tasks have been run yet.\n")
+        
+        # Add group status if available
+        if "groups" in runtime_state and runtime_state["groups"]:
+            text_content.append("\nGROUP STATUS\n" + "=" * 60 + "\n")
+            for group_name, group_data in sorted(runtime_state["groups"].items()):
+                last_run = group_data.get("last_run", "Never")
+                last_status = group_data.get("last_status", "unknown")
+                tasks_total = group_data.get("tasks_total", 0)
+                tasks_successful = group_data.get("tasks_successful", 0)
+                success_rate = group_data.get("success_rate", 0)
+                status_icon = "✓" if last_status == "success" else "✗" if last_status == "failed" else "?"
+                text_content.append(f"{status_icon} {group_name}")
+                text_content.append(f"  Status: {last_status}")
+                text_content.append(f"  Last Run: {last_run}")
+                text_content.append(f"  Tasks: {tasks_successful}/{tasks_total} ({success_rate}%)\n")
+        
+        status_text.setPlainText("\n".join(text_content))
+        layout.addWidget(status_text)
+        
+        # Add close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.accept)
+        layout.addWidget(close_button)
+        
+        self.setLayout(layout)
 
 
 class SignalboxTray:
@@ -24,6 +108,12 @@ class SignalboxTray:
         self.verbose = verbose
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
+        
+        # Create worker signals for thread-safe communication
+        self.signals = WorkerSignals()
+        self.signals.finished.connect(self._on_task_finished)
+        self.signals.status_update.connect(self.update_status)
+        self.signals.show_message.connect(lambda title, msg: self.tray_icon.showMessage(title, msg))
         
         if self.verbose:
             print("[VERBOSE] Initializing Signalbox Tray...")
@@ -151,16 +241,16 @@ class SignalboxTray:
         try:
             runtime_state = load_runtime_state()
             
-            # Check if any scripts have failed (runtime stores 'scripts', not 'tasks')
+            # Check if any tasks have failed
             has_failures = False
             task_count = 0
             success_count = 0
             
-            if "scripts" in runtime_state:
-                for script_name, script_data in runtime_state["scripts"].items():
+            if "tasks" in runtime_state:
+                for task_name, task_data in runtime_state["tasks"].items():
                     task_count += 1
                     # Runtime uses 'last_status' not 'status'
-                    last_status = script_data.get("last_status", "")
+                    last_status = task_data.get("last_status", "")
                     if last_status == "failed":
                         has_failures = True
                     elif last_status == "success":
@@ -215,32 +305,19 @@ class SignalboxTray:
         return None
 
     def show_status(self):
-        """Show status information (currently opens terminal with signalbox task list)."""
-        import subprocess
-        terminal = self.find_terminal()
-        if not terminal:
-            error_msg = "No terminal emulator found. Tried: x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, xterm, alacritty, kitty, terminator"
-            self.tray_icon.showMessage("Error", error_msg)
-            if self.verbose:
-                print(f"[VERBOSE] {error_msg}", file=sys.stderr)
-            return
-        
+        """Show status information in a dialog window."""
         try:
-            if self.verbose:
-                print(f"[VERBOSE] Opening terminal: {terminal} -e signalbox task list")
-            # Handle different terminal command formats
-            if terminal in ["gnome-terminal", "xfce4-terminal"]:
-                subprocess.Popen([terminal, "--", "signalbox", "task", "list"])
-            else:
-                subprocess.Popen([terminal, "-e", "signalbox", "task", "list"])
+            runtime_state = load_runtime_state()
+            dialog = StatusDialog(runtime_state, parent=None)
+            dialog.exec()
         except Exception as e:
-            error_msg = f"Could not open terminal: {e}"
+            error_msg = f"Could not load status: {e}"
             self.tray_icon.showMessage("Error", error_msg)
             if self.verbose:
                 print(f"[VERBOSE] {error_msg}", file=sys.stderr)
 
     def set_loading_state(self, loading):
-        """Set loading state and update icon to yellow."""
+        """Set loading state and update icon to yellow (thread-safe)."""
         self._is_loading = loading
         if loading:
             icon_path = self.get_icon_path("yellow")
@@ -250,10 +327,22 @@ class SignalboxTray:
             if self.verbose:
                 print("[VERBOSE] Set loading state (yellow icon)")
         else:
-            # Trigger status update to restore proper icon
-            self.update_status()
+            # Clear the loading flag and manually trigger update_status
             if self.verbose:
                 print("[VERBOSE] Cleared loading state")
+            # update_status will be called via signal
+
+    def _on_task_finished(self, success):
+        """Callback when background tasks finish (runs in main thread)."""
+        self.set_loading_state(False)
+        
+        if success:
+            self.tray_icon.showMessage("Signalbox", "All tasks completed successfully")
+        else:
+            self.tray_icon.showMessage("Signalbox", "Some tasks failed - check logs")
+        
+        # Update status to reflect new results
+        self.update_status()
 
     def run_all_tasks(self):
         """Run all tasks in background (no terminal)."""
@@ -279,19 +368,16 @@ class SignalboxTray:
                     if result.stderr:
                         print(f"[VERBOSE] stderr: {result.stderr[:500]}")
                 
-                # Clear loading state and update status
-                self.set_loading_state(False)
+                # Use signal to notify main thread
+                success = result.returncode == 0
+                self.signals.finished.emit(success)
                 
-                if result.returncode == 0:
-                    self.tray_icon.showMessage("Signalbox", "All tasks completed successfully")
-                else:
-                    self.tray_icon.showMessage("Signalbox", "Some tasks failed - check logs")
             except Exception as e:
                 error_msg = f"Could not run tasks: {e}"
-                self.tray_icon.showMessage("Error", error_msg)
                 if self.verbose:
                     print(f"[VERBOSE] {error_msg}", file=sys.stderr)
-                self.set_loading_state(False)
+                self.signals.show_message.emit("Error", error_msg)
+                self.signals.finished.emit(False)
         
         # Set loading state and start background thread
         self.set_loading_state(True)
