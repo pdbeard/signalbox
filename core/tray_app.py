@@ -236,6 +236,8 @@ class SignalboxTray:
         """
         # Don't update if we're in loading state
         if getattr(self, '_is_loading', False):
+            if self.verbose:
+                print("[VERBOSE] Skipping status update - loading state active")
             return
         
         try:
@@ -272,7 +274,17 @@ class SignalboxTray:
             
             # Update icon if we have one
             if icon_path and icon_path.exists():
-                self.tray_icon.setIcon(QIcon(str(icon_path)))
+                icon = QIcon(str(icon_path))
+                if not icon.isNull():
+                    self.tray_icon.setIcon(icon)
+                    if self.verbose:
+                        print(f"[VERBOSE] Updated icon to: {icon_path.name}")
+                else:
+                    if self.verbose:
+                        print(f"[VERBOSE] WARNING: Icon is null for {icon_path}")
+            else:
+                if self.verbose:
+                    print(f"[VERBOSE] WARNING: Icon not found at {icon_path}")
             
             # Update tooltip
             self.tray_icon.setToolTip(tooltip)
@@ -321,11 +333,21 @@ class SignalboxTray:
         self._is_loading = loading
         if loading:
             icon_path = self.get_icon_path("yellow")
-            if icon_path and icon_path.exists():
-                self.tray_icon.setIcon(QIcon(str(icon_path)))
-            self.tray_icon.setToolTip("Signalbox - Running tasks...")
             if self.verbose:
-                print("[VERBOSE] Set loading state (yellow icon)")
+                print(f"[VERBOSE] Yellow icon path: {icon_path}, exists: {icon_path.exists() if icon_path else 'None'}")
+            if icon_path and icon_path.exists():
+                icon = QIcon(str(icon_path))
+                if not icon.isNull():
+                    self.tray_icon.setIcon(icon)
+                    self.tray_icon.setToolTip("Signalbox - Running tasks...")
+                    if self.verbose:
+                        print("[VERBOSE] Set loading state (yellow icon)")
+                else:
+                    if self.verbose:
+                        print("[VERBOSE] WARNING: Yellow icon is null, not updating")
+            else:
+                if self.verbose:
+                    print("[VERBOSE] WARNING: Yellow icon not found, icon not updated")
         else:
             # Clear the loading flag and manually trigger update_status
             if self.verbose:
