@@ -128,9 +128,13 @@ class SignalboxTray:
         Returns:
             Path object or None
         """
-        icons_dir = Path(__file__).parent.parent / "icons"
-        icon_file = icons_dir / f"{status}.png"
-        return icon_file if icon_file.exists() else None
+        # Try workspace/project directory first
+        workspace_icons = Path.cwd() / "icons" / f"{status}.png"
+        if workspace_icons.exists():
+            return workspace_icons
+        # Fallback to package directory
+        package_icons = Path(__file__).parent.parent / "icons" / f"{status}.png"
+        return package_icons
 
     def update_status(self):
         """
@@ -282,17 +286,23 @@ class SignalboxTray:
 
 def main():
     """Entry point for the tray application."""
+    import signal
     parser = argparse.ArgumentParser(description="Signalbox System Tray Application")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Enable verbose output for troubleshooting")
     args = parser.parse_args()
-    
-    try:
-        tray = SignalboxTray(verbose=args.verbose)
-        sys.exit(tray.run())
-    except KeyboardInterrupt:
-        print("\nExiting...")
+
+    tray = SignalboxTray(verbose=args.verbose)
+
+    def handle_sigint(signum, frame):
+        print("\nExiting via Ctrl+C...")
+        tray.exit_app()
         sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_sigint)
+
+    try:
+        sys.exit(tray.run())
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         if args.verbose:
