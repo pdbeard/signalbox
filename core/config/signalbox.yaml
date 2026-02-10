@@ -66,6 +66,11 @@ group_notifications:
   on_failure_only: true    # Only send notifications when tasks in the group fail
   show_failed_names: true  # Include failed task names in notifications
 
+# System tray settings
+tray:
+  enabled: true            # Enable/disable system tray icon
+  poll_interval: 30        # How often to poll status (in seconds)
+
 # Display settings
 display:
   # Date format for displaying timestamps

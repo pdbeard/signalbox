@@ -16,6 +16,36 @@
 - Advanced features (editing scripts/groups, full runtime view) require a proper GUI application
 - Consider starting with tray-only, then expanding to a full GUI if advanced control is needed
 
+---
+
+## Implementation Status ✅
+
+**COMPLETED** - Basic tray implementation using PyQt6:
+- ✅ PyQt6 dependency added to requirements.txt and pyproject.toml
+- ✅ Created `core/tray_app.py` with basic tray functionality
+- ✅ Green/red status icons created in `icons/` directory
+- ✅ Configuration options added to `signalbox.yaml`
+- ✅ Entry point `signalbox-tray` added for easy launching
+- ✅ Basic menu with View Status, Run All Tasks, Open Config, Exit
+- ✅ Polling runtime state to update icon color
+- ✅ Usage documentation created in `TRAY_USAGE.md`
+
+**Current Features:**
+- System tray icon with green (success) / red (failure) status
+- Tooltip showing task summary
+- Right-click menu for basic control
+- Configurable polling interval
+- Enable/disable via config
+
+**Future Enhancements:**
+- Inline task list in tray menu
+- Per-task status display
+- Desktop notifications for failures
+- Remote Signalbox instance integration
+- Full GUI for advanced editing
+
+---
+
 # Signalbox Taskbar Integration Guide
 
 This guide outlines the steps to create a system tray (taskbar) entry for Signalbox, with status indication (green/red icon) based on script success. It also highlights platform and compositor differences (Wayland, X11, Hyperland, etc.).
