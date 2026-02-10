@@ -265,63 +265,39 @@ def task_list():
     import os
 
     # Flatten all tasks with their source file for a single table
+    from core.cli_output import print_task_list_table
     all_rows = []
     for source_file, tasks in tasks_by_file.items():
         file_name = os.path.basename(source_file)
         for task in tasks:
-            all_rows.append((task, file_name))
-
-    # Prepare table columns
-    max_name_len = max((len(task.get("name", "")) for task, _ in all_rows), default=4)
-    max_name_len = min(max_name_len, 30)
-    max_status_len = 8
-    max_last_run_len = 19  # date format length
-    max_desc_len = max((len(task.get("description", "")) for task, _ in all_rows), default=11)
-    max_desc_len = min(max_desc_len, 40)
-    max_source_len = max((len(source) for _, source in all_rows), default=6)
-    max_source_len = min(max_source_len, 30)
-
-    # Header
-    header = f"{'TASK':<{max_name_len}}  {'STATUS':<{max_status_len}}  {'LAST RUN':<{max_last_run_len}}  {'DESCRIPTION':<{max_desc_len}}  {'SOURCE':<{max_source_len}}"
-    click.echo(header)
-    click.echo("─" * len(header))
-
-    for task, file_name in all_rows:
-        try:
-            name = task.get("name", "")[:max_name_len]
-            status = task.get("last_status", "not run")
-            last_run = task.get("last_run", "")
-            description = task.get("description", "")[:max_desc_len]
-            source = file_name[:max_source_len]
-
-            # Color for status
-            if status.lower() in ("success", "ok"):
-                status_str = click.style(status.ljust(max_status_len), fg="green", bold=True)
-            elif status.lower() in ("failed", "fail", "error"):
-                status_str = click.style(status.ljust(max_status_len), fg="red", bold=True)
-            else:
-                status_str = click.style(status.ljust(max_status_len), fg="yellow")
-
-            # Format last run
-            if last_run:
-                try:
-                    timestamp_str = last_run.replace(".log", "")
-                    dt = parse_timestamp(timestamp_str)
-                    last_run_str = dt.strftime(date_format)
-                except Exception:
-                    last_run_str = last_run
-            else:
-                last_run_str = ""
-
-            click.echo(f"{name:<{max_name_len}}  {status_str}  {last_run_str:<{max_last_run_len}}  {description:<{max_desc_len}}  {source:<{max_source_len}}")
-        except KeyError as e:
-            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-            msg = f" Task entry missing required field: {e}. Check your tasks YAML files. Offending task: {task}"
-            click.echo(f"{label}{msg}", err=True)
-        except Exception as e:
-            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-            msg = f" Unexpected error in task config: {e}. Offending task: {task}"
-            click.echo(f"{label}{msg}", err=True)
+            try:
+                name = task.get("name", "")
+                status = task.get("last_status", "not run")
+                last_run = task.get("last_run", "")
+                description = task.get("description", "")
+                source = file_name
+                # Format last run
+                if last_run:
+                    try:
+                        timestamp_str = last_run.replace(".log", "")
+                        dt = parse_timestamp(timestamp_str)
+                        last_run_str = dt.strftime(date_format)
+                    except Exception:
+                        last_run_str = last_run
+                else:
+                    last_run_str = ""
+                all_rows.append({
+                    "name": name,
+                    "status": status,
+                    "last_run": last_run_str,
+                    "description": description,
+                    "source": source,
+                })
+            except KeyError as e:
+                click.echo(f"[CONFIG ERROR] Task entry missing required field: {e}. Offending task: {task}", err=True)
+            except Exception as e:
+                click.echo(f"[CONFIG ERROR] Unexpected error in task config: {e}. Offending task: {task}", err=True)
+    print_task_list_table(all_rows)
 
 
 @task.command(name="run")
@@ -335,22 +311,35 @@ def task_run(name, run_all_tasks):
         os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
         config = load_config(suppress_warnings=True)
         click.echo("Running all tasks...")
-        failed_tasks = []
-        
+        from core.cli_output_run import print_task_run_table
+        results = []
         for task_item in config["tasks"]:
-            click.echo(f"Running {task_item['name']}...")
+            name = task_item["name"]
+            log_file = ""
+            error = ""
             try:
-                success = run_task(task_item["name"], config)
-                if not success:
-                    failed_tasks.append(task_item['name'])
+                click.echo(f"Running {name}...")
+                success = run_task(name, config)
+                status = "success" if success else "failed"
+                # Find log file
+                log_dir = config.get("paths", {}).get("log_dir", "logs")
+                log_path = os.path.join(log_dir, name)
+                log_files = sorted([f for f in os.listdir(log_path) if f.endswith(".log")], reverse=True)
+                log_file = log_files[0] if log_files else ""
             except SignalboxError as e:
-                click.echo(f"Error: {e.message}", err=True)
-                failed_tasks.append(task_item['name'])
+                status = "failed"
+                error = str(e)
             except Exception as e:
-                click.echo(f"Error: {str(e)}", err=True)
-                failed_tasks.append(task_item['name'])
-        
-        # Report results and exit with appropriate code
+                status = "failed"
+                error = str(e)
+            results.append({
+                "name": name,
+                "status": status,
+                "log_file": log_file,
+                "error": error,
+            })
+        print_task_run_table(results)
+        failed_tasks = [r["name"] for r in results if r["status"] != "success"]
         if failed_tasks:
             click.echo(f"\n{len(failed_tasks)} task(s) failed: {', '.join(failed_tasks)}", err=True)
             sys.exit(1)
@@ -394,13 +383,38 @@ def group_run(name):
     task_names = group["tasks"]
     start_time = datetime.now()
     timestamp = format_timestamp(start_time)
-    if execution_mode == "parallel":
-        tasks_successful = run_group_parallel(task_names, config)
-    else:
-        tasks_successful = run_group_serial(task_names, config, stop_on_error)
+    from core.cli_output_run import print_group_run_table
+    results = []
+    for task_name in task_names:
+        log_file = ""
+        error = ""
+        try:
+            click.echo(f"Running {task_name}...")
+            if execution_mode == "parallel":
+                success = run_group_parallel([task_name], config)
+            else:
+                success = run_group_serial([task_name], config, stop_on_error)
+            status = "success" if success else "failed"
+            log_dir = config.get("paths", {}).get("log_dir", "logs")
+            log_path = os.path.join(log_dir, task_name)
+            log_files = sorted([f for f in os.listdir(log_path) if f.endswith(".log")], reverse=True)
+            log_file = log_files[0] if log_files else ""
+        except SignalboxError as e:
+            status = "failed"
+            error = str(e)
+        except Exception as e:
+            status = "failed"
+            error = str(e)
+        results.append({
+            "name": task_name,
+            "status": status,
+            "log_file": log_file,
+            "error": error,
+        })
     end_time = datetime.now()
     execution_time = (end_time - start_time).total_seconds()
     tasks_total = len(task_names)
+    tasks_successful = sum(1 for r in results if r["status"] == "success")
     if tasks_successful == tasks_total:
         group_status = "success"
     elif tasks_successful > 0:
@@ -421,6 +435,7 @@ def group_run(name):
             tasks_successful=tasks_successful,
         )
 
+    print_group_run_table(results)
     click.echo(f"Group {name} executed.")
 
 
@@ -552,37 +567,21 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit):
         click.echo("No logs found matching filters")
         return
     
-    # Table output
+    # Table output using rich
+    from core.cli_output_tables import print_log_list_table
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-    
-    # Column widths
-    max_task_len = max(len(log["task"]) for log in filtered_logs)
-    max_task_len = min(max_task_len, 30)  # Cap at 30 chars
-    
-    # Header
-    header = f"{'TASK':<{max_task_len}}  {'STATUS':<8}  {'TIMESTAMP':<19}  LOG FILE"
-    click.echo(header)
-    click.echo("─" * len(header))
-    
-    # Rows
+    log_rows = []
     for log in filtered_logs:
-        task_name = log["task"][:max_task_len]
-        status_str = log["metadata"]["status"]
-        timestamp_str = log["timestamp"].strftime(date_format)
-        log_file = log["log_file"]
-        
-        # Color code status
-        if status_str == "success":
-            status_display = click.style(status_str.ljust(8), fg="green")
-        elif status_str == "failed":
-            status_display = click.style(status_str.ljust(8), fg="red")
-        else:
-            status_display = status_str.ljust(8)
-        
-        click.echo(f"{task_name:<{max_task_len}}  {status_display}  {timestamp_str}  {log_file}")
-    
-    # Summary
-    click.echo()
+        try:
+            log_rows.append({
+                "task": log["task"],
+                "status": log["metadata"]["status"],
+                "timestamp": log["timestamp"].strftime(date_format),
+                "log_file": log["log_file"],
+            })
+        except Exception as e:
+            click.echo(f"[LOG ERROR] {e} in log: {log}", err=True)
+    print_log_list_table(log_rows)
     click.echo(f"Total: {len(filtered_logs)} log(s)")
 
 
@@ -685,31 +684,23 @@ def group_list():
     if not groups:
         click.echo("No groups defined.")
         return
+    from core.cli_output_group import print_group_list_table
+    group_rows = []
     for group in groups:
         try:
-            schedule_info = f" [scheduled: {group['schedule']}]" if "schedule" in group else ""
-            execution_mode = group.get("execution", "serial")
-            stop_on_error = group.get("stop_on_error", False)
-
-            # Build execution info
-            exec_info = f" [execution: {execution_mode}"
-            if execution_mode == "serial" and stop_on_error:
-                exec_info += ", stop_on_error"
-            exec_info += "]"
-
-            click.echo(f"Group: {group['name']} - {group.get('description', '')}{schedule_info}{exec_info}")
-            click.echo("  Tasks:")
-            for task_name in group.get("tasks", []):
-                click.echo(f"    - {task_name}")
-            click.echo("")
+            group_rows.append({
+                "name": group.get("name", ""),
+                "description": group.get("description", ""),
+                "schedule": group.get("schedule", ""),
+                "execution": group.get("execution", "serial"),
+                "stop_on_error": group.get("stop_on_error", False),
+                "tasks": group.get("tasks", []),
+            })
         except KeyError as e:
-            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-            msg = f" Group entry missing required field: {e}. Offending group: {group}"
-            click.echo(f"{label}{msg}", err=True)
+            click.echo(f"[CONFIG ERROR] Group entry missing required field: {e}. Offending group: {group}", err=True)
         except Exception as e:
-            label = click.style("[CONFIG ERROR]", fg="red", bold=True)
-            msg = f" Unexpected error in group config: {e}. Offending group: {group}"
-            click.echo(f"{label}{msg}", err=True)
+            click.echo(f"[CONFIG ERROR] Unexpected error in group config: {e}. Offending group: {group}", err=True)
+    print_group_list_table(group_rows)
 
 
 @config.command(name="show")
@@ -754,30 +745,17 @@ def list_schedules():
         click.echo("No scheduled groups defined.")
         return
 
-    # Prepare table columns
-    max_group_len = max((len(g.get('name', '')) for g in scheduled), default=5)
-    max_group_len = min(max_group_len, 25)
-    max_sched_len = max((len(g.get('schedule', '')) for g in scheduled), default=8)
-    max_sched_len = min(max_sched_len, 20)
-    max_desc_len = max((len(g.get('description', 'N/A')) for g in scheduled), default=11)
-    max_desc_len = min(max_desc_len, 40)
-    max_task_count_len = max((len(str(len(g.get('tasks', [])))) for g in scheduled), default=1)
-    max_task_count_len = max(max_task_count_len, 5)
-    max_tasks_len = max((len(", ".join(g.get('tasks', []))) for g in scheduled), default=5)
-    max_tasks_len = min(max_tasks_len, 40)
-
-    # Header
-    header = f"{'GROUP':<{max_group_len}}  {'SCHEDULE':<{max_sched_len}}  {'DESCRIPTION':<{max_desc_len}}  {'TASKS':<{max_task_count_len}}  {'TASK NAMES':<{max_tasks_len}}"
-    click.echo(header)
-    click.echo("─" * len(header))
-
+    from core.cli_output_tables import print_schedule_list_table
+    schedule_rows = []
     for group in scheduled:
-        group_name = group.get('name', '')[:max_group_len]
-        schedule = group.get('schedule', '')[:max_sched_len]
-        description = group.get('description', 'N/A')[:max_desc_len]
-        task_count = str(len(group.get('tasks', []))).ljust(max_task_count_len)
-        tasks = ", ".join(group.get('tasks', []))[:max_tasks_len]
-        click.echo(f"{group_name:<{max_group_len}}  {schedule:<{max_sched_len}}  {description:<{max_desc_len}}  {task_count:<{max_task_count_len}}  {tasks:<{max_tasks_len}}")
+        schedule_rows.append({
+            "group": group.get('name', ''),
+            "schedule": group.get('schedule', ''),
+            "description": group.get('description', 'N/A'),
+            "task_count": len(group.get('tasks', [])),
+            "tasks": ", ".join(group.get('tasks', [])),
+        })
+    print_schedule_list_table(schedule_rows)
 
 
 @cli.command()
