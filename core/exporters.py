@@ -28,6 +28,25 @@ def validate_group_for_export(group, group_name):
     return True, None
 
 
+def get_schedule_string(group):
+    """Extract schedule string from group config.
+    
+    Supports both formats:
+    - String: schedule: "0 * * * *"
+    - Dict: schedule: { cron: "0 * * * *" }
+    
+    Args:
+        group: Group configuration dict
+        
+    Returns:
+        str: Cron schedule string
+    """
+    schedule = group.get("schedule")
+    if isinstance(schedule, dict):
+        return schedule.get("cron", "")
+    return schedule or ""
+
+
 def get_python_executable():
     """Determine the Python executable to use for exported tasks.
 
@@ -125,7 +144,7 @@ def generate_systemd_timer(group, group_name):
             str: Timer file content
     """
     service_name = f"signalbox-{group_name}"
-    cron_schedule = group["schedule"]
+    cron_schedule = get_schedule_string(group)
 
     return f"""[Unit]
 Description=Timer for signalbox - {group.get('description', group_name)}
@@ -237,7 +256,7 @@ def generate_cron_entry(group, group_name):
     task_dir = get_task_dir()
     signalbox_cmd = get_signalbox_command()
 
-    return f"{group['schedule']} cd {task_dir} && {signalbox_cmd} run-group {group_name}"
+    return f"{get_schedule_string(group)} cd {task_dir} && {signalbox_cmd} run-group {group_name}"
 
 
 def export_cron(group, group_name):

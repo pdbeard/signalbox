@@ -812,54 +812,72 @@ def export_cron(group_name):
 @handle_exceptions
 def config_validate():
     """Validate configuration files for errors."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich import box
+    
+    console = Console()
     result = validator.validate_configuration()
 
     # Show which files are being validated
     if result.files_used:
-        click.echo(f"Validating: {', '.join(result.files_used)}\n")
+        files_text = "\n".join([f"  • {f}" for f in result.files_used])
+        console.print(Panel(files_text, title="[bold cyan]Validating Configuration Files[/bold cyan]", 
+                           border_style="cyan", box=box.ROUNDED))
 
     # Show errors
     if result.errors:
-        click.echo("Errors found:")
+        error_text = ""
         for error in result.errors:
             if not error.strip():
-                click.echo()
+                error_text += "\n"
             elif error.strip().endswith(".yaml") or error.strip().startswith(
                 ("Task Config File", "Group Config File")
             ):
-                click.echo(error)
+                error_text += f"[bold red]{error}[/bold red]\n"
             else:
-                click.echo(f" - {error}")
+                error_text += f"  [red]✗[/red] {error}\n"
+        console.print(Panel(error_text.rstrip(), title="[bold red]Errors Found[/bold red]", 
+                           border_style="red", box=box.ROUNDED))
 
     # Show warnings
     if result.warnings:
-        click.echo("\nWarnings:")
-        for warning in result.warnings:
-            click.echo(f"{warning}")
+        warning_text = "\n".join([f"  [yellow]⚠[/yellow] {w}" for w in result.warnings])
+        console.print(Panel(warning_text, title="[bold yellow]Warnings[/bold yellow]", 
+                           border_style="yellow", box=box.ROUNDED))
 
         strict_mode = get_config_value("validation.strict", False)
         if strict_mode:
-            click.echo("\nValidation failed (strict mode enabled)")
+            console.print("\n[red]Validation failed (strict mode enabled)[/red]")
             sys.exit(2)
 
     # Show success message
     if not result.has_issues:
-        click.echo("✓ Configuration is valid")
+        console.print(f"\n[bold green]✓ Configuration is valid[/bold green]\n")
     elif not result.errors:
-        click.echo("\n✓ No errors found (warnings only)")
+        console.print(f"\n[bold green]✓ No errors found[/bold green] [dim](warnings only)[/dim]\n")
 
     # Show summary
     if result.config and not result.has_issues:
         summary = validator.get_validation_summary(result)
-        click.echo(f"\nSummary:")
-        click.echo(f"  Tasks: {summary.get('tasks', 0)}")
-        click.echo(f"  Groups: {summary.get('groups', 0)}")
-        click.echo(f"  Scheduled groups: {summary.get('scheduled_groups', 0)}")
-
+        
+        summary_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+        summary_table.add_column("Item", style="cyan")
+        summary_table.add_column("Value", style="bold white")
+        
+        summary_table.add_row("Tasks", str(summary.get('tasks', 0)))
+        summary_table.add_row("Groups", str(summary.get('groups', 0)))
+        summary_table.add_row("Scheduled groups", str(summary.get('scheduled_groups', 0)))
+        
         if "default_timeout" in summary:
-            click.echo(f"  Default timeout: {summary['default_timeout']}s")
+            summary_table.add_row("Default timeout", f"{summary['default_timeout']}s")
             log_limit = summary.get("default_log_limit", {})
-            click.echo(f"  Default log limit: {log_limit.get('type', 'count')} = {log_limit.get('value', 10)}")
+            summary_table.add_row("Default log limit", 
+                                 f"{log_limit.get('type', 'count')} = {log_limit.get('value', 10)}")
+        
+        console.print(Panel(summary_table, title="[bold cyan]Summary[/bold cyan]", 
+                           border_style="cyan", box=box.ROUNDED))
 
     # Exit with appropriate code if validation failed
     if not result.is_valid:
