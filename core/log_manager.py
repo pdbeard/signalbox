@@ -8,8 +8,13 @@ from .helpers import format_timestamp
 
 
 def get_task_log_dir(task_name):
-    """Get the log directory path for a task."""
+    """Get the log directory path for a task, relative to config file directory."""
     log_dir = get_config_value("paths.log_dir", "logs")
+    # Try to resolve log_dir relative to config home
+    from .config import _default_config_manager
+    config_home = _default_config_manager.find_config_home()
+    if not os.path.isabs(log_dir):
+        log_dir = os.path.join(config_home, log_dir)
     return os.path.join(log_dir, task_name)
 
 
@@ -23,19 +28,14 @@ def ensure_log_dir(task_name):
 
 
 def get_log_path(task_name, timestamp=None):
-    """Get the full path for a log file.
-
-    Args:
-        task_name: Name of the task
-        timestamp: Optional timestamp string, defaults to current time
-
-    Returns:
-        str: Full path to the log file
-    """
+    """Get the full path for a log file, relative to config file directory."""
     if timestamp is None:
         timestamp = format_timestamp(datetime.now())
-
     log_dir = get_config_value("paths.log_dir", "logs")
+    from .config import _default_config_manager
+    config_home = _default_config_manager.find_config_home()
+    if not os.path.isabs(log_dir):
+        log_dir = os.path.join(config_home, log_dir)
     return os.path.join(log_dir, task_name, f"{timestamp}.log")
 
 

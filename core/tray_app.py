@@ -179,34 +179,60 @@ class SignalboxTray:
     def setup_menu(self):
         """Set up the tray menu."""
         menu = QMenu()
-        
+
         # View Status action
         status_action = QAction("View Status", self.app)
         status_action.triggered.connect(self.show_status)
         menu.addAction(status_action)
-        
+
         menu.addSeparator()
-        
+
         # Run All Tasks action
         run_all_action = QAction("Run All Tasks", self.app)
         run_all_action.triggered.connect(self.run_all_tasks)
         menu.addAction(run_all_action)
-        
+
         menu.addSeparator()
-        
+
+        # Clear Error State action
+        clear_error_action = QAction("Clear error state", self.app)
+        clear_error_action.triggered.connect(self.clear_error_state)
+        menu.addAction(clear_error_action)
+
+        menu.addSeparator()
+
         # Open Config action
         config_action = QAction("Open Config", self.app)
         config_action.triggered.connect(self.open_config)
         menu.addAction(config_action)
-        
+
         menu.addSeparator()
-        
+
         # Exit action
         exit_action = QAction("Exit", self.app)
         exit_action.triggered.connect(self.exit_app)
         menu.addAction(exit_action)
-        
+
         self.tray_icon.setContextMenu(menu)
+
+    def clear_error_state(self):
+        """Set a timestamp to ignore failed logs before now and reset tray status to green."""
+        import json
+        import time
+        state_file = os.path.expanduser("~/.signalbox_tray_state.json")
+        state = {}
+        # Try to load existing state
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    state = json.load(f)
+            except Exception:
+                state = {}
+        state["ignore_failures_before"] = int(time.time())
+        with open(state_file, "w") as f:
+            json.dump(state, f)
+        self.tray_icon.showMessage("Signalbox", "Error state cleared. Tray will ignore failures before now.")
+        self.update_status()
 
     def get_icon_path(self, status):
         """
@@ -229,9 +255,8 @@ class SignalboxTray:
     def update_status(self):
         """
         Poll runtime state and update icon based on overall status.
-        
         Green = all recent tasks successful
-        Red = one or more tasks failed
+        Red = one or more tasks failed (not ignored)
         Yellow = loading/in-progress
         """
         # Don't update if we're in loading state
@@ -239,25 +264,44 @@ class SignalboxTray:
             if self.verbose:
                 print("[VERBOSE] Skipping status update - loading state active")
             return
-        
+
+        # Load ignore_failures_before timestamp
+        import json
+        state_file = os.path.expanduser("~/.signalbox_tray_state.json")
+        ignore_before = 0
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    state = json.load(f)
+                    ignore_before = int(state.get("ignore_failures_before", 0))
+            except Exception:
+                ignore_before = 0
+
         try:
             runtime_state = load_runtime_state()
-            
-            # Check if any tasks have failed
+
+            # Check if any tasks have failed (not ignored)
             has_failures = False
             task_count = 0
             success_count = 0
-            
+
             if "tasks" in runtime_state:
                 for task_name, task_data in runtime_state["tasks"].items():
                     task_count += 1
-                    # Runtime uses 'last_status' not 'status'
                     last_status = task_data.get("last_status", "")
+                    last_run = task_data.get("last_run_time", 0) or task_data.get("last_run", 0)
+                    # last_run_time should be a unix timestamp if available, else fallback
+                    try:
+                        last_run_ts = int(last_run) if last_run else 0
+                    except Exception:
+                        last_run_ts = 0
                     if last_status == "failed":
-                        has_failures = True
+                        # Only count as failure if after ignore_before
+                        if last_run_ts > ignore_before:
+                            has_failures = True
                     elif last_status == "success":
                         success_count += 1
-            
+
             if self.verbose:
                 print(f"[VERBOSE] Status update: {success_count}/{task_count} tasks successful, failures: {has_failures}")
             

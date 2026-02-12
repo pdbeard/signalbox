@@ -1,5 +1,0 @@
-# Runtime state for test.yaml - auto-generated, do not edit manually
-tasks:
-  fail_test:
-    last_run: '20260211_085442_172081'
-    last_status: failed
