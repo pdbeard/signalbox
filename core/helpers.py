@@ -64,8 +64,8 @@ def load_yaml_files_from_dir(
 
 
     for filename in sorted(os.listdir(directory)):
-        # Skip files in build/ directory
         filepath = os.path.join(directory, filename)
+        # Skip files in build/ directory
         if 'build' in filepath.split(os.sep):
             continue
 

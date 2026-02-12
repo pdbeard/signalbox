@@ -208,7 +208,13 @@ def validate_configuration(include_catalog=True):
             result.errors.append(f"No tasks file found ({tasks_file})")
             return result
         else:
-            result.config = load_config()
+            try:
+                result.config = load_config()
+            except Exception as e:
+                result.errors.append(f"Error loading config: {e}")
+                import traceback
+                result.errors.append(f"Traceback: {traceback.format_exc()}")
+                return result
             # Track which files are being used
             config_file = resolve_path("config/signalbox.yaml")
             if os.path.exists(config_file):
@@ -331,25 +337,65 @@ def _validate_groups(result):
     # Note: Required field validation is now done per-file during initial validation
     # to properly group errors by source file
 
+    # Get group sources for better error messages
+    group_sources = config.get("_group_sources", {})
+
     for group in groups:
         if "name" not in group:
             continue
 
         group_name = group["name"]
+        source_file = group_sources.get(group_name, "unknown file")
+        if source_file != "unknown file":
+            source_file = os.path.basename(source_file)
 
         # Check if tasks exist
         if "tasks" in group and group["tasks"]:
             for task_name in group["tasks"]:
+                # Check if task_name is a string (common error: using dict instead of string)
+                if not isinstance(task_name, str):
+                    result.errors.append(
+                        "Group '{}' in {} has invalid task entry: expected string, got {}".format(
+                            group_name, source_file, type(task_name).__name__
+                        )
+                    )
+                    continue
                 if task_name not in task_names:
                     result.errors.append("Group '{}' references non-existent task '{}'".format(group_name, task_name))
 
         # Validate schedule if present
         if "schedule" in group:
-            schedule = group["schedule"]
-            parts = schedule.split()
-            if len(parts) != 5:
-                result.warnings.append(
-                    "Group '{}' schedule may be invalid: '{}' (expected 5 fields)".format(group_name, schedule)
+            try:
+                schedule = group["schedule"]
+                # Support both string format and dict format with 'cron' key
+                if isinstance(schedule, dict):
+                    if "cron" in schedule:
+                        schedule_str = schedule["cron"]
+                    else:
+                        result.errors.append(
+                            "Group '{}' in {} has schedule dict without 'cron' key".format(group_name, source_file)
+                        )
+                        continue
+                elif isinstance(schedule, str):
+                    schedule_str = schedule
+                else:
+                    result.errors.append(
+                        "Group '{}' in {} has invalid schedule type: expected string or dict, got {}".format(
+                            group_name, source_file, type(schedule).__name__
+                        )
+                    )
+                    continue
+                
+                parts = schedule_str.split()
+                if len(parts) != 5:
+                    result.warnings.append(
+                        "Group '{}' in {} schedule may be invalid: '{}' (expected 5 cron fields)".format(
+                            group_name, source_file, schedule_str
+                        )
+                    )
+            except Exception as e:
+                result.errors.append(
+                    "Group '{}' in {} has invalid schedule: {}".format(group_name, source_file, e)
                 )
 
 

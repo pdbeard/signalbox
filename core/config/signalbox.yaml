@@ -11,9 +11,9 @@ default_log_limit:
 # - All .yaml/.yml files in task/group directory are loaded (appended together)
 paths:
   log_dir: logs
-  scripts_file: config/tasks  # Directory containing user task YAML files
+  tasks_file: config/tasks  # Directory containing user task YAML files
   groups_file: config/groups    # Directory containing user group YAML files
-  catalog_scripts_file: config/catalog/tasks  # Directory containing catalog task YAML files
+  catalog_tasks_file: config/catalog/tasks  # Directory containing catalog task YAML files
   catalog_groups_file: config/catalog/groups    # Directory containing catalog group YAML files
 
 # Catalog settings
@@ -65,6 +65,11 @@ group_notifications:
   enabled: true            # Enable/disable group execution summary notifications
   on_failure_only: true    # Only send notifications when tasks in the group fail
   show_failed_names: true  # Include failed task names in notifications
+
+# System tray settings
+tray:
+  enabled: true            # Enable/disable system tray icon
+  poll_interval: 30        # How often to poll status (in seconds)
 
 # Display settings
 display:

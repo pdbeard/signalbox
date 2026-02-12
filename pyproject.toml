@@ -29,6 +29,8 @@ classifiers = [
 dependencies = [
     "click>=8.0.0",
     "PyYAML>=5.4.0",
+    "PyQt6>=6.4.0",
+    "rich>=13.0.0",
 ]
 
 [project.urls]
@@ -38,9 +40,10 @@ Issues = "https://github.com/pdbeard/signalbox/issues"
 
 [project.scripts]
 signalbox = "core.cli_commands:cli"
+signalbox-tray = "core.tray_app:main"
 
 [tool.setuptools.package-data]
-"core" = ["config/**/*"]
+"core" = ["config/**/*", "icons/*.png"]
 
 [project.optional-dependencies]
 dev = [

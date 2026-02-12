@@ -1,0 +1,12 @@
+Tray pulls from runtime, runtime doesn't change or update on config changes, so stays red if you delete old scripts that never run successfully. 
+
+Probably need a clear all runtime, or some sort of history where it doesn't count as "unsuccesful" to the signalbox-tray. 
+
+Init carrys over runtimes
+
+init still created a script folder in catalog. 
+
+Config is not pulling from ~/.config/signalbox/config only from signalbox/config/catalog (think if fixed this already on another computer but didn't push to github)
+
+
+had installing via pipx had to uninstall via pipx and then install to fix the issue (should include in readme)

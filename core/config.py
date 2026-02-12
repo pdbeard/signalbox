@@ -113,12 +113,13 @@ class ConfigManager:
         """Load configuration from tasks and groups directories."""
         config = {"tasks": [], "groups": [], "_task_sources": {}, "_group_sources": {}}
 
-        # Load user tasks from directory
-        tasks_path = self.get_config_value("paths.tasks_file", TASKS_FILE)
-        tasks_path = self.resolve_path(tasks_path)
-        if os.path.isdir(tasks_path):
+
+        # Load user tasks from directory (only 'tasks_file' config key supported)
+        user_tasks_dir = self.get_config_value("paths.tasks_file", TASKS_FILE)
+        user_tasks_dir = self.resolve_path(user_tasks_dir)
+        if os.path.isdir(user_tasks_dir):
             tasks_list = load_yaml_files_from_dir(
-                tasks_path, key="tasks", track_sources=True, suppress_warnings=suppress_warnings
+                user_tasks_dir, key="tasks", track_sources=True, suppress_warnings=suppress_warnings
             )
             for item in tasks_list:
                 task_name = item["data"].get("name")

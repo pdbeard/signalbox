@@ -67,6 +67,7 @@ def run_task(name, config):
         timeout = min_timeout
 
     try:
+        click.echo("")  # Add a blank line before each task execution output
         # Execute the task
         result = subprocess.run(task["command"], shell=True, capture_output=True, text=True, timeout=timeout)
 
@@ -151,6 +152,7 @@ def run_group_parallel(task_names, config):
     def run_task_wrapper(task_name):
         """Wrapper for parallel execution that catches exceptions."""
         try:
+            click.echo("")  # Add a blank line before each group task execution output
             click.echo(f"Running {task_name}...")
             success = run_task(task_name, config)
             return (task_name, success, None)
@@ -207,6 +209,7 @@ def run_group_serial(task_names, config, stop_on_error):
 
     for task_name in task_names:
         try:
+            click.echo("")  # Add a blank line before each group task execution output
             click.echo(f"Running {task_name}...")
             success = run_task(task_name, config)
 

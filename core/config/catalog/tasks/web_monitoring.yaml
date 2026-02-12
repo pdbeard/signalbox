@@ -4,21 +4,68 @@
 # These tasks are NOT meant for production use - they are educational tools!
 #
 tasks:
-- name: check_website_health
-  description: Check website status
-  command: curl -s -o /dev/null -w "%{http_code}" https://example.com
-
-
-- name: check_website_health2
-  description: Check if main website is responding
-  command: "URL=https://httpbin.org/status/200; if curl -f -s -o /dev/null $URL; then echo OK $URL; else echo DOWN $URL; fi"
+- name: rguc
+  description: Check if rguc.co.uk is responding
+  command: |
+    URL=https://rguc.co.uk
+    if curl -f -s -o /dev/null $URL; then
+      echo OK $URL
+      exit 0
+    else
+      echo DOWN $URL
+      exit 1
+    fi
   log_limit:
     type: count
     value: 5
   alerts:
     - pattern: "^OK "
-      message: "Website is up."
+      message: "rguc.co.uk is up."
       severity: info
     - pattern: "^DOWN "
-      message: "Website is down!"
+      message: "rguc.co.uk is down!"
+      severity: critical
+
+- name: iclinical 
+  description: Check if iclinical.co.uk is responding
+  command: |
+    URL=https://iclinical.co.uk
+    if curl -f -s -o /dev/null $URL; then
+      echo OK $URL
+      exit 0
+    else
+      echo DOWN $URL
+      exit 1
+    fi
+  log_limit:
+    type: count
+    value: 5
+  alerts:
+    - pattern: "^OK "
+      message: "iclinical.co.uk is up."
+      severity: info
+    - pattern: "^DOWN "
+      message: "iclinical.co.uk is down!"
+      severity: critical
+
+- name: dgftpec
+  description: Check if dgftpec.co.uk is responding
+  command: |
+    URL=https://dgftpec.co.uk
+    if curl -f -s -o /dev/null $URL; then
+      echo OK $URL
+      exit 0
+    else
+      echo DOWN $URL
+      exit 1
+    fi
+  log_limit:
+    type: count
+    value: 5
+  alerts:
+    - pattern: "^OK "
+      message: "dgftpec.co.uk is up."
+      severity: info
+    - pattern: "^DOWN "
+      message: "dgftpec.co.uk is down!"
       severity: critical
