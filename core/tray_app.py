@@ -286,15 +286,35 @@ class SignalboxTray:
             success_count = 0
 
             if "tasks" in runtime_state:
+                from datetime import datetime
+                import re
+                def parse_last_run_to_ts(last_run):
+                    # If already an int or float, treat as timestamp
+                    if isinstance(last_run, (int, float)):
+                        return int(last_run)
+                    if not last_run or last_run == "Never":
+                        return 0
+                    # If it's a log filename like 20260212_122600_712387.log
+                    m = re.match(r"(\d{8})_(\d{6})_\d+", str(last_run))
+                    if m:
+                        date_str, time_str = m.group(1), m.group(2)
+                        try:
+                            dt = datetime.strptime(date_str + time_str, "%Y%m%d%H%M%S")
+                            return int(dt.timestamp())
+                        except Exception:
+                            return 0
+                    # Try parsing as ISO or other date string
+                    try:
+                        dt = datetime.fromisoformat(str(last_run))
+                        return int(dt.timestamp())
+                    except Exception:
+                        return 0
+
                 for task_name, task_data in runtime_state["tasks"].items():
                     task_count += 1
                     last_status = task_data.get("last_status", "")
-                    last_run = task_data.get("last_run_time", 0) or task_data.get("last_run", 0)
-                    # last_run_time should be a unix timestamp if available, else fallback
-                    try:
-                        last_run_ts = int(last_run) if last_run else 0
-                    except Exception:
-                        last_run_ts = 0
+                    last_run = task_data.get("last_run_time", None) or task_data.get("last_run", None)
+                    last_run_ts = parse_last_run_to_ts(last_run)
                     if last_status == "failed":
                         # Only count as failure if after ignore_before
                         if last_run_ts > ignore_before:
