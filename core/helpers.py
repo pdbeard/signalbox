@@ -62,7 +62,13 @@ def load_yaml_files_from_dir(
     if not os.path.exists(directory):
         return items
 
+
     for filename in sorted(os.listdir(directory)):
+        # Skip files in build/ directory
+        filepath = os.path.join(directory, filename)
+        if 'build' in filepath.split(os.sep):
+            continue
+
         # Apply filters
         if filename_prefix and not filename.startswith(filename_prefix):
             continue
@@ -72,8 +78,6 @@ def load_yaml_files_from_dir(
 
         if filter_func and not filter_func(filename):
             continue
-
-        filepath = os.path.join(directory, filename)
 
         try:
             with open(filepath, "r") as f:
