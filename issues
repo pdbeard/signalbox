@@ -1,3 +1,11 @@
+[VERBOSE] stderr: Warning: Log rotation failed for pdbeard: [Errno 1] Operation not permitted: '/Users/patrick/.config/signalbox/logs/pdbeard/alerts'
+Warning: Log rotation failed for rguc: [Errno 1] Operation not permitted: '/Users/patrick/.config/signalbox/logs/rguc/alerts'
+Warning: Log rotation failed for iclinical: [Errno 1] Operation not permitted: '/Users/patrick/.config/signalbox/logs/iclinical/alerts'
+Warning: Log rotation failed for dgftpec: [Errno 1] Operation not permitted: '/Users/patrick/.config/signa
+
+
+seems to have permission errors when attempting log rotation
+
 Tray pulls from runtime, runtime doesn't change or update on config changes, so stays red if you delete old scripts that never run successfully. 
 
 Probably need a clear all runtime, or some sort of history where it doesn't count as "unsuccesful" to the signalbox-tray. 

@@ -177,8 +177,82 @@ class SignalboxTray:
                 print(f"[VERBOSE] Using default system icon (icon file not found)")
 
     def setup_menu(self):
-        """Set up the tray menu with group and task runners."""
+        """Set up the tray menu with inline status display, group and task runners."""
         menu = QMenu()
+
+        # Inline status display with human-friendly last run
+        from datetime import datetime
+        import re
+        def parse_last_run_to_ts(last_run):
+            if isinstance(last_run, (int, float)):
+                return int(last_run)
+            if not last_run or last_run == "Never":
+                return 0
+            m = re.match(r"(\d{8})_(\d{6})_\d+", str(last_run))
+            if m:
+                date_str, time_str = m.group(1), m.group(2)
+                try:
+                    dt = datetime.strptime(date_str + time_str, "%Y%m%d%H%M%S")
+                    return int(dt.timestamp())
+                except Exception:
+                    return 0
+            try:
+                dt = datetime.fromisoformat(str(last_run))
+                return int(dt.timestamp())
+            except Exception:
+                return 0
+
+        def human_delta(ts):
+            if not ts:
+                return "never"
+            now = int(datetime.now().timestamp())
+            delta = now - ts
+            if delta < 60:
+                return f"{delta} sec"
+            elif delta < 3600:
+                mins = round(delta / 60)
+                return f"{mins} min"
+            elif delta < 86400:
+                hrs = round(delta / 3600)
+                return f"{hrs} hr"
+            else:
+                days = round(delta / 86400)
+                return f"{days} day" if days == 1 else f"{days} days"
+
+        runtime_state = load_runtime_state()
+        menu.addSection("Task Status")
+        if "tasks" in runtime_state:
+            for task_name, task_data in sorted(runtime_state["tasks"].items()):
+                last_status = task_data.get("last_status", "unknown")
+                last_run = task_data.get("last_run", "Never")
+                last_run_ts = parse_last_run_to_ts(last_run)
+                status_icon = "✓" if last_status == "success" else "✗" if last_status == "failed" else "?"
+                label = f"{status_icon} {task_name} | {human_delta(last_run_ts)}"
+                action = QAction(label, menu)
+                action.setEnabled(False)
+                menu.addAction(action)
+        else:
+            action = QAction("No tasks have been run yet.", menu)
+            action.setEnabled(False)
+            menu.addAction(action)
+
+        menu.addSection("Group Status")
+        if "groups" in runtime_state:
+            for group_name, group_data in sorted(runtime_state["groups"].items()):
+                last_status = group_data.get("last_status", "unknown")
+                last_run = group_data.get("last_run", "Never")
+                last_run_ts = parse_last_run_to_ts(last_run)
+                status_icon = "✓" if last_status == "success" else "✗" if last_status == "failed" else "?"
+                label = f"{status_icon} {group_name} | {human_delta(last_run_ts)}"
+                action = QAction(label, menu)
+                action.setEnabled(False)
+                menu.addAction(action)
+        else:
+            action = QAction("No groups have been run yet.", menu)
+            action.setEnabled(False)
+            menu.addAction(action)
+
+        menu.addSeparator()
 
         # View Status action
         status_action = QAction("View Status", self.app)
@@ -228,6 +302,41 @@ class SignalboxTray:
                 file_menu.addAction(action)
             task_menu.addMenu(file_menu)
         menu.addMenu(task_menu)
+
+        menu.addSeparator()
+
+        # Notification toggles
+        import json
+        state_file = os.path.expanduser("~/.signalbox_tray_state.json")
+        state = {}
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    state = json.load(f)
+            except Exception:
+                state = {}
+        notifications_enabled = state.get("notifications_enabled", True)
+        notify_failures_only = state.get("notify_failures_only", True)
+
+        notif_toggle = QAction("Enable Notifications", menu)
+        notif_toggle.setCheckable(True)
+        notif_toggle.setChecked(notifications_enabled)
+        def toggle_notifications():
+            state["notifications_enabled"] = notif_toggle.isChecked()
+            with open(state_file, "w") as f:
+                json.dump(state, f)
+        notif_toggle.toggled.connect(toggle_notifications)
+        menu.addAction(notif_toggle)
+
+        notify_mode_toggle = QAction("Notify on Success & Failure", menu)
+        notify_mode_toggle.setCheckable(True)
+        notify_mode_toggle.setChecked(not not notify_failures_only)
+        def toggle_notify_mode():
+            state["notify_failures_only"] = not notify_mode_toggle.isChecked()
+            with open(state_file, "w") as f:
+                json.dump(state, f)
+        notify_mode_toggle.toggled.connect(toggle_notify_mode)
+        menu.addAction(notify_mode_toggle)
 
         menu.addSeparator()
 
@@ -496,12 +605,24 @@ class SignalboxTray:
     def _on_task_finished(self, success):
         """Callback when background tasks finish (runs in main thread)."""
         self.set_loading_state(False)
-        
-        if success:
-            self.tray_icon.showMessage("Signalbox", "All tasks completed successfully")
-        else:
-            self.tray_icon.showMessage("Signalbox", "Some tasks failed - check logs")
-        
+        # Load notification settings
+        import json
+        state_file = os.path.expanduser("~/.signalbox_tray_state.json")
+        state = {}
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    state = json.load(f)
+            except Exception:
+                state = {}
+        notifications_enabled = state.get("notifications_enabled", True)
+        notify_failures_only = state.get("notify_failures_only", True)
+
+        if notifications_enabled:
+            if success and not notify_failures_only:
+                self.tray_icon.showMessage("Signalbox", "All tasks completed successfully")
+            elif not success:
+                self.tray_icon.showMessage("Signalbox", "Some tasks failed - check logs")
         # Update status to reflect new results
         self.update_status()
 
