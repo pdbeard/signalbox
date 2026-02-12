@@ -177,7 +177,7 @@ class SignalboxTray:
                 print(f"[VERBOSE] Using default system icon (icon file not found)")
 
     def setup_menu(self):
-        """Set up the tray menu."""
+        """Set up the tray menu with group and task runners."""
         menu = QMenu()
 
         # View Status action
@@ -191,6 +191,43 @@ class SignalboxTray:
         run_all_action = QAction("Run All Tasks", self.app)
         run_all_action.triggered.connect(self.run_all_tasks)
         menu.addAction(run_all_action)
+
+        menu.addSeparator()
+
+        # Add group submenu
+        group_menu = QMenu("Run Group", menu)
+        config = self.config if hasattr(self, 'config') else load_config()
+        group_sources = config.get("_group_sources", {})
+        groups_by_file = {}
+        for group in config.get("groups", []):
+            group_name = group.get("name")
+            source_file = group_sources.get(group_name, "(unknown)")
+            groups_by_file.setdefault(source_file, []).append(group_name)
+        for file, group_names in groups_by_file.items():
+            file_menu = QMenu(os.path.basename(file), group_menu)
+            for group_name in group_names:
+                action = QAction(group_name, file_menu)
+                action.triggered.connect(lambda checked, name=group_name: self.run_group(name))
+                file_menu.addAction(action)
+            group_menu.addMenu(file_menu)
+        menu.addMenu(group_menu)
+
+        # Add task submenu
+        task_menu = QMenu("Run Task", menu)
+        task_sources = config.get("_task_sources", {})
+        tasks_by_file = {}
+        for task in config.get("tasks", []):
+            task_name = task.get("name")
+            source_file = task_sources.get(task_name, "(unknown)")
+            tasks_by_file.setdefault(source_file, []).append(task_name)
+        for file, task_names in tasks_by_file.items():
+            file_menu = QMenu(os.path.basename(file), task_menu)
+            for task_name in task_names:
+                action = QAction(task_name, file_menu)
+                action.triggered.connect(lambda checked, name=task_name: self.run_task(name))
+                file_menu.addAction(action)
+            task_menu.addMenu(file_menu)
+        menu.addMenu(task_menu)
 
         menu.addSeparator()
 
@@ -214,6 +251,44 @@ class SignalboxTray:
         menu.addAction(exit_action)
 
         self.tray_icon.setContextMenu(menu)
+
+    def run_group(self, group_name):
+        """Run a group by name."""
+        import subprocess
+        import threading
+        def run_group_bg():
+            try:
+                result = subprocess.run([
+                    "signalbox", "group", "run", group_name
+                ], capture_output=True, text=True)
+                success = result.returncode == 0
+                self.signals.finished.emit(success)
+            except Exception as e:
+                self.signals.show_message.emit("Error", f"Could not run group {group_name}: {e}")
+                self.signals.finished.emit(False)
+        self.set_loading_state(True)
+        self.tray_icon.showMessage("Signalbox", f"Running group: {group_name}")
+        thread = threading.Thread(target=run_group_bg, daemon=True)
+        thread.start()
+
+    def run_task(self, task_name):
+        """Run a task by name."""
+        import subprocess
+        import threading
+        def run_task_bg():
+            try:
+                result = subprocess.run([
+                    "signalbox", "task", "run", task_name
+                ], capture_output=True, text=True)
+                success = result.returncode == 0
+                self.signals.finished.emit(success)
+            except Exception as e:
+                self.signals.show_message.emit("Error", f"Could not run task {task_name}: {e}")
+                self.signals.finished.emit(False)
+        self.set_loading_state(True)
+        self.tray_icon.showMessage("Signalbox", f"Running task: {task_name}")
+        thread = threading.Thread(target=run_task_bg, daemon=True)
+        thread.start()
 
     def clear_error_state(self):
         """Set a timestamp to ignore failed logs before now and reset tray status to green."""
@@ -472,13 +547,24 @@ class SignalboxTray:
         thread.start()
 
     def open_config(self):
-        """Open config file in default editor."""
+        """Open config file in default editor (macOS: open, Linux: xdg-open)."""
         import subprocess
-        config_path = self.config.get("config_file", "config/signalbox.yaml")
+        import platform
+        from .config import _default_config_manager
+        config_home = _default_config_manager.find_config_home()
+        config_file = self.config.get("config_file", "config/signalbox.yaml")
+        if not os.path.isabs(config_file):
+            config_path = os.path.join(config_home, config_file)
+        else:
+            config_path = config_file
         if self.verbose:
             print(f"[VERBOSE] Opening config file: {config_path}")
         try:
-            subprocess.Popen(["xdg-open", config_path])
+            system = platform.system()
+            if system == "Darwin":
+                subprocess.Popen(["open", config_path])
+            else:
+                subprocess.Popen(["xdg-open", config_path])
         except Exception as e:
             error_msg = f"Could not open config: {e}"
             self.tray_icon.showMessage("Error", error_msg)
