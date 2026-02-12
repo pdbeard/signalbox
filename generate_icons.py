@@ -28,7 +28,7 @@ def create_icon(color_name, rgb_color, size=64):
                  outline=(0, 0, 0, 200), width=border_width)
     
     # Save the icon
-    output_path = f"icons/{color_name}.png"
+    output_path = f"core/icons/{color_name}.png"
     img.save(output_path, "PNG")
     print(f"Created {output_path}")
 

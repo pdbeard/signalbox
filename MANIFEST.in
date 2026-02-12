@@ -1,2 +1,2 @@
 recursive-include core/config *
-recursive-include icons *.png *.svg
+recursive-include core/icons *.png *.svg

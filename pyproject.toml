@@ -43,7 +43,7 @@ signalbox = "core.cli_commands:cli"
 signalbox-tray = "core.tray_app:main"
 
 [tool.setuptools.package-data]
-"core" = ["config/**/*"]
+"core" = ["config/**/*", "icons/*.png"]
 
 [project.optional-dependencies]
 dev = [

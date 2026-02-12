@@ -218,12 +218,12 @@ class SignalboxTray:
         Returns:
             Path object or None
         """
-        # Try workspace/project directory first
-        workspace_icons = Path.cwd() / "icons" / f"{status}.png"
+        # Try workspace/project directory first (for development)
+        workspace_icons = Path.cwd() / "core" / "icons" / f"{status}.png"
         if workspace_icons.exists():
             return workspace_icons
-        # Fallback to package directory
-        package_icons = Path(__file__).parent.parent / "icons" / f"{status}.png"
+        # Fallback to package directory (for installed package)
+        package_icons = Path(__file__).parent / "icons" / f"{status}.png"
         return package_icons
 
     def update_status(self):

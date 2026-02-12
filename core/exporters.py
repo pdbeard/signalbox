@@ -256,7 +256,7 @@ def generate_cron_entry(group, group_name):
     task_dir = get_task_dir()
     signalbox_cmd = get_signalbox_command()
 
-    return f"{get_schedule_string(group)} cd {task_dir} && {signalbox_cmd} run-group {group_name}"
+    return f"{get_schedule_string(group)} cd {task_dir} && {signalbox_cmd} group run {group_name}"
 
 
 def export_cron(group, group_name):

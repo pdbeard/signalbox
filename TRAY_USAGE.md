@@ -86,6 +86,40 @@ Add to your compositor config:
 exec-once = signalbox-tray
 ```
 
+### macOS
+To autostart signalbox-tray on login:
+
+**Option 1: Login Items (GUI)**
+1. Open **System Settings** > **General** > **Login Items**.
+2. Click the **+** button and add the full path to your signalbox-tray executable (e.g., `/Users/USERNAME/.local/bin/signalbox-tray` or wherever pipx installs it).
+3. The tray will launch automatically on login.
+
+**Option 2: launchd (advanced/manual)**
+1. Create a file at `~/Library/LaunchAgents/com.signalbox.tray.plist` with the following contents:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.signalbox.tray</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/USERNAME/.local/bin/signalbox-tray</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+```
+2. Load it with:
+```sh
+launchctl load ~/Library/LaunchAgents/com.signalbox.tray.plist
+```
+3. The tray will now start automatically at login.
+
+**Note:** Adjust the path to signalbox-tray as needed. You can find it with `which signalbox-tray`.
+
 ## Customization
 ### Custom Icons
 Replace the default icons in the `icons/` directory:

@@ -748,12 +748,22 @@ def list_schedules():
     from core.cli_output_tables import print_schedule_list_table
     schedule_rows = []
     for group in scheduled:
+        # Ensure all values are strings for rich table rendering
+        group_name = str(group.get('name', ''))
+        schedule = str(group.get('schedule', ''))
+        description = str(group.get('description', 'N/A'))
+        tasks_list = group.get('tasks', [])
+        if isinstance(tasks_list, (list, tuple)):
+            tasks_str = ", ".join([str(t) for t in tasks_list])
+        else:
+            tasks_str = str(tasks_list)
+        task_count = str(len(tasks_list)) if isinstance(tasks_list, (list, tuple)) else "1"
         schedule_rows.append({
-            "group": group.get('name', ''),
-            "schedule": group.get('schedule', ''),
-            "description": group.get('description', 'N/A'),
-            "task_count": len(group.get('tasks', [])),
-            "tasks": ", ".join(group.get('tasks', [])),
+            "group": group_name,
+            "schedule": schedule,
+            "description": description,
+            "task_count": task_count,
+            "tasks": tasks_str,
         })
     print_schedule_list_table(schedule_rows)
 

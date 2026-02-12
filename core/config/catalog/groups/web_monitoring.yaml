@@ -1,0 +1,12 @@
+# Web Monitoring Group
+# Runs all web monitoring scripts every hour
+
+groups:
+- name: rguc_sites
+  description: Run web monitoring scripts every hour
+  execution: serial
+  schedule: "0 * * * *"  # Every hour
+  tasks:
+    - rguc 
+    - iclinical 
+    - dgftpec
