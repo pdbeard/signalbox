@@ -4,6 +4,10 @@ Warning: Log rotation failed for iclinical: [Errno 1] Operation not permitted: '
 Warning: Log rotation failed for dgftpec: [Errno 1] Operation not permitted: '/Users/patrick/.config/signa
 
 
+log file rotation errors
+
+
+
 seems to have permission errors when attempting log rotation
 
 Tray pulls from runtime, runtime doesn't change or update on config changes, so stays red if you delete old scripts that never run successfully. 
