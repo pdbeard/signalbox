@@ -20,45 +20,28 @@ from . import alerts
 from .helpers import format_timestamp
 
 
-def run_task(name, config):
-    """Execute a single task and log the results.
-
-    Args:
-            name: Name of the task to run
-            config: Full configuration dict containing tasks
-
-    Returns:
-            bool: True if task executed successfully (exit code 0), False otherwise
+def _find_task(name, config):
+    """Find a task in the config by name.
 
     Raises:
-            TaskNotFoundError: If task not found in configuration
-            ExecutionTimeoutError: If task execution times out
-            ExecutionError: If task execution fails for any other reason
+        TaskNotFoundError: If no task with the given name exists in config.
     """
-
-    # Validate configuration before running task
-    from . import validator, config as config_mod
-
-    validation_result = validator.validate_configuration()
-    if validation_result.errors or validation_result.warnings:
-        click.echo("Some configuration errors or warnings were found. Please run 'signalbox validate' for details.")
-
-    # Reload config with warnings suppressed for task execution
-    config = config_mod.load_config(suppress_warnings=True)
-
     task = next((s for s in config["tasks"] if s["name"] == name), None)
     if not task:
         raise TaskNotFoundError(name)
+    return task
 
-    # Prepare logging
-    ensure_log_dir(name)
-    timestamp = format_timestamp(datetime.now())
-    log_file = get_log_path(name, timestamp)
 
-    # Get timeout setting
+def _execute(task, name):
+    """Run the task subprocess and return (result, log_file, timestamp).
+
+    Handles timeout resolution and log path preparation.
+
+    Raises:
+        ExecutionTimeoutError: If the subprocess exceeds the configured timeout.
+    """
     timeout = get_config_value("execution.default_timeout", 300)
-    # Security: Enforce minimum timeout of 1 second to prevent DOS attacks
-    # A timeout of 0 would mean "no timeout" which could hang forever
+    # Security: Enforce minimum timeout to prevent DOS via infinite hangs
     min_timeout = get_config_value("execution.min_timeout", 1)
     if timeout == 0:
         timeout = None
@@ -66,73 +49,90 @@ def run_task(name, config):
         click.echo(f"Warning: Timeout {timeout}s is below minimum {min_timeout}s, using minimum", err=True)
         timeout = min_timeout
 
+    ensure_log_dir(name)
+    timestamp = format_timestamp(datetime.now())
+    log_file = get_log_path(name, timestamp)
+
     try:
-        click.echo("")  # Add a blank line before each task execution output
-        # Execute the task
         result = subprocess.run(task["command"], shell=True, capture_output=True, text=True, timeout=timeout)
-
-        # Write log file
-        write_execution_log(log_file, task["command"], result.returncode, result.stdout, result.stderr)
-
-        # Check for alert patterns in output
-        combined_output = result.stdout + "\n" + result.stderr
-        triggered_alerts = alerts.check_alert_patterns(name, task, combined_output)
-
-        # Save and optionally notify for each triggered alert
-        if triggered_alerts:
-            global_alerts_enabled = get_config_value("alerts.notifications.enabled", True)
-            global_on_failure_only = get_config_value("alerts.notifications.on_failure_only", True)
-            
-            for alert in triggered_alerts:
-                alerts.save_alert(name, alert)
-
-                # Always log to console
-                severity_label = alert["severity"].upper()
-                click.echo(f"  [{severity_label}] {alert['message']}")
-
-                # Check if notifications are enabled (global or per-alert override)
-                alert_notify = alert.get("notify")
-                if alert_notify is False:
-                    continue  # Skip notification but alert was already logged
-                alerts_enabled = alert_notify if alert_notify is not None else global_alerts_enabled
-                
-                if alerts_enabled:
-                    # Check on_failure_only setting (global or per-alert override)
-                    alert_on_failure_only = alert.get("on_failure_only")
-                    on_failure_only = alert_on_failure_only if alert_on_failure_only is not None else global_on_failure_only
-                    
-                    alert_severity = alert.get("severity", "info")
-                    if on_failure_only and alert_severity == "info":
-                        # Skip notification for info-level alerts when on_failure_only is enabled
-                        continue
-                    
-                    # Use custom title if provided, otherwise default to "Alert: {task_name}"
-                    alert_title = alert.get("title") or f"Alert: {name}"
-                    notifications.send_notification(
-                        title=alert_title,
-                        message=alert["message"],
-                        urgency="critical" if alert_severity == "critical" else "normal",
-                    )
-
-        # Rotate old logs
-        rotate_logs(task)
-
-        # Determine status and save runtime state
-        status = "success" if result.returncode == 0 else "failed"
-        click.echo(f"Task {name} {status}. Log: {log_file}")
-
-        task_source_file = config["_task_sources"].get(name)
-        if task_source_file:
-            save_task_runtime_state(name, task_source_file, timestamp, status)
-
-        # Update in-memory config
-        task["last_status"] = status
-        task["last_run"] = timestamp
-
-        return result.returncode == 0
-
     except subprocess.TimeoutExpired:
         raise ExecutionTimeoutError(name, timeout)
+
+    return result, log_file, timestamp
+
+
+def _post_execution(name, task, result, log_file, timestamp, config):
+    """Handle all post-execution concerns: logging, alerts, notifications, log rotation, runtime state."""
+    write_execution_log(log_file, task["command"], result.returncode, result.stdout, result.stderr)
+
+    # Check for alert patterns in output
+    combined_output = result.stdout + "\n" + result.stderr
+    triggered_alerts = alerts.check_alert_patterns(name, task, combined_output)
+
+    # Save and optionally notify for each triggered alert
+    if triggered_alerts:
+        global_alerts_enabled = get_config_value("alerts.notifications.enabled", True)
+        global_on_failure_only = get_config_value("alerts.notifications.on_failure_only", True)
+
+        for alert in triggered_alerts:
+            alerts.save_alert(name, alert)
+
+            severity_label = alert["severity"].upper()
+            click.echo(f"  [{severity_label}] {alert['message']}")
+
+            alert_notify = alert.get("notify")
+            if alert_notify is False:
+                continue
+            alerts_enabled = alert_notify if alert_notify is not None else global_alerts_enabled
+
+            if alerts_enabled:
+                alert_on_failure_only = alert.get("on_failure_only")
+                on_failure_only = alert_on_failure_only if alert_on_failure_only is not None else global_on_failure_only
+                alert_severity = alert.get("severity", "info")
+                if on_failure_only and alert_severity == "info":
+                    continue
+                alert_title = alert.get("title") or f"Alert: {name}"
+                notifications.send_notification(
+                    title=alert_title,
+                    message=alert["message"],
+                    urgency="critical" if alert_severity == "critical" else "normal",
+                )
+
+    rotate_logs(task)
+
+    status = "success" if result.returncode == 0 else "failed"
+    click.echo(f"Task {name} {status}. Log: {log_file}")
+
+    task_source_file = config["_task_sources"].get(name)
+    if task_source_file:
+        save_task_runtime_state(name, task_source_file, timestamp, status)
+
+    task["last_status"] = status
+    task["last_run"] = timestamp
+
+
+def run_task(name, config):
+    """Execute a single task and log the results.
+
+    Args:
+        name: Name of the task to run
+        config: Full configuration dict containing tasks
+
+    Returns:
+        bool: True if task executed successfully (exit code 0), False otherwise
+
+    Raises:
+        TaskNotFoundError: If task not found in configuration
+        ExecutionTimeoutError: If task execution times out
+        ExecutionError: If task execution fails for any other reason
+    """
+    task = _find_task(name, config)
+    try:
+        result, log_file, timestamp = _execute(task, name)
+        _post_execution(name, task, result, log_file, timestamp, config)
+        return result.returncode == 0
+    except (ExecutionTimeoutError, TaskNotFoundError):
+        raise
     except Exception as e:
         raise ExecutionError(name, str(e))
 

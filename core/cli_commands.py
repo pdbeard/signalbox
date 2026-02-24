@@ -131,12 +131,13 @@ def log():
 def config():
     """
     Configuration management.
-    
+
     \b
     Commands:
-      show [KEY]    Show configuration (all or specific setting)
-      validate      Validate configuration files
-      path          Show configuration directory path
+      show [KEY]          Show configuration (all or specific setting)
+      validate            Validate configuration files
+      path                Show configuration directory path
+      check-permissions   Check config and log directory permissions
     """
     pass
 
@@ -732,6 +733,63 @@ def config_path():
     from .config import find_config_home
     config_dir = find_config_home()
     click.echo(config_dir)
+
+
+@config.command(name="check-permissions")
+def config_check_permissions():
+    """Check that config and log directories have secure permissions.
+
+    Warns if the config directory, task files, or log directory are readable
+    or writable by users other than the owner. Config files should be treated
+    as shell scripts — if they can be written by others, arbitrary commands
+    can be injected into scheduled tasks.
+    """
+    config_home = _default_config_manager.find_config_home()
+    log_dir = get_config_value("paths.log_dir", "logs")
+    if not os.path.isabs(log_dir):
+        log_dir = os.path.join(config_home, log_dir)
+
+    issues = []
+
+    def check_dir(path, label):
+        if not os.path.exists(path):
+            return
+        mode = os.stat(path).st_mode & 0o777
+        if mode & 0o077:
+            issues.append(f"{label} is accessible by group/others: {path}  (current: {oct(mode)}, recommended: 0o700)")
+
+    def check_file(path, label):
+        if not os.path.exists(path):
+            return
+        mode = os.stat(path).st_mode & 0o777
+        if mode & 0o022:
+            issues.append(f"{label} is writable by group/others: {path}  (current: {oct(mode)}, recommended: 0o600)")
+
+    check_dir(config_home, "Config home")
+    check_dir(log_dir, "Log directory")
+
+    tasks_dir = os.path.join(config_home, "config", "tasks")
+    if os.path.exists(tasks_dir):
+        for fname in os.listdir(tasks_dir):
+            fpath = os.path.join(tasks_dir, fname)
+            if os.path.isfile(fpath):
+                check_file(fpath, f"Task file '{fname}'")
+
+    groups_dir = os.path.join(config_home, "config", "groups")
+    if os.path.exists(groups_dir):
+        for fname in os.listdir(groups_dir):
+            fpath = os.path.join(groups_dir, fname)
+            if os.path.isfile(fpath):
+                check_file(fpath, f"Group file '{fname}'")
+
+    if issues:
+        click.echo("Permission issues found:", err=True)
+        for issue in issues:
+            click.echo(f"  WARNING: {issue}", err=True)
+        click.echo("\nRun: chmod 700 <directory>  or  chmod 600 <file>  to fix.", err=True)
+        sys.exit(1)
+    else:
+        click.echo("All permission checks passed.")
 
 
 @cli.command()

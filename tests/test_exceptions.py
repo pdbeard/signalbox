@@ -12,7 +12,7 @@ def test_configuration_error():
     assert e.exit_code == 2
 
 def test_script_not_found_error():
-    e = exceptions.ScriptNotFoundError('myscript')
+    e = exceptions.TaskNotFoundError('myscript')
     assert 'myscript' in str(e)
     assert e.exit_code == 3
 

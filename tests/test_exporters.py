@@ -66,7 +66,7 @@ def test_generate_systemd_timer():
 def test_generate_cron_entry():
     group = {'description': 'desc', 'schedule': '* * * * *'}
     entry = exporters.generate_cron_entry(group, 'g1')
-    assert 'run-group g1' in entry
+    assert 'group run g1' in entry
 
 def test_export_systemd(monkeypatch, tmp_path):
     group = {'description': 'desc', 'schedule': '* * * * *'}

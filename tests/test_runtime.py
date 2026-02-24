@@ -10,7 +10,7 @@ from unittest.mock import patch, mock_open
 
 from core.runtime import (
     load_runtime_state,
-    save_script_runtime_state,
+    save_task_runtime_state,
     save_group_runtime_state,
     merge_config_with_runtime_state,
 )
@@ -55,15 +55,15 @@ class TestLoadRuntimeState:
             assert result == {"scripts": {}, "groups": {}}
 
     @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("core.helpers.os.path.exists")
+    @patch("core.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_script_runtime_state(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading runtime state for scripts."""
         mock_resolve.side_effect = lambda path: f"/config/{path}"
 
         def exists_side_effect(path):
-            return path == "/config/runtime/scripts"
+            return path == "/config/runtime/tasks"
 
         mock_exists.side_effect = exists_side_effect
         mock_listdir.return_value = ["runtime_test.yaml"]
@@ -115,15 +115,15 @@ class TestLoadRuntimeState:
         assert result["groups"]["test_group"]["execution_count"] == 5
 
     @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("core.helpers.os.path.exists")
+    @patch("core.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_ignores_non_runtime_files(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test that only runtime_*.yaml files are loaded."""
         mock_resolve.side_effect = lambda path: f"/config/{path}"
 
         def exists_side_effect(path):
-            return path == "/config/runtime/scripts"
+            return path == "/config/runtime/tasks"
 
         mock_exists.side_effect = exists_side_effect
         mock_listdir.return_value = ["runtime_test.yaml", "other_file.yaml", "readme.txt", ".hidden.yaml"]
@@ -141,15 +141,15 @@ class TestLoadRuntimeState:
         assert len(result[key]) == 1
 
     @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("core.helpers.os.path.exists")
+    @patch("core.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_handles_invalid_yaml(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading runtime state with invalid YAML file."""
         mock_resolve.side_effect = lambda path: f"/config/{path}"
 
         def exists_side_effect(path):
-            return path == "/config/runtime/scripts"
+            return path == "/config/runtime/tasks"
 
         mock_exists.side_effect = exists_side_effect
         mock_listdir.return_value = ["runtime_bad.yaml"]
@@ -159,7 +159,7 @@ class TestLoadRuntimeState:
             result = load_runtime_state()
 
         # Should return empty state without crashing
-        assert result == {"scripts": {}, "groups": {}}
+        assert result == {"tasks": {}, "groups": {}}
 
     @patch("core.runtime.resolve_path")
     @patch("core.runtime.os.path.exists")
@@ -185,15 +185,15 @@ class TestLoadRuntimeState:
         assert result["tasks"] == {}
 
     @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("core.helpers.os.path.exists")
+    @patch("core.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_multiple_runtime_files(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading multiple runtime files and merging."""
         mock_resolve.side_effect = lambda path: f"/config/{path}"
 
         def exists_side_effect(path):
-            return path == "/config/runtime/scripts"
+            return path == "/config/runtime/tasks"
 
         mock_exists.side_effect = exists_side_effect
         mock_listdir.return_value = ["runtime_file1.yaml", "runtime_file2.yaml"]
@@ -217,7 +217,7 @@ class TestLoadRuntimeState:
 
 
 class TestSaveScriptRuntimeState:
-    """Tests for save_script_runtime_state function."""
+    """Tests for save_task_runtime_state function."""
 
     @patch("core.runtime.resolve_path")
     @patch("core.runtime.os.path.exists")
@@ -229,7 +229,7 @@ class TestSaveScriptRuntimeState:
         mock_exists.return_value = False
 
         with patch("yaml.dump") as mock_dump:
-            save_script_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
+            save_task_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
 
         # Verify directory creation
         mock_makedirs.assert_called_once()
@@ -263,7 +263,7 @@ class TestSaveScriptRuntimeState:
         }
 
         with patch("yaml.safe_load", return_value=existing_data), patch("yaml.dump") as mock_dump:
-            save_script_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
+            save_task_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
 
         # Verify yaml dump was called
         dumped_data = mock_dump.call_args[0][0]
@@ -284,7 +284,7 @@ class TestSaveScriptRuntimeState:
 
         # Simulate corrupted file
         with patch("yaml.safe_load", side_effect=yaml.YAMLError("Corrupted")), patch("yaml.dump") as mock_dump:
-            save_script_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
+            save_task_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
 
         # Should create new data structure
         dumped_data = mock_dump.call_args[0][0]
@@ -301,10 +301,10 @@ class TestSaveScriptRuntimeState:
         mock_exists.return_value = False
 
         with patch("yaml.dump"):
-            save_script_runtime_state("test_script", "scripts/custom.yaml", "20240101_120000", "success")
+            save_task_runtime_state("test_script", "scripts/custom.yaml", "20240101_120000", "success")
 
         # Verify resolve_path was called with correct runtime filename
-        expected_call = "runtime/scripts/runtime_custom.yaml"
+        expected_call = "runtime/tasks/runtime_custom.yaml"
         mock_resolve.assert_called_with(expected_call)
 
 
@@ -365,8 +365,8 @@ class TestSaveGroupRuntimeState:
         assert group_data["last_status"] == "success"
         assert group_data["execution_time_seconds"] == 45.5
         assert group_data["execution_count"] == 1
-        assert group_data["scripts_total"] == 10
-        assert group_data["scripts_successful"] == 8
+        assert group_data["tasks_total"] == 10
+        assert group_data["tasks_successful"] == 8
         assert group_data["success_rate"] == 80.0
 
     @patch("core.runtime.resolve_path")
@@ -584,7 +584,7 @@ class TestRuntimeIntegration:
 
         with patch("core.runtime.resolve_path", return_value=str(runtime_file)):
             # Save state
-            save_script_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
+            save_task_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
 
             # Verify file exists
             assert runtime_file.exists()

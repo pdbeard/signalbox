@@ -157,6 +157,27 @@ def load_yaml_dict_from_dir(
     return merged_dict
 
 
+def get_resolved_log_dir() -> str:
+    """
+    Resolve the configured log directory to an absolute path.
+
+    Centralizes the resolution logic used across alerts.py and log_manager.py
+    so both modules read from the same location regardless of working directory
+    or SIGNALBOX_HOME / XDG_CONFIG_HOME settings.
+
+    Returns:
+        Absolute path to the log directory
+    """
+    import os
+    from .config import get_config_value, _default_config_manager
+
+    log_dir = get_config_value("paths.log_dir", "logs")
+    if not os.path.isabs(log_dir):
+        config_home = _default_config_manager.find_config_home()
+        log_dir = os.path.join(config_home, log_dir)
+    return log_dir
+
+
 def get_timestamp_format() -> str:
     """
     Get the configured timestamp format.

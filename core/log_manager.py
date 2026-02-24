@@ -49,10 +49,6 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
             stdout: Standard output from the command
             stderr: Standard error from the command
     """
-    # Security: Set restrictive permissions (owner read/write only)
-    # This prevents other users from reading potentially sensitive log output
-    import os
-
     # Check max log file size to prevent disk filling attacks
     max_log_size = get_config_value("logging.max_file_size_mb", 100) * 1024 * 1024
     content_size = len(command) + len(str(return_code)) + len(stdout) + len(stderr)
@@ -65,7 +61,10 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
         stdout = stdout[:half_size] + truncation_msg + stdout[-half_size:] if len(stdout) > half_size else stdout
         stderr = stderr[:half_size] + truncation_msg + stderr[-half_size:] if len(stderr) > half_size else stderr
 
-    with open(log_file, "w") as f:
+    # Security: create file with 0o600 from the start so there is no window
+    # between creation and chmod where the file could be world-readable.
+    fd = os.open(log_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         if get_config_value("logging.include_command", True):
             f.write(f"Command: {command}\n")
 
@@ -77,9 +76,6 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
 
         if get_config_value("execution.capture_stderr", True):
             f.write("STDERR:\n" + stderr + "\n")
-
-    # Set secure permissions: 0o600 (owner read/write only)
-    os.chmod(log_file, 0o600)
 
 
 def rotate_logs(task):
@@ -274,6 +270,10 @@ def clear_all_logs():
             bool: True if log directory was found and cleared, False otherwise
     """
     log_dir = get_config_value("paths.log_dir", "logs")
+    from .config import _default_config_manager
+    config_home = _default_config_manager.find_config_home()
+    if not os.path.isabs(log_dir):
+        log_dir = os.path.join(config_home, log_dir)
 
     if not os.path.exists(log_dir):
         return False

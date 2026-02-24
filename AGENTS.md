@@ -15,7 +15,7 @@
 - **Formatting:** Follow PEP8, prefer `black` formatting (4 spaces, max line length 88/120)
 - **Types:** No type hints required, but use clear variable names and docstrings
 - **Naming:** Use snake_case for variables/functions, UPPER_CASE for constants
-- **Error Handling:** Use try/except, print errors with `click.echo`, fail gracefully
+- **Error Handling:** The project uses a single convention: raise custom exceptions from `core/exceptions.py` (`TaskNotFoundError`, `ExecutionError`, etc.) and let the CLI layer's `@handle_exceptions` decorator translate them into user-facing messages and exit codes. Do not use result objects (e.g. `return ExportResult(success=False)`) for error paths in core modules, and do not print-and-continue for failures that the caller needs to know about.
 - **Configuration:** Use YAML for config, scripts, and groups; validate with CLI
 - **Logging:** Store logs in `logs/`, rotate by count or age
 - **CLI:** Expose commands via `click` decorators

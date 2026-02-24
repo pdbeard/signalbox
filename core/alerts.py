@@ -4,21 +4,12 @@ import re
 import json
 from datetime import datetime, timedelta
 from .config import get_config_value
-from .helpers import format_timestamp, parse_timestamp
+from .helpers import format_timestamp, parse_timestamp, get_resolved_log_dir
 
 
 def get_alerts_dir(task_name):
     """Get the alerts directory for a task."""
-    log_dir = get_config_value("paths.log_dir", "logs")
-    # Expand ~ to home directory
-    if log_dir.startswith("~"):
-        log_dir = os.path.expanduser(log_dir)
-    # If not absolute, make it relative to config directory
-    if not os.path.isabs(log_dir):
-        config_dir = os.path.expanduser("~/.config/signalbox")
-        log_dir = os.path.join(config_dir, log_dir)
-
-    return os.path.join(log_dir, task_name, "alerts")
+    return os.path.join(get_resolved_log_dir(), task_name, "alerts")
 
 
 def ensure_alerts_dir(task_name):
@@ -96,12 +87,7 @@ def load_alerts(task_name=None, severity=None, max_days=None):
     alerts = []
 
     # Determine which task directories to check
-    log_dir = get_config_value("paths.log_dir", "logs")
-    if log_dir.startswith("~"):
-        log_dir = os.path.expanduser(log_dir)
-    if not os.path.isabs(log_dir):
-        config_dir = os.path.expanduser("~/.config/signalbox")
-        log_dir = os.path.join(config_dir, log_dir)
+    log_dir = get_resolved_log_dir()
 
     if task_name:
         task_dirs = [task_name]

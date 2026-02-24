@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import subprocess
 
 from core.executor import run_task, run_group_parallel, run_group_serial
-from core.exceptions import ScriptNotFoundError, ExecutionError, ExecutionTimeoutError
+from core.exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError
 
 
 class TestRunTask:
@@ -20,7 +20,7 @@ class TestRunTask:
     @patch("core.executor.get_config_value")
     @patch("core.executor.get_log_path")
     @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.save_script_runtime_state")
+    @patch("core.executor.save_task_runtime_state")
     @patch("core.executor.rotate_logs")
     @patch("core.executor.write_execution_log")
     @patch("core.executor.subprocess.run")
@@ -74,7 +74,7 @@ class TestRunTask:
     @patch("core.executor.get_config_value")
     @patch("core.executor.get_log_path")
     @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.save_script_runtime_state")
+    @patch("core.executor.save_task_runtime_state")
     @patch("core.executor.rotate_logs")
     @patch("core.executor.write_execution_log")
     @patch("core.executor.subprocess.run")
@@ -123,7 +123,7 @@ class TestRunTask:
             "_task_sources": {},
         }
 
-        with pytest.raises(ScriptNotFoundError) as exc_info:
+        with pytest.raises(TaskNotFoundError) as exc_info:
             run_task("nonexistent_task", config)
 
         assert "nonexistent_task" in str(exc_info.value)
@@ -313,7 +313,7 @@ class TestRunGroupParallel:
         # script1 succeeds, script2 raises exception, script3 succeeds
         def run_task_side_effect(name, config):
             if name == "script2":
-                raise ScriptNotFoundError("script2")
+                raise TaskNotFoundError("script2")
             return True
 
         mock_run_task.side_effect = run_task_side_effect
@@ -414,7 +414,7 @@ class TestRunGroupSerial:
 
         def run_task_side_effect(name, config):
             if name == "script2":
-                raise ScriptNotFoundError("script2")
+                raise TaskNotFoundError("script2")
             return True
 
         mock_run_task.side_effect = run_task_side_effect
@@ -472,7 +472,7 @@ class TestExecutorIntegration:
     @patch("core.executor.subprocess.run")
     @patch("core.executor.write_execution_log")
     @patch("core.executor.rotate_logs")
-    @patch("core.executor.save_script_runtime_state")
+    @patch("core.executor.save_task_runtime_state")
     @patch("core.executor.ensure_log_dir")
     @patch("core.executor.get_log_path")
     @patch("core.executor.notifications.notify_execution_result")
@@ -531,7 +531,7 @@ class TestExecutorIntegration:
     @patch("core.executor.subprocess.run")
     @patch("core.executor.write_execution_log")
     @patch("core.executor.rotate_logs")
-    @patch("core.executor.save_script_runtime_state")
+    @patch("core.executor.save_task_runtime_state")
     @patch("core.executor.ensure_log_dir")
     @patch("core.executor.get_log_path")
     @patch("core.executor.notifications.notify_execution_result")

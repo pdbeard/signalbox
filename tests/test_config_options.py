@@ -10,19 +10,19 @@ def test_custom_log_dir(tmp_path):
     config = {
         "paths": {
             "log_dir": str(custom_log_dir.resolve()),
-            "scripts_file": str(scripts_dir.resolve()),
+            "tasks_file": str(scripts_dir.resolve()),
             "groups_file": str(groups_dir.resolve()),
         },
-        "scripts": [{"name": "hello", "command": "echo hi", "description": "test"}],
+        "tasks": [{"name": "hello", "command": "echo hi", "description": "test"}],
     }
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     config_file = config_dir / "signalbox.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
-    # Create script file
+    # Create task file
     with open(scripts_dir / "test.yaml", "w") as f:
-        yaml.dump({"scripts": config["scripts"]}, f)
+        yaml.dump({"tasks": config["tasks"]}, f)
     try:
         import sys
         import os
@@ -40,12 +40,12 @@ def test_custom_log_dir(tmp_path):
         runner = CliRunner()
         # Patch core.config.load_config to return our test config dict, not the config module
         test_config_dict = {
-            "scripts": [{"name": "hello", "command": "echo hi", "description": "test"}],
+            "tasks": [{"name": "hello", "command": "echo hi", "description": "test"}],
             "groups": [],
-            "_script_sources": {"hello": str(scripts_dir / "test.yaml")},
+            "_task_sources": {"hello": str(scripts_dir / "test.yaml")},
             "_group_sources": {},
         }
-        with patch("core.config.load_config", return_value=test_config_dict):
+        with patch("core.cli_commands.load_config", return_value=test_config_dict):
             result = runner.invoke(cli, ["--config", str(config_file), "run", "hello"])
         print("CLI output:", result.output)
         assert result.exit_code == 0, f"CLI failed: {result.output}"

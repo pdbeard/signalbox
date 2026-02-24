@@ -41,9 +41,9 @@ def send_notification(title, message, urgency="normal"):
 
 def _send_macos_notification(title, message):
     """Send notification on macOS using osascript."""
-    # Escape quotes in title and message
-    title = title.replace('"', '\\"')
-    message = message.replace('"', '\\"')
+    # Escape backslashes first, then quotes (order matters to avoid double-escaping)
+    title = title.replace("\\", "\\\\").replace('"', '\\"')
+    message = message.replace("\\", "\\\\").replace('"', '\\"')
 
     script = f'display notification "{message}" with title "{title}"'
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=5)
@@ -117,13 +117,10 @@ def notify_execution_result(total, passed, failed, context="tasks", failed_names
     """
     from .config import get_config_value
     
-    # Get settings from global config (use new key group_notifications, fallback to old notifications key)
-    enabled = get_config_value("group_notifications.enabled", 
-                              get_config_value("notifications.enabled", True))
-    on_failure_only = get_config_value("group_notifications.on_failure_only", 
-                                       get_config_value("notifications.on_failure_only", True))
-    show_failed_names = get_config_value("group_notifications.show_failed_names", 
-                                         get_config_value("notifications.show_failed_names", True))
+    # Get settings from global config under group_notifications
+    enabled = get_config_value("group_notifications.enabled", True)
+    on_failure_only = get_config_value("group_notifications.on_failure_only", True)
+    show_failed_names = get_config_value("group_notifications.show_failed_names", True)
 
     # Check if we should send notification
     if not enabled:

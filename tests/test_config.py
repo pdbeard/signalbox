@@ -83,22 +83,27 @@ class TestFindConfigHome:
                         result = manager.find_config_home()
                         assert result == os.path.expanduser("~/.config/signalbox")
 
-    def test_current_dir_fallback(self):
+    def test_current_dir_fallback(self, tmp_path):
         """Test fallback to current working directory."""
         manager = ConfigManager()
 
+        # Create a config file in tmp_path so the CWD existence check passes
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / "signalbox.yaml").write_text("")
+
         with patch.dict(os.environ, {}, clear=True):
             with patch("os.path.isdir") as mock_isdir:
-                # Make user config dir check fail
-                def isdir_side_effect(path):
-                    if ".config/signalbox" in path:
-                        return False
-                    return True
+                with patch("os.getcwd", return_value=str(tmp_path)):
+                    # Make user config dir check fail
+                    def isdir_side_effect(path):
+                        if ".config/signalbox" in path:
+                            return False
+                        return True
 
-                mock_isdir.side_effect = isdir_side_effect
+                    mock_isdir.side_effect = isdir_side_effect
 
-                result = manager.find_config_home()
-                assert result == os.getcwd()
+                    result = manager.find_config_home()
+                    assert result == str(tmp_path)
 
     def test_caching_config_home(self, temp_config_dir):
         """Test that config home is cached after first lookup."""
