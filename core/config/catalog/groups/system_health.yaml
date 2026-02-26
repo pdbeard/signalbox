@@ -1,0 +1,21 @@
+# System Health Monitoring Groups
+#
+groups:
+- name: system_health_check
+  description: Parallel system resource check — disk, memory, and load in one pass. Fast because all three run concurrently.
+  execution: parallel
+  schedule: "*/15 * * * *"
+  tasks:
+    - check_disk_space
+    - check_memory_pressure
+    - check_system_load
+
+- name: daily_maintenance
+  description: Daily housekeeping — cleans old tmp files and scans for unexpectedly large files. Runs at 2am to avoid disrupting working hours.
+  execution: serial
+  stop_on_error: false
+  schedule: "0 2 * * *"
+  tasks:
+    - clean_old_tmp_files
+    - check_large_files
+    - verify_recent_backup

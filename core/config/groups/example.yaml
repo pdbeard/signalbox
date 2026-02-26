@@ -14,3 +14,11 @@
 #     schedule: "0 2 * * *"  # Optional cron expression
 #
 # You can delete this file once you add your own groups.
+groups:
+- name: Group example 
+  description: group example
+  execution: serial
+  stop_on_error: true  # STOPS when fail_test fails
+  tasks:
+  - hello
+  - world

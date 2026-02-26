@@ -1,0 +1,49 @@
+# System Health Monitoring Tasks
+#
+# Checks for disk space, memory pressure, and system load.
+# Suitable for scheduling every 5-15 minutes via a group.
+#
+# NOTE: check_memory_pressure uses the macOS `memory_pressure` command.
+# Linux users: replace it with `free -m` and adjust alert patterns accordingly.
+#
+tasks:
+- name: check_disk_space
+  description: Report disk usage across all filesystems. Alerts if any volume is critically full.
+  command: |
+    df -h
+  log_limit:
+    type: count
+    value: 50
+  alerts:
+    - pattern: "9[0-9]%|100%"
+      message: "A filesystem is critically full (90%+) — act immediately"
+      severity: critical
+    - pattern: "8[5-9]%"
+      message: "A filesystem is nearly full (85%+) — investigate soon"
+      severity: warning
+
+- name: check_memory_pressure
+  description: "Check system memory pressure (macOS). High pressure means the OS is actively compressing or swapping. Linux: replace command with 'free -m'."
+  command: |
+    memory_pressure
+  log_limit:
+    type: count
+    value: 50
+  alerts:
+    - pattern: "pressure: 9[0-9]%|pressure: 100%"
+      message: "Memory pressure is critical — applications may be severely impacted"
+      severity: critical
+    - pattern: "pressure: [7-8][0-9]%"
+      message: "Memory pressure is elevated — system may be slow"
+      severity: warning
+
+- name: check_system_load
+  description: Show system load averages (1, 5, 15 minutes) and CPU count for context. High load relative to CPU count may indicate a runaway process.
+  command: |
+    echo "Load averages:"
+    uptime
+    echo ""
+    echo "CPU cores: $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 'unknown')"
+  log_limit:
+    type: count
+    value: 50

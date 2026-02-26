@@ -1,0 +1,61 @@
+# Routine Maintenance Tasks
+#
+# Housekeeping tasks suitable for daily or weekly scheduling.
+# Review commands before enabling — clean_old_tmp_files deletes files.
+#
+tasks:
+- name: clean_old_tmp_files
+  description: Remove files from /tmp older than 7 days. Only targets the top level of /tmp to avoid removing files from active subdirectories.
+  command: |
+    echo "Scanning /tmp for files older than 7 days..."
+    COUNT=$(find /tmp -maxdepth 1 -mtime +7 -delete -print 2>/dev/null | wc -l | tr -d ' ')
+    echo "Removed ${COUNT} file(s)"
+  log_limit:
+    type: count
+    value: 30
+
+- name: check_large_files
+  description: Find files larger than 1GB in your home directory (up to 5 levels deep, skipping hidden directories). Useful for spotting unexpected large files consuming disk space.
+  command: |
+    echo "Scanning for files over 1GB in ~..."
+    FOUND=$(find ~ -maxdepth 5 -size +1G -not -path '*/.*' 2>/dev/null)
+    if [ -z "$FOUND" ]; then
+      echo "No files over 1GB found"
+    else
+      echo "LARGE_FILES_FOUND:"
+      echo "$FOUND"
+    fi
+  log_limit:
+    type: count
+    value: 10
+  alerts:
+    - pattern: "LARGE_FILES_FOUND"
+      message: "One or more files over 1GB found in home directory — review if unexpected"
+      severity: info
+
+- name: verify_recent_backup
+  description: "Check that a recent backup exists in your backup directory. Edit BACKUP_DIR to point to your backup location. Alerts if no backup has been created in the last 24 hours."
+  command: |
+    BACKUP_DIR="${HOME}/backups"
+    MAX_AGE_HOURS=24
+    echo "Checking for backups in: $BACKUP_DIR"
+    if [ ! -d "$BACKUP_DIR" ]; then
+      echo "BACKUP_MISSING: Backup directory does not exist: $BACKUP_DIR"
+      exit 1
+    fi
+    RECENT=$(find "$BACKUP_DIR" -maxdepth 2 \
+      \( -name "*.tar.gz" -o -name "*.tar.bz2" -o -name "*.zip" -o -name "*.bak" \) \
+      -mmin -$((MAX_AGE_HOURS * 60)) 2>/dev/null | head -1)
+    if [ -n "$RECENT" ]; then
+      echo "BACKUP_OK: Recent backup found:"
+      echo "  $RECENT"
+    else
+      echo "BACKUP_MISSING: No backup found in ${BACKUP_DIR} within the last ${MAX_AGE_HOURS} hours"
+    fi
+  log_limit:
+    type: count
+    value: 30
+  alerts:
+    - pattern: "BACKUP_MISSING"
+      message: "No recent backup found — backup may be overdue or misconfigured"
+      severity: critical

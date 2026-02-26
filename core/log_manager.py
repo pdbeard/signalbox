@@ -3,7 +3,7 @@
 import os
 from datetime import datetime, timedelta
 from .config import get_config_value
-from .helpers import format_timestamp
+from .helpers import format_timestamp, get_resolved_log_dir
 
 
 
@@ -293,8 +293,8 @@ def get_all_log_files():
         list: List of dicts with task, log_file, timestamp, path
     """
     from .helpers import parse_timestamp
-    log_dir = get_config_value("paths.log_dir", "logs")
-    
+    log_dir = get_resolved_log_dir()
+
     if not os.path.exists(log_dir):
         return []
     

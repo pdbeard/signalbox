@@ -1,12 +1,14 @@
-# Web Monitoring Group
-# Runs all web monitoring scripts every hour
-
+# Web and Network Monitoring Groups
+#
+# Remember to edit the target URLs/domains in the task files before enabling scheduling.
+#
 groups:
-- name: rguc_sites
-  description: Run web monitoring scripts every hour
-  execution: serial
-  schedule: "0 * * * *"  # Every hour
+- name: web_health_check
+  description: Parallel web and network health check — website status, SSL expiry, DNS resolution, and connectivity in one pass.
+  execution: parallel
+  schedule: "*/10 * * * *"
   tasks:
-    - rguc 
-    - iclinical 
-    - dgftpec
+    - check_website_health
+    - check_ssl_expiry
+    - check_dns_resolution
+    - ping_connectivity

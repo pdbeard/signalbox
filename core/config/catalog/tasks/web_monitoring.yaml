@@ -1,71 +1,105 @@
-# Web Monitoring Tasks Examples
+# Web and Network Monitoring Tasks
 #
-# ⚠️  IMPORTANT: These are EXAMPLE tasks for learning and getting started.
-# These tasks are NOT meant for production use - they are educational tools!
+# Generic tasks for checking website availability, SSL certificates,
+# DNS resolution, and basic network connectivity.
+#
+# Replace example.com / https://example.com with your actual targets.
+# Suitable for scheduling every 5-15 minutes via a group.
 #
 tasks:
-- name: rguc
-  description: Check if rguc.co.uk is responding
+- name: check_website_health
+  description: "Check if a website responds with HTTP 2xx. Edit the URL to your target. Alerts on 4xx/5xx errors and connection failures."
   command: |
-    URL=https://rguc.co.uk
-    if curl -f -s -o /dev/null $URL; then
-      echo OK $URL
-      exit 0
-    else
-      echo DOWN $URL
+    URL="https://example.com"
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$URL")
+    TIME=$(curl -s -o /dev/null -w "%{time_total}" --max-time 15 "$URL" 2>/dev/null || echo "N/A")
+    echo "URL: $URL"
+    echo "HTTP_STATUS: $STATUS"
+    echo "Response time: ${TIME}s"
+    case "$STATUS" in
+      2*) echo "RESULT: OK" ;;
+      3*) echo "RESULT: REDIRECT (may need updating)" ;;
+      4*) echo "RESULT: CLIENT_ERROR" ;;
+      5*) echo "RESULT: SERVER_ERROR" ;;
+      000) echo "RESULT: CONNECTION_FAILED" ;;
+      *) echo "RESULT: UNKNOWN" ;;
+    esac
+  log_limit:
+    type: count
+    value: 50
+  alerts:
+    - pattern: "RESULT: SERVER_ERROR"
+      message: "Website is returning a server error (5xx)"
+      severity: critical
+    - pattern: "RESULT: CONNECTION_FAILED"
+      message: "Website is unreachable — connection failed"
+      severity: critical
+    - pattern: "RESULT: CLIENT_ERROR"
+      message: "Website returned a client error (4xx)"
+      severity: warning
+
+- name: check_ssl_expiry
+  description: "Check if an SSL certificate expires within 30 days. Edit HOST to match your domain. Runs a non-intrusive TLS handshake to read the certificate."
+  command: |
+    HOST="example.com"
+    PORT=443
+    echo "Checking SSL certificate for ${HOST}:${PORT}"
+    CERT_INFO=$(echo | openssl s_client -connect "${HOST}:${PORT}" -servername "$HOST" 2>/dev/null | openssl x509 -noout -enddate -subject 2>/dev/null)
+    if [ -z "$CERT_INFO" ]; then
+      echo "SSL_ERROR: Could not retrieve certificate for $HOST"
       exit 1
+    fi
+    echo "$CERT_INFO"
+    # Check if cert expires within 30 days (2592000 seconds)
+    echo | openssl s_client -connect "${HOST}:${PORT}" -servername "$HOST" 2>/dev/null \
+      | openssl x509 -noout -checkend 2592000 2>/dev/null \
+      && echo "SSL_OK: Certificate valid for 30+ days" \
+      || echo "SSL_WARNING: Certificate expires within 30 days"
+  log_limit:
+    type: count
+    value: 10
+  alerts:
+    - pattern: "SSL_WARNING"
+      message: "SSL certificate expires within 30 days — renew immediately"
+      severity: critical
+    - pattern: "SSL_ERROR"
+      message: "Could not retrieve SSL certificate — host may be unreachable"
+      severity: warning
+
+- name: check_dns_resolution
+  description: "Verify DNS resolution is working for a domain. Edit DOMAIN to your target. Alerts if the domain fails to resolve."
+  command: |
+    DOMAIN="example.com"
+    echo "Resolving: $DOMAIN"
+    RESULT=$(dig +short +time=5 +tries=2 "$DOMAIN" 2>&1)
+    if [ -z "$RESULT" ]; then
+      echo "DNS_FAILURE: No result for $DOMAIN"
+      exit 1
+    else
+      echo "DNS_OK: $DOMAIN resolves to:"
+      echo "$RESULT"
     fi
   log_limit:
     type: count
-    value: 5
+    value: 20
   alerts:
-    - pattern: "^OK "
-      message: "rguc.co.uk is up."
-      severity: info
-    - pattern: "^DOWN "
-      message: "rguc.co.uk is down!"
+    - pattern: "DNS_FAILURE"
+      message: "DNS resolution failed — domain may be unreachable or DNS is down"
       severity: critical
 
-- name: iclinical 
-  description: Check if iclinical.co.uk is responding
+- name: ping_connectivity
+  description: Check basic outbound network connectivity by pinging a reliable public host. Alerts on packet loss.
   command: |
-    URL=https://iclinical.co.uk
-    if curl -f -s -o /dev/null $URL; then
-      echo OK $URL
-      exit 0
-    else
-      echo DOWN $URL
-      exit 1
-    fi
+    HOST="8.8.8.8"
+    echo "Pinging $HOST..."
+    ping -c 4 "$HOST"
   log_limit:
     type: count
-    value: 5
+    value: 50
   alerts:
-    - pattern: "^OK "
-      message: "iclinical.co.uk is up."
-      severity: info
-    - pattern: "^DOWN "
-      message: "iclinical.co.uk is down!"
+    - pattern: "100\\.0% packet loss"
+      message: "No network connectivity — all pings lost"
       severity: critical
-
-- name: dgftpec
-  description: Check if dgftpec.co.uk is responding
-  command: |
-    URL=https://dgftpec.co.uk
-    if curl -f -s -o /dev/null $URL; then
-      echo OK $URL
-      exit 0
-    else
-      echo DOWN $URL
-      exit 1
-    fi
-  log_limit:
-    type: count
-    value: 5
-  alerts:
-    - pattern: "^OK "
-      message: "dgftpec.co.uk is up."
-      severity: info
-    - pattern: "^DOWN "
-      message: "dgftpec.co.uk is down!"
-      severity: critical
+    - pattern: "[1-9][0-9]\\.\\d% packet loss"
+      message: "Network instability detected — significant packet loss"
+      severity: warning
