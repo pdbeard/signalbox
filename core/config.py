@@ -216,6 +216,51 @@ class ConfigManager:
                     with open(filepath, "w") as f:
                         yaml.dump({"groups": groups}, f, default_flow_style=False, sort_keys=False)
 
+    def save_global_config_value(self, path, value):
+        """Write a single value into signalbox.yaml using dot notation.
+
+        Navigates or creates the nested key structure, writes the file
+        atomically (temp file + rename), then invalidates the in-memory
+        cache so the next read reflects the change.
+
+        Args:
+            path: Dot-notation key e.g. 'alerts.notifications.enabled'
+            value: Value to set
+        """
+        import tempfile
+
+        config_file = self.resolve_path(CONFIG_FILE)
+
+        if os.path.exists(config_file):
+            with open(config_file, "r") as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+
+        keys = path.split(".")
+        d = config
+        for key in keys[:-1]:
+            if key not in d or not isinstance(d[key], dict):
+                d[key] = {}
+            d = d[key]
+        d[keys[-1]] = value
+
+        config_dir = os.path.dirname(config_file)
+        fd, tmp_path = tempfile.mkstemp(dir=config_dir, suffix=".yaml.tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            os.replace(tmp_path, config_file)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        # Invalidate cache so next read picks up the new value
+        self._global_config = None
+
     def reset(self):
         """Reset cached configuration (useful for testing or reload)."""
         self._global_config = None
