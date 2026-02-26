@@ -385,32 +385,34 @@ def group_run(name):
     start_time = datetime.now()
     timestamp = format_timestamp(start_time)
     from core.cli_output_run import print_group_run_table
+
+    # Run all tasks in a single call so parallel/serial semantics are correct.
+    # Previously tasks were dispatched one at a time inside a loop, which made
+    # parallel mode run serially and broke stop_on_error for serial mode.
+    if execution_mode == "parallel":
+        run_group_parallel(task_names, config)
+    else:
+        run_group_serial(task_names, config, stop_on_error)
+
+    # Collect per-task results for the status table from runtime state + log files.
+    log_dir = config.get("paths", {}).get("log_dir", "logs")
+    runtime = load_runtime_state()
     results = []
     for task_name in task_names:
-        log_file = ""
-        error = ""
         try:
-            click.echo(f"Running {task_name}...")
-            if execution_mode == "parallel":
-                success = run_group_parallel([task_name], config)
-            else:
-                success = run_group_serial([task_name], config, stop_on_error)
-            status = "success" if success else "failed"
-            log_dir = config.get("paths", {}).get("log_dir", "logs")
+            task_state = runtime.get("tasks", {}).get(task_name, {})
+            status = task_state.get("last_status", "unknown")
             log_path = os.path.join(log_dir, task_name)
             log_files = sorted([f for f in os.listdir(log_path) if f.endswith(".log")], reverse=True)
             log_file = log_files[0] if log_files else ""
-        except SignalboxError as e:
-            status = "failed"
-            error = str(e)
-        except Exception as e:
-            status = "failed"
-            error = str(e)
+        except Exception:
+            status = "unknown"
+            log_file = ""
         results.append({
             "name": task_name,
             "status": status,
             "log_file": log_file,
-            "error": error,
+            "error": "",
         })
     end_time = datetime.now()
     execution_time = (end_time - start_time).total_seconds()
