@@ -114,7 +114,7 @@ def rotate_logs(task):
             default_limit = get_config_value("default_log_limit", {"type": "count", "value": 10})
             log_limit = task.get("log_limit", default_limit)
 
-            log_files = os.listdir(task_log_dir)
+            log_files = [f for f in os.listdir(task_log_dir) if os.path.isfile(os.path.join(task_log_dir, f))]
 
             if log_limit["type"] == "count":
                 _rotate_by_count(task_log_dir, log_files, log_limit["value"])

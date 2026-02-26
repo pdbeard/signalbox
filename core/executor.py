@@ -100,6 +100,14 @@ def _post_execution(name, task, result, log_file, timestamp, config):
 
     rotate_logs(task)
 
+    retention = get_config_value("alerts.retention", {})
+    alerts.prune_alerts(
+        name,
+        max_days=retention.get("max_days", 30),
+        max_entries=retention.get("max_entries", 1000),
+        per_severity=retention.get("per_severity"),
+    )
+
     status = "success" if result.returncode == 0 else "failed"
     click.echo(f"Task {name} {status}. Log: {log_file}")
 
