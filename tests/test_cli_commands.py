@@ -296,28 +296,34 @@ class TestRunGroupCommand:
     @patch("core.cli_commands.os.listdir", return_value=[])
     @patch("core.cli_commands.load_config")
     @patch("core.cli_commands.run_group_serial")
+    @patch("core.cli_commands.load_runtime_state")
     @patch("core.cli_commands.save_group_runtime_state")
     @patch("core.cli_commands.get_config_value")
     def test_run_group_calculates_status(
-        self, mock_get_config, mock_save, mock_run_serial, mock_load, mock_listdir, runner, sample_config
+        self, mock_get_config, mock_save, mock_runtime, mock_run_serial, mock_load, mock_listdir, runner, sample_config
     ):
         """Test group run calculates correct status based on results."""
         mock_load.return_value = sample_config
         mock_get_config.return_value = "%Y%m%d_%H%M%S_%f"
 
         # All tasks succeed → "success"
-        mock_run_serial.return_value = 1
+        mock_runtime.return_value = {
+            "tasks": {"test_task": {"last_status": "success"}, "another_task": {"last_status": "success"}}
+        }
         runner.invoke(cli, ["group", "run", "test_group"])
         assert mock_save.call_args[1]["last_status"] == "success"
 
         # First task succeeds, second fails → "partial"
-        mock_run_serial.side_effect = [1, 0]
+        mock_runtime.return_value = {
+            "tasks": {"test_task": {"last_status": "success"}, "another_task": {"last_status": "failed"}}
+        }
         runner.invoke(cli, ["group", "run", "test_group"])
         assert mock_save.call_args[1]["last_status"] == "partial"
 
         # All tasks fail → "failed"
-        mock_run_serial.side_effect = None
-        mock_run_serial.return_value = 0
+        mock_runtime.return_value = {
+            "tasks": {"test_task": {"last_status": "failed"}, "another_task": {"last_status": "failed"}}
+        }
         runner.invoke(cli, ["group", "run", "test_group"])
         assert mock_save.call_args[1]["last_status"] == "failed"
 

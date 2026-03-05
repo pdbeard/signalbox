@@ -328,50 +328,89 @@ def get_all_log_files():
     return logs
 
 
+def parse_stdout_from_log(content):
+    """Extract the STDOUT section from log file content."""
+    marker = "STDOUT:\n"
+    end_marker = "\nSTDERR:"
+    start = content.find(marker)
+    if start == -1:
+        return ""
+    start += len(marker)
+    end = content.find(end_marker, start)
+    return content[start:end].strip() if end != -1 else content[start:].strip()
+
+
+def parse_stderr_from_log(content):
+    """Extract the STDERR section from log file content."""
+    marker = "STDERR:\n"
+    start = content.find(marker)
+    if start == -1:
+        return ""
+    return content[start + len(marker):].strip()
+
+
+def get_stdout_preview(content, max_chars=70):
+    """Return a single-line preview of stdout.
+
+    Prefers the first substantive line (not a bare label ending in ':').
+    Falls back to the first non-empty line if everything looks like a label.
+    """
+    first_nonempty = None
+    for line in parse_stdout_from_log(content).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if first_nonempty is None:
+            first_nonempty = line
+        if not line.endswith(":"):
+            return line[:max_chars] + ("…" if len(line) > max_chars else "")
+    if first_nonempty:
+        return first_nonempty[:max_chars] + ("…" if len(first_nonempty) > max_chars else "")
+    return ""
+
+
 def parse_log_metadata(log_path):
     """Parse log file to extract status and metadata.
-    
+
     Args:
         log_path: Path to log file
-        
+
     Returns:
-        dict: Metadata including status, return_code, duration (if available)
+        dict: Metadata including status, return_code, stdout_preview
     """
     metadata = {
         'status': 'unknown',
         'return_code': None,
-        'duration': None,
-        'command': None
+        'command': None,
+        'stdout_preview': '',
     }
-    
+
     if not os.path.exists(log_path):
         return metadata
-    
+
     try:
         with open(log_path, 'r') as f:
             content = f.read()
-            
-        # Parse return code
-        if 'Return code: ' in content:
-            for line in content.split('\n'):
-                if line.startswith('Return code: '):
-                    try:
-                        metadata['return_code'] = int(line.split(': ')[1])
-                        metadata['status'] = 'success' if metadata['return_code'] == 0 else 'failed'
-                    except:
-                        pass
-                    break
-        
-        # Parse command
-        if 'Command: ' in content:
-            for line in content.split('\n'):
-                if line.startswith('Command: '):
-                    metadata['command'] = line.split(': ', 1)[1]
-                    break
-                    
+
+        for line in content.split('\n'):
+            if line.startswith('Return code: '):
+                try:
+                    metadata['return_code'] = int(line.split(': ')[1])
+                    metadata['status'] = 'success' if metadata['return_code'] == 0 else 'failed'
+                except Exception:
+                    pass
+                break
+
+        for line in content.split('\n'):
+            if line.startswith('Command: '):
+                metadata['command'] = line.split(': ', 1)[1]
+                break
+
+        metadata['stdout_preview'] = get_stdout_preview(content)
+
     except Exception:
         pass
-    
+
     return metadata
 
 

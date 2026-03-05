@@ -215,6 +215,30 @@ def init():
     click.echo("   You can now run signalbox from any directory!")
 
 
+def _print_run_output_preview(stdout, stderr, task_name, max_lines=20):
+    """Print truncated stdout (and stderr if present) after a task run."""
+    output = stdout.strip()
+    err = stderr.strip()
+
+    if not output and not err:
+        return
+
+    click.echo("")
+    if output:
+        lines = output.splitlines()
+        for line in lines[:max_lines]:
+            click.echo(f"  {line}")
+        if len(lines) > max_lines:
+            click.echo(
+                f"  ... {len(lines) - max_lines} more line(s) —"
+                f" run 'signalbox log show {task_name}' to see all"
+            )
+    if err:
+        for line in err.splitlines()[:5]:
+            click.echo(click.style(f"  {line}", fg="red"))
+    click.echo("")
+
+
 # Root-level shortcuts for frequently used commands
 @cli.command(name="run")
 @click.argument("name")
@@ -304,8 +328,9 @@ def task_list():
 @task.command(name="run")
 @click.argument("name", required=False)
 @click.option("--all", "run_all_tasks", is_flag=True, help="Run all tasks")
+@click.option("--quiet", "-q", is_flag=True, help="Suppress inline output preview")
 @handle_exceptions
-def task_run(name, run_all_tasks):
+def task_run(name, run_all_tasks, quiet):
     """Run a single task or all tasks."""
     if run_all_tasks:
         import os
@@ -352,6 +377,13 @@ def task_run(name, run_all_tasks):
         os.environ["SIGNALBOX_SUPPRESS_CONFIG_WARNINGS"] = "1"
         config = load_config(suppress_warnings=True)
         success = run_task(name, config)
+        if not quiet:
+            log_path, exists = log_manager.get_latest_log(name)
+            if exists:
+                content = log_manager.read_log_content(log_path)
+                stdout = log_manager.parse_stdout_from_log(content)
+                stderr = log_manager.parse_stderr_from_log(content)
+                _print_run_output_preview(stdout, stderr if not success else "", name)
         if not success:
             sys.exit(1)
     else:
@@ -516,75 +548,88 @@ def log_history_cmd(name):
 @click.option("--until", help="Show logs until date (YYYY-MM-DD)")
 @click.option("--today", is_flag=True, help="Show only today's logs")
 @click.option("--last", "limit", type=int, default=50, help="Show last N runs (default: 50)")
+@click.option("--verbose", "-v", is_flag=True, help="Show truncated output for each log entry")
 @handle_exceptions
-def log_list_cmd(task, status, failed, success, since, until, today, limit):
+def log_list_cmd(task, status, failed, success, since, until, today, limit, verbose):
     """List all task execution logs with filters."""
     from datetime import datetime, timedelta
-    
-    # Get all logs
+
     logs = log_manager.get_all_log_files()
-    
+
     if not logs:
         click.echo("No logs found")
         return
-    
-    # Apply status shortcuts
+
     if failed:
         status = "failed"
     elif success:
         status = "success"
-    
-    # Parse date filters
+
     since_dt = None
     until_dt = None
-    
+
     if today:
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        since_dt = today_start
+        since_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     elif since:
         try:
             since_dt = datetime.strptime(since, "%Y-%m-%d")
         except ValueError:
             click.echo(f"Error: Invalid date format for --since: {since}. Use YYYY-MM-DD", err=True)
             sys.exit(2)
-    
+
     if until:
         try:
-            until_dt = datetime.strptime(until, "%Y-%m-%d")
-            until_dt = until_dt.replace(hour=23, minute=59, second=59)
+            until_dt = datetime.strptime(until, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
         except ValueError:
             click.echo(f"Error: Invalid date format for --until: {until}. Use YYYY-MM-DD", err=True)
             sys.exit(2)
-    
-    # Filter logs
+
     filtered_logs = log_manager.filter_logs(
-        logs, 
-        task=task, 
-        status=status, 
-        since=since_dt, 
+        logs,
+        task=task,
+        status=status,
+        since=since_dt,
         until=until_dt,
-        limit=limit
+        limit=limit,
     )
-    
+
     if not filtered_logs:
         click.echo("No logs found matching filters")
         return
-    
-    # Table output using rich
-    from core.cli_output_tables import print_log_list_table
+
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-    log_rows = []
-    for log in filtered_logs:
-        try:
-            log_rows.append({
-                "task": log["task"],
-                "status": log["metadata"]["status"],
-                "timestamp": log["timestamp"].strftime(date_format),
-                "log_file": log["log_file"],
-            })
-        except Exception as e:
-            click.echo(f"[LOG ERROR] {e} in log: {log}", err=True)
-    print_log_list_table(log_rows)
+
+    if verbose:
+        from core.cli_output_tables import print_log_list_verbose
+        log_rows = []
+        for log in filtered_logs:
+            try:
+                content = log_manager.read_log_content(log["path"])
+                log_rows.append({
+                    "task": log["task"],
+                    "status": log["metadata"]["status"],
+                    "timestamp": log["timestamp"].strftime(date_format),
+                    "stdout": log_manager.parse_stdout_from_log(content),
+                    "stderr": log_manager.parse_stderr_from_log(content),
+                })
+            except Exception as e:
+                click.echo(f"[LOG ERROR] {e}", err=True)
+        print_log_list_verbose(log_rows)
+    else:
+        from core.cli_output_tables import print_log_list_table
+        log_rows = []
+        for log in filtered_logs:
+            try:
+                log_rows.append({
+                    "task": log["task"],
+                    "status": log["metadata"]["status"],
+                    "timestamp": log["timestamp"].strftime(date_format),
+                    "preview": log["metadata"].get("stdout_preview", ""),
+                })
+            except Exception as e:
+                click.echo(f"[LOG ERROR] {e}", err=True)
+        print_log_list_table(log_rows)
+
     click.echo(f"Total: {len(filtered_logs)} log(s)")
 
 
