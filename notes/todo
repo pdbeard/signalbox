@@ -1,3 +1,5 @@
+jj test commit 
+
 FIX INSTALL INSTRUCTIONS, REMOVE VENV AS A VALID "full" INSTALL OPTION. GIVE MORE PIPX INSTRUCTIONS (ie, how to find path (pipx list))
 
 Make timeout an overridable config within the scripts config
