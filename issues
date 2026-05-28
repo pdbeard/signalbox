@@ -5,7 +5,7 @@ Warning: Log rotation failed for dgftpec: [Errno 1] Operation not permitted: '/U
 
 
 log file rotation errors
-
+git
 
 
 seems to have permission errors when attempting log rotation

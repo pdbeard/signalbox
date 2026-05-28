@@ -6,9 +6,20 @@
 # Example task format:
 #
 tasks:
-  - name: my_task
-    command: echo "Hello World"
-    description: My custom task
+  - name: Hello
+    command: echo "Hello"
+    description: Hello task example
+    log_limit:
+      type: count
+      value: 10
+    alerts:
+      - pattern: "Error"
+        title: "My Task Error Alert"  # Optional: custom title for notifications
+        message: "An error occurred"
+        severity: critical
+  - name: World
+    command: echo "World"
+    description: World task example
     log_limit:
       type: count
       value: 10

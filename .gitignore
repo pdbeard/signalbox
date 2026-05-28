@@ -31,6 +31,9 @@ groups/_new.yaml   # Auto-generated file for new groups when using directory mod
 *.timer
 *.cron
 
+# jj (Jujutsu VCS)
+.jj/
+
 # IDE
 .vscode/
 .idea/
