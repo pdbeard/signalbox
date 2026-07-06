@@ -61,7 +61,6 @@ The validate command now:
 ## Further Reading
 
 - [CONFIG_GUIDE.md](CONFIG_GUIDE.md) - Comprehensive guide with examples
-- [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) - Complete reference of all settings
 - [FILE_STRUCTURE.md](FILE_STRUCTURE.md) - Scripts and groups file format
 - [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md) - Scheduling patterns and examples
 
