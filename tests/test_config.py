@@ -3,14 +3,15 @@ import yaml
 import pytest
 from pathlib import Path
 from unittest.mock import patch
+
 """
-Test suite for core/config.py
+Test suite for signalbox/config.py
 
 Tests configuration loading, resolution, and management functionality.
 """
 
 
-from core.config import (
+from signalbox.config import (
     ConfigManager,
     find_config_home,
     resolve_path,

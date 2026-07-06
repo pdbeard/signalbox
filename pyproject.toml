@@ -29,7 +29,6 @@ classifiers = [
 dependencies = [
     "click>=8.0.0",
     "PyYAML>=5.4.0",
-    "PyQt6>=6.4.0",
     "rich>=13.0.0",
 ]
 
@@ -39,34 +38,27 @@ Repository = "https://github.com/pdbeard/signalbox"
 Issues = "https://github.com/pdbeard/signalbox/issues"
 
 [project.scripts]
-signalbox = "core.cli_commands:cli"
-signalbox-tray = "core.tray_app:main"
+signalbox = "signalbox.cli:cli"
+signalbox-tray = "signalbox.tray_app:main"
 
 [tool.setuptools.package-data]
-"core" = ["config/**/*", "icons/*.png"]
+"signalbox" = ["config/**/*", "icons/*.png"]
 
 [project.optional-dependencies]
+tray = [
+    "PyQt6>=6.4.0",
+]
 dev = [
     "flake8>=6.0.0",
     "black>=23.0.0",
     "pytest>=7.0.0",
 ]
 
-# Development tool scripts
 [tool.setuptools]
-packages = ["core"]
-py-modules = ["signalbox"]
+packages = ["signalbox", "signalbox.commands"]
 
 [tool.black]
 line-length = 120
 target-version = ['py38']
 
-[tool.flake8]
-max-line-length = 120
-extend-ignore = ["E203", "W503"]
-per-file-ignores = [
-    # Allow f-strings without placeholders in CLI code (used for multiline formatting)
-    "core/cli_commands.py:F541",
-    "core/executor.py:F541",
-    "core/exporters.py:F541",
-]
+# Note: flake8 does not read pyproject.toml — its configuration lives in .flake8

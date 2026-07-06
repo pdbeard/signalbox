@@ -1,7 +1,7 @@
 """
-Tests for core.cli_commands module.
+Tests for the signalbox CLI (signalbox.cli and signalbox.commands.*).
 
-Tests CLI command functionality including list, run, run-group, logs,
+Tests CLI command functionality including list, run, group run, logs,
 validation, and other commands. All commands are invoked through the
 top-level `cli` group using CliRunner for correctness.
 """
@@ -10,8 +10,9 @@ import pytest
 from click.testing import CliRunner
 from unittest.mock import patch, MagicMock, mock_open
 
-from core.cli_commands import cli, handle_exceptions
-from core.exceptions import TaskNotFoundError
+from signalbox.cli import cli
+from signalbox.commands.utils import handle_exceptions
+from signalbox.exceptions import TaskNotFoundError
 
 
 @pytest.fixture
@@ -95,15 +96,15 @@ class TestHandleExceptions:
 class TestInitCommand:
     """Tests for init command."""
 
-    @patch("core.cli_commands.os.path.exists")
-    @patch("core.cli_commands.os.makedirs")
-    @patch("core.cli_commands.shutil.copytree")
+    @patch("signalbox.commands.misc.os.path.exists")
+    @patch("signalbox.commands.misc.os.makedirs")
+    @patch("signalbox.commands.misc.shutil.copytree")
     @patch("builtins.open", new_callable=mock_open)
     def test_init_creates_new_config(self, mock_file, mock_copytree, mock_makedirs, mock_exists, runner):
         """Test init command creates new configuration."""
         # Return False for the config home check (no existing config to backup),
         # True for the template_config check (so the copytree branch is taken).
-        mock_exists.side_effect = lambda path: str(path).endswith("core/config") or str(path).endswith("core" + __import__("os").sep + "config")
+        mock_exists.side_effect = lambda path: str(path).endswith("signalbox/config")
 
         result = runner.invoke(cli, ["init"])
 
@@ -111,10 +112,10 @@ class TestInitCommand:
         assert "Signalbox initialized successfully!" in result.output
         assert "Created logs directory" in result.output
 
-    @patch("core.cli_commands.os.path.exists")
-    @patch("core.cli_commands.shutil.move")
-    @patch("core.cli_commands.shutil.copytree")
-    @patch("core.cli_commands.os.makedirs")
+    @patch("signalbox.commands.misc.os.path.exists")
+    @patch("signalbox.commands.misc.shutil.move")
+    @patch("signalbox.commands.misc.shutil.copytree")
+    @patch("signalbox.commands.misc.os.makedirs")
     def test_init_with_existing_config_confirms_backup(
         self, mock_makedirs, mock_copytree, mock_move, mock_exists, runner
     ):
@@ -127,7 +128,7 @@ class TestInitCommand:
         assert result.exit_code == 0
         assert "Backed up existing config" in result.output
 
-    @patch("core.cli_commands.os.path.exists")
+    @patch("signalbox.commands.misc.os.path.exists")
     def test_init_with_existing_config_cancels(self, mock_exists, runner):
         """Test init command respects cancellation."""
         mock_exists.return_value = True
@@ -142,10 +143,10 @@ class TestInitCommand:
 class TestListCommand:
     """Tests for list command."""
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.load_runtime_state")
-    @patch("core.cli_commands.merge_config_with_runtime_state")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.task.load_config")
+    @patch("signalbox.commands.task.load_runtime_state")
+    @patch("signalbox.commands.task.merge_config_with_runtime_state")
+    @patch("signalbox.commands.task.get_config_value")
     def test_list_displays_scripts(self, mock_get_config, mock_merge, mock_runtime, mock_load, runner, sample_config):
         """Test list command displays all scripts."""
         mock_load.return_value = sample_config
@@ -161,10 +162,10 @@ class TestListCommand:
         assert "success" in result.output
         assert "no logs" in result.output
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.load_runtime_state")
-    @patch("core.cli_commands.merge_config_with_runtime_state")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.task.load_config")
+    @patch("signalbox.commands.task.load_runtime_state")
+    @patch("signalbox.commands.task.merge_config_with_runtime_state")
+    @patch("signalbox.commands.task.get_config_value")
     def test_list_handles_timestamp_formatting(
         self, mock_get_config, mock_merge, mock_runtime, mock_load, runner, sample_config
     ):
@@ -183,9 +184,10 @@ class TestListCommand:
 class TestRunCommand:
     """Tests for run command."""
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_task")
-    def test_run_executes_script(self, mock_run_script, mock_load, runner, sample_config):
+    @patch("signalbox.commands.task.load_config")
+    @patch("signalbox.commands.task.run_task")
+    @patch("signalbox.commands.task.log_manager.get_latest_log", return_value=(None, False))
+    def test_run_executes_script(self, mock_get_log, mock_run_script, mock_load, runner, sample_config):
         """Test run command executes a script."""
         mock_load.return_value = sample_config
         mock_run_script.return_value = True
@@ -195,8 +197,8 @@ class TestRunCommand:
         assert result.exit_code == 0
         mock_run_script.assert_called_once_with("test_task", sample_config)
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_task")
+    @patch("signalbox.commands.task.load_config")
+    @patch("signalbox.commands.task.run_task")
     def test_run_handles_script_not_found(self, mock_run_script, mock_load, runner, sample_config):
         """Test run command handles script not found error."""
         mock_load.return_value = sample_config
@@ -211,10 +213,10 @@ class TestRunCommand:
 class TestRunAllCommand:
     """Tests for task run --all command."""
 
-    @patch("core.cli_commands.os.listdir", return_value=[])
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_task")
-    def test_run_all_executes_all_scripts(self, mock_run_script, mock_load, mock_listdir, runner, sample_config):
+    @patch("signalbox.commands.task.log_manager.get_latest_log", return_value=(None, False))
+    @patch("signalbox.commands.task.load_config")
+    @patch("signalbox.commands.task.run_task")
+    def test_run_all_executes_all_scripts(self, mock_run_script, mock_load, mock_get_log, runner, sample_config):
         """Test task run --all executes all scripts."""
         mock_load.return_value = sample_config
         mock_run_script.return_value = True
@@ -225,10 +227,10 @@ class TestRunAllCommand:
         assert "Running all tasks" in result.output
         assert mock_run_script.call_count == 2
 
-    @patch("core.cli_commands.os.listdir", return_value=[])
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_task")
-    def test_run_all_continues_on_error(self, mock_run_script, mock_load, mock_listdir, runner, sample_config):
+    @patch("signalbox.commands.task.log_manager.get_latest_log", return_value=(None, False))
+    @patch("signalbox.commands.task.load_config")
+    @patch("signalbox.commands.task.run_task")
+    def test_run_all_continues_on_error(self, mock_run_script, mock_load, mock_get_log, runner, sample_config):
         """Test task run --all continues even if one script fails."""
         mock_load.return_value = sample_config
         mock_run_script.side_effect = [True, TaskNotFoundError("test")]
@@ -242,18 +244,18 @@ class TestRunAllCommand:
 class TestRunGroupCommand:
     """Tests for group run command."""
 
-    @patch("core.cli_commands.os.listdir", return_value=[])
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_group_serial")
-    @patch("core.cli_commands.save_group_runtime_state")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.group._latest_log_name", return_value="")
+    @patch("signalbox.commands.group.load_config")
+    @patch("signalbox.commands.group.run_group_serial")
+    @patch("signalbox.commands.group.load_runtime_state")
+    @patch("signalbox.commands.group.save_group_runtime_state")
     def test_run_group_serial_execution(
-        self, mock_get_config, mock_save, mock_run_serial, mock_load, mock_listdir, runner, sample_config
+        self, mock_save, mock_runtime, mock_run_serial, mock_load, mock_log_name, runner, sample_config
     ):
         """Test group run with serial execution."""
         mock_load.return_value = sample_config
         mock_run_serial.return_value = 1
-        mock_get_config.return_value = "%Y%m%d_%H%M%S_%f"
+        mock_runtime.return_value = {"tasks": {}, "groups": {}}
 
         result = runner.invoke(cli, ["group", "run", "test_group"])
 
@@ -262,20 +264,20 @@ class TestRunGroupCommand:
         assert "serial" in result.output
         assert mock_run_serial.called
 
-    @patch("core.cli_commands.os.listdir", return_value=[])
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_group_parallel")
-    @patch("core.cli_commands.save_group_runtime_state")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.group._latest_log_name", return_value="")
+    @patch("signalbox.commands.group.load_config")
+    @patch("signalbox.commands.group.run_group_parallel")
+    @patch("signalbox.commands.group.load_runtime_state")
+    @patch("signalbox.commands.group.save_group_runtime_state")
     def test_run_group_parallel_execution(
-        self, mock_get_config, mock_save, mock_run_parallel, mock_load, mock_listdir, runner, sample_config
+        self, mock_save, mock_runtime, mock_run_parallel, mock_load, mock_log_name, runner, sample_config
     ):
         """Test group run with parallel execution."""
         # Modify config for parallel execution
         sample_config["groups"][0]["execution"] = "parallel"
         mock_load.return_value = sample_config
         mock_run_parallel.return_value = 1
-        mock_get_config.return_value = "%Y%m%d_%H%M%S_%f"
+        mock_runtime.return_value = {"tasks": {}, "groups": {}}
 
         result = runner.invoke(cli, ["group", "run", "test_group"])
 
@@ -283,7 +285,7 @@ class TestRunGroupCommand:
         assert "parallel" in result.output
         assert mock_run_parallel.called
 
-    @patch("core.cli_commands.load_config")
+    @patch("signalbox.commands.group.load_config")
     def test_run_group_not_found(self, mock_load, runner, sample_config):
         """Test group run handles group not found error."""
         mock_load.return_value = sample_config
@@ -293,18 +295,16 @@ class TestRunGroupCommand:
         assert result.exit_code == 3
         assert "not found" in result.output
 
-    @patch("core.cli_commands.os.listdir", return_value=[])
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.run_group_serial")
-    @patch("core.cli_commands.load_runtime_state")
-    @patch("core.cli_commands.save_group_runtime_state")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.group._latest_log_name", return_value="")
+    @patch("signalbox.commands.group.load_config")
+    @patch("signalbox.commands.group.run_group_serial")
+    @patch("signalbox.commands.group.load_runtime_state")
+    @patch("signalbox.commands.group.save_group_runtime_state")
     def test_run_group_calculates_status(
-        self, mock_get_config, mock_save, mock_runtime, mock_run_serial, mock_load, mock_listdir, runner, sample_config
+        self, mock_save, mock_runtime, mock_run_serial, mock_load, mock_log_name, runner, sample_config
     ):
         """Test group run calculates correct status based on results."""
         mock_load.return_value = sample_config
-        mock_get_config.return_value = "%Y%m%d_%H%M%S_%f"
 
         # All tasks succeed → "success"
         mock_runtime.return_value = {
@@ -331,11 +331,11 @@ class TestRunGroupCommand:
 class TestLogsCommand:
     """Tests for log show command."""
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.get_latest_log")
-    @patch("core.cli_commands.log_manager.read_log_content")
-    @patch("core.cli_commands.log_manager.format_log_with_colors")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.log.load_config")
+    @patch("signalbox.commands.log.log_manager.get_latest_log")
+    @patch("signalbox.commands.log.log_manager.read_log_content")
+    @patch("signalbox.commands.log.log_manager.format_log_with_colors")
+    @patch("signalbox.commands.log.get_config_value")
     def test_logs_displays_latest_log(
         self, mock_get_config, mock_format, mock_read, mock_get_log, mock_load, runner, sample_config
     ):
@@ -351,8 +351,8 @@ class TestLogsCommand:
         assert result.exit_code == 0
         assert "Log content" in result.output
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.get_latest_log")
+    @patch("signalbox.commands.log.load_config")
+    @patch("signalbox.commands.log.log_manager.get_latest_log")
     def test_logs_handles_no_logs(self, mock_get_log, mock_load, runner, sample_config):
         """Test log show handles missing logs."""
         mock_load.return_value = sample_config
@@ -363,7 +363,7 @@ class TestLogsCommand:
         assert result.exit_code == 0
         assert "No logs found" in result.output
 
-    @patch("core.cli_commands.load_config")
+    @patch("signalbox.commands.log.load_config")
     def test_logs_handles_script_not_found(self, mock_load, runner, sample_config):
         """Test log show handles script not found."""
         mock_load.return_value = sample_config
@@ -376,8 +376,8 @@ class TestLogsCommand:
 class TestClearLogsCommand:
     """Tests for log clear --task command."""
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.clear_task_logs")
+    @patch("signalbox.commands.log.load_config")
+    @patch("signalbox.commands.log.log_manager.clear_task_logs")
     def test_clear_logs_removes_logs(self, mock_clear, mock_load, runner, sample_config):
         """Test log clear --task removes logs for a task."""
         mock_load.return_value = sample_config
@@ -388,8 +388,8 @@ class TestClearLogsCommand:
         assert result.exit_code == 0
         assert "Cleared logs for test_task" in result.output
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.log_manager.clear_task_logs")
+    @patch("signalbox.commands.log.load_config")
+    @patch("signalbox.commands.log.log_manager.clear_task_logs")
     def test_clear_logs_handles_no_logs(self, mock_clear, mock_load, runner, sample_config):
         """Test log clear --task handles no logs found."""
         mock_load.return_value = sample_config
@@ -404,7 +404,7 @@ class TestClearLogsCommand:
 class TestClearAllLogsCommand:
     """Tests for log clear --all command."""
 
-    @patch("core.cli_commands.log_manager.clear_all_logs")
+    @patch("signalbox.commands.log.log_manager.clear_all_logs")
     def test_clear_all_logs_removes_all(self, mock_clear, runner):
         """Test log clear --all removes all logs."""
         mock_clear.return_value = True
@@ -414,7 +414,7 @@ class TestClearAllLogsCommand:
         assert result.exit_code == 0
         assert "Cleared all logs" in result.output
 
-    @patch("core.cli_commands.log_manager.clear_all_logs")
+    @patch("signalbox.commands.log.log_manager.clear_all_logs")
     def test_clear_all_logs_handles_no_directory(self, mock_clear, runner):
         """Test log clear --all handles missing directory."""
         mock_clear.return_value = False
@@ -428,7 +428,7 @@ class TestClearAllLogsCommand:
 class TestListGroupsCommand:
     """Tests for group list command."""
 
-    @patch("core.cli_commands.load_config")
+    @patch("signalbox.commands.group.load_config")
     def test_list_groups_displays_all_groups(self, mock_load, runner, sample_config):
         """Test group list displays all groups."""
         mock_load.return_value = sample_config
@@ -438,7 +438,7 @@ class TestListGroupsCommand:
         assert result.exit_code == 0
         assert "test_group" in result.output
 
-    @patch("core.cli_commands.load_config")
+    @patch("signalbox.commands.group.load_config")
     def test_list_groups_handles_no_groups(self, mock_load, runner):
         """Test group list handles no groups defined."""
         mock_load.return_value = {"tasks": [], "groups": []}
@@ -448,7 +448,7 @@ class TestListGroupsCommand:
         assert result.exit_code == 0
         assert "No groups defined" in result.output
 
-    @patch("core.cli_commands.load_config")
+    @patch("signalbox.commands.group.load_config")
     def test_list_groups_shows_scheduled_info(self, mock_load, runner, sample_config):
         """Test group list shows schedule information."""
         sample_config["groups"][0]["schedule"] = "0 2 * * *"
@@ -463,7 +463,7 @@ class TestListGroupsCommand:
 class TestShowConfigCommand:
     """Tests for config show command."""
 
-    @patch("core.cli_commands.load_global_config")
+    @patch("signalbox.commands.config.load_global_config")
     def test_show_config_displays_configuration(self, mock_load, runner):
         """Test config show displays global configuration."""
         mock_load.return_value = {
@@ -477,7 +477,7 @@ class TestShowConfigCommand:
         assert "execution" in result.output
         assert "default_timeout" in result.output
 
-    @patch("core.cli_commands.load_global_config")
+    @patch("signalbox.commands.config.load_global_config")
     def test_show_config_handles_no_config(self, mock_load, runner):
         """Test config show handles no configuration."""
         mock_load.return_value = {}
@@ -491,7 +491,7 @@ class TestShowConfigCommand:
 class TestGetSettingCommand:
     """Tests for config show <key> command."""
 
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.config.get_config_value")
     def test_get_setting_retrieves_value(self, mock_get, runner):
         """Test config show <key> retrieves a config value."""
         mock_get.return_value = 300
@@ -501,7 +501,7 @@ class TestGetSettingCommand:
         assert result.exit_code == 0
         assert "300" in result.output
 
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.config.get_config_value")
     def test_get_setting_handles_not_found(self, mock_get, runner):
         """Test config show <key> handles setting not found."""
         mock_get.return_value = None
@@ -515,7 +515,7 @@ class TestGetSettingCommand:
 class TestListSchedulesCommand:
     """Tests for list-schedules command."""
 
-    @patch("core.cli_commands.load_config")
+    @patch("signalbox.commands.misc.load_config")
     def test_list_schedules_displays_scheduled_groups(self, mock_load, runner, sample_config):
         """Test list-schedules displays scheduled groups."""
         sample_config["groups"][0]["schedule"] = "0 2 * * *"
@@ -527,7 +527,7 @@ class TestListSchedulesCommand:
         assert "test_group" in result.output
         assert "0 2 * * *" in result.output
 
-    @patch("core.cli_commands.load_config")
+    @patch("signalbox.commands.misc.load_config")
     def test_list_schedules_handles_no_schedules(self, mock_load, runner, sample_config):
         """Test list-schedules handles no scheduled groups."""
         mock_load.return_value = sample_config
@@ -541,9 +541,9 @@ class TestListSchedulesCommand:
 class TestExportSystemdCommand:
     """Tests for export-systemd command."""
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.exporters.export_systemd")
-    @patch("core.cli_commands.exporters.get_systemd_install_instructions")
+    @patch("signalbox.commands.misc.load_config")
+    @patch("signalbox.commands.misc.exporters.export_systemd")
+    @patch("signalbox.commands.misc.exporters.get_systemd_install_instructions")
     def test_export_systemd_generates_files(self, mock_instructions, mock_export, mock_load, runner, sample_config):
         """Test export-systemd generates systemd files."""
         mock_load.return_value = sample_config
@@ -558,8 +558,8 @@ class TestExportSystemdCommand:
         assert result.exit_code == 0
         assert "Generated" in result.output
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.exporters.export_systemd")
+    @patch("signalbox.commands.misc.load_config")
+    @patch("signalbox.commands.misc.exporters.export_systemd")
     def test_export_systemd_handles_error(self, mock_export, mock_load, runner, sample_config):
         """Test export-systemd handles export errors."""
         mock_load.return_value = sample_config
@@ -577,9 +577,9 @@ class TestExportSystemdCommand:
 class TestExportCronCommand:
     """Tests for export-cron command."""
 
-    @patch("core.cli_commands.load_config")
-    @patch("core.cli_commands.exporters.export_cron")
-    @patch("core.cli_commands.exporters.get_cron_install_instructions")
+    @patch("signalbox.commands.misc.load_config")
+    @patch("signalbox.commands.misc.exporters.export_cron")
+    @patch("signalbox.commands.misc.exporters.get_cron_install_instructions")
     def test_export_cron_generates_file(self, mock_instructions, mock_export, mock_load, runner, sample_config):
         """Test export-cron generates cron file."""
         mock_load.return_value = sample_config
@@ -599,9 +599,9 @@ class TestExportCronCommand:
 class TestValidateCommand:
     """Tests for validate command."""
 
-    @patch("core.cli_commands.validator.validate_configuration")
-    @patch("core.cli_commands.validator.get_validation_summary")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.config.validator.validate_configuration")
+    @patch("signalbox.commands.config.validator.get_validation_summary")
+    @patch("signalbox.commands.config.get_config_value")
     def test_validate_successful(self, mock_get_config, mock_summary, mock_validate, runner):
         """Test validate command with valid configuration."""
         mock_result = MagicMock()
@@ -620,7 +620,7 @@ class TestValidateCommand:
         assert result.exit_code == 0
         assert "Configuration is valid" in result.output
 
-    @patch("core.cli_commands.validator.validate_configuration")
+    @patch("signalbox.commands.config.validator.validate_configuration")
     def test_validate_with_errors(self, mock_validate, runner):
         """Test validate command with errors."""
         mock_result = MagicMock()
@@ -636,8 +636,8 @@ class TestValidateCommand:
         assert result.exit_code == 2
         assert "Errors Found" in result.output
 
-    @patch("core.cli_commands.validator.validate_configuration")
-    @patch("core.cli_commands.get_config_value")
+    @patch("signalbox.commands.config.validator.validate_configuration")
+    @patch("signalbox.commands.config.get_config_value")
     def test_validate_with_warnings_strict_mode(self, mock_get_config, mock_validate, runner):
         """Test validate command with warnings in strict mode."""
         mock_result = MagicMock()
@@ -658,7 +658,7 @@ class TestValidateCommand:
 class TestNotifyTestCommand:
     """Tests for notify-test command."""
 
-    @patch("core.cli_commands.notifications.send_notification")
+    @patch("signalbox.commands.misc.notifications.send_notification")
     @patch("platform.system")
     def test_notify_test_sends_notification(self, mock_system, mock_send, runner):
         """Test notify-test sends a test notification."""
@@ -670,7 +670,7 @@ class TestNotifyTestCommand:
         assert result.exit_code == 0
         assert "Notification sent successfully" in result.output
 
-    @patch("core.cli_commands.notifications.send_notification")
+    @patch("signalbox.commands.misc.notifications.send_notification")
     @patch("platform.system")
     def test_notify_test_handles_failure(self, mock_system, mock_send, runner):
         """Test notify-test handles notification failure."""
@@ -682,7 +682,7 @@ class TestNotifyTestCommand:
         assert result.exit_code == 1
         assert "Failed to send notification" in result.output
 
-    @patch("core.cli_commands.notifications.send_notification")
+    @patch("signalbox.commands.misc.notifications.send_notification")
     @patch("platform.system")
     def test_notify_test_custom_parameters(self, mock_system, mock_send, runner):
         """Test notify-test with custom title and message."""
@@ -705,7 +705,7 @@ class TestCLIIntegration:
         result = runner.invoke(cli, ["--help"])
 
         assert result.exit_code == 0
-        assert "signalbox" in result.output
+        assert "signalbox" in result.output.lower()
 
     def test_all_commands_registered(self, runner):
         """Test that all expected top-level commands and groups are registered."""
@@ -724,6 +724,7 @@ class TestCLIIntegration:
             "export-systemd",
             "export-cron",
             "notify-test",
+            "alerts",
         ]
 
         for command in commands:

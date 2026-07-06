@@ -2,7 +2,7 @@ import builtins
 import json
 import os
 import pytest
-from core import alerts
+from signalbox import alerts
 from datetime import datetime, timedelta
 
 
@@ -48,10 +48,12 @@ def test_load_alerts_unreadable_file(tmp_path, monkeypatch):
         f.write("{}\n")
     # Patch open to raise IOError
     orig_open = builtins.open
+
     def bad_open(*a, **kw):
         if a[0] == str(alert_log):
             raise IOError("unreadable")
         return orig_open(*a, **kw)
+
     monkeypatch.setattr(builtins, "open", bad_open)
     with pytest.raises(OSError):
         alerts.load_alerts(task_name=script_name)
@@ -62,7 +64,13 @@ def test_save_alert_missing_dir(tmp_path, monkeypatch):
     script_name = "missingdir"
     log_dir = tmp_path / "logs"
     monkeypatch.setattr(alerts, "get_resolved_log_dir", lambda: str(log_dir))
-    alert = {"pattern": "p", "message": "m", "severity": "info", "timestamp": alerts.format_timestamp(datetime.now()), "script_name": script_name}
+    alert = {
+        "pattern": "p",
+        "message": "m",
+        "severity": "info",
+        "timestamp": alerts.format_timestamp(datetime.now()),
+        "script_name": script_name,
+    }
     # Directory does not exist, should be created
     alerts.save_alert(script_name, alert)
     alert_log = log_dir / script_name / "alerts" / "alerts.jsonl"
@@ -70,17 +78,21 @@ def test_save_alert_missing_dir(tmp_path, monkeypatch):
 
 
 def test_alert_summary_only_warnings(tmp_path, monkeypatch):
-    monkeypatch.setattr(alerts, 'load_alerts', lambda **kwargs: [{"severity": "warning", "task_name": "s1"} for _ in range(3)])
+    monkeypatch.setattr(
+        alerts, "load_alerts", lambda **kwargs: [{"severity": "warning", "task_name": "s1"} for _ in range(3)]
+    )
     summary = alerts.get_alert_summary()
-    assert summary['by_severity']['warning'] == 3
-    assert summary['total'] == 3
+    assert summary["by_severity"]["warning"] == 3
+    assert summary["total"] == 3
 
 
 def test_alert_summary_only_infos(tmp_path, monkeypatch):
-    monkeypatch.setattr(alerts, 'load_alerts', lambda **kwargs: [{"severity": "info", "task_name": "s1"} for _ in range(2)])
+    monkeypatch.setattr(
+        alerts, "load_alerts", lambda **kwargs: [{"severity": "info", "task_name": "s1"} for _ in range(2)]
+    )
     summary = alerts.get_alert_summary()
-    assert summary['by_severity']['info'] == 2
-    assert summary['total'] == 2
+    assert summary["by_severity"]["info"] == 2
+    assert summary["total"] == 2
 
 
 def test_check_alert_patterns_invalid_regex(monkeypatch):
@@ -101,7 +113,17 @@ def test_load_alerts_with_corrupt_json(tmp_path, monkeypatch):
     alert_log = alerts_dir / "alerts.jsonl"
     with open(alert_log, "w") as f:
         f.write("{bad json}\n")
-        f.write(json.dumps({"message": "ok", "severity": "info", "timestamp": alerts.format_timestamp(datetime.now()), "task_name": script_name}) + "\n")
+        f.write(
+            json.dumps(
+                {
+                    "message": "ok",
+                    "severity": "info",
+                    "timestamp": alerts.format_timestamp(datetime.now()),
+                    "task_name": script_name,
+                }
+            )
+            + "\n"
+        )
     loaded = alerts.load_alerts(task_name=script_name)
     assert any(a["message"] == "ok" for a in loaded)
 
@@ -117,9 +139,27 @@ def test_prune_alerts_by_severity_and_time(tmp_path, monkeypatch):
     now = datetime.now()
     # Write alerts with different timestamps
     alert_data = [
-        {"pattern": "A", "message": "Critical", "severity": "critical", "timestamp": alerts.format_timestamp(now - timedelta(days=10)), "task_name": script_name},
-        {"pattern": "B", "message": "Info", "severity": "info", "timestamp": alerts.format_timestamp(now), "task_name": script_name},
-        {"pattern": "C", "message": "Warning", "severity": "warning", "timestamp": alerts.format_timestamp(now - timedelta(days=2)), "task_name": script_name},
+        {
+            "pattern": "A",
+            "message": "Critical",
+            "severity": "critical",
+            "timestamp": alerts.format_timestamp(now - timedelta(days=10)),
+            "task_name": script_name,
+        },
+        {
+            "pattern": "B",
+            "message": "Info",
+            "severity": "info",
+            "timestamp": alerts.format_timestamp(now),
+            "task_name": script_name,
+        },
+        {
+            "pattern": "C",
+            "message": "Warning",
+            "severity": "warning",
+            "timestamp": alerts.format_timestamp(now - timedelta(days=2)),
+            "task_name": script_name,
+        },
     ]
     with open(alert_log, "w") as f:
         for a in alert_data:
@@ -141,8 +181,20 @@ def test_multiple_alerts_from_single_script(tmp_path, monkeypatch):
     monkeypatch.setattr(alerts, "get_resolved_log_dir", lambda: str(log_dir))
     now = datetime.now()
     alerts_list = [
-        {"pattern": "A", "message": "Alert 1", "severity": "info", "timestamp": alerts.format_timestamp(now), "task_name": script_name},
-        {"pattern": "B", "message": "Alert 2", "severity": "critical", "timestamp": alerts.format_timestamp(now), "task_name": script_name},
+        {
+            "pattern": "A",
+            "message": "Alert 1",
+            "severity": "info",
+            "timestamp": alerts.format_timestamp(now),
+            "task_name": script_name,
+        },
+        {
+            "pattern": "B",
+            "message": "Alert 2",
+            "severity": "critical",
+            "timestamp": alerts.format_timestamp(now),
+            "task_name": script_name,
+        },
     ]
     for alert in alerts_list:
         alerts.save_alert(script_name, alert)
@@ -155,22 +207,22 @@ def test_multiple_alerts_from_single_script(tmp_path, monkeypatch):
 def test_alert_summary_edge_cases(tmp_path, monkeypatch):
     """Test alert summary with no alerts and all severities."""
     # No alerts
-    monkeypatch.setattr(alerts, 'load_alerts', lambda **kwargs: [])
+    monkeypatch.setattr(alerts, "load_alerts", lambda **kwargs: [])
     summary = alerts.get_alert_summary()
-    assert summary['total'] == 0
+    assert summary["total"] == 0
     # All severities
     all_alerts = [
         {"severity": "critical", "task_name": "s1"},
         {"severity": "info", "task_name": "s1"},
         {"severity": "warning", "task_name": "s2"},
     ]
-    monkeypatch.setattr(alerts, 'load_alerts', lambda **kwargs: all_alerts)
+    monkeypatch.setattr(alerts, "load_alerts", lambda **kwargs: all_alerts)
     summary = alerts.get_alert_summary()
-    assert summary['by_severity']['critical'] == 1
-    assert summary['by_severity']['info'] == 1
-    assert summary['by_severity']['warning'] == 1
-    assert summary['by_task']['s1'] == 2
-    assert summary['by_task']['s2'] == 1
+    assert summary["by_severity"]["critical"] == 1
+    assert summary["by_severity"]["info"] == 1
+    assert summary["by_severity"]["warning"] == 1
+    assert summary["by_task"]["s1"] == 2
+    assert summary["by_task"]["s2"] == 1
 
 
 def test_time_based_filtering_edge_cases(tmp_path, monkeypatch):
@@ -183,8 +235,20 @@ def test_time_based_filtering_edge_cases(tmp_path, monkeypatch):
     alert_log = alerts_dir / "alerts.jsonl"
     now = datetime.now()
     alert_data = [
-        {"pattern": "A", "message": "Future", "severity": "info", "timestamp": alerts.format_timestamp(now + timedelta(days=365)), "task_name": script_name},
-        {"pattern": "B", "message": "Ancient", "severity": "info", "timestamp": alerts.format_timestamp(now - timedelta(days=365)), "task_name": script_name},
+        {
+            "pattern": "A",
+            "message": "Future",
+            "severity": "info",
+            "timestamp": alerts.format_timestamp(now + timedelta(days=365)),
+            "task_name": script_name,
+        },
+        {
+            "pattern": "B",
+            "message": "Ancient",
+            "severity": "info",
+            "timestamp": alerts.format_timestamp(now - timedelta(days=365)),
+            "task_name": script_name,
+        },
     ]
     with open(alert_log, "w") as f:
         for a in alert_data:
@@ -270,7 +334,13 @@ def test_save_and_load_alert(tmp_path, monkeypatch):
     script_name = "s"
     log_dir = tmp_path / "logs"
     monkeypatch.setattr(alerts, "get_resolved_log_dir", lambda: str(log_dir))
-    alert = {"pattern": "p", "message": "m", "severity": "info", "timestamp": alerts.format_timestamp(datetime.now()), "task_name": script_name}
+    alert = {
+        "pattern": "p",
+        "message": "m",
+        "severity": "info",
+        "timestamp": alerts.format_timestamp(datetime.now()),
+        "task_name": script_name,
+    }
     alerts.save_alert(script_name, alert)
     loaded = alerts.load_alerts(task_name=script_name)
     assert loaded and loaded[0]["message"] == "m"
@@ -285,7 +355,11 @@ def test_alert_retention_and_summary(tmp_path, monkeypatch):
     alerts_dir.mkdir(parents=True)
     alert_log = alerts_dir / "alerts.jsonl"
     now = datetime.now()
-    old_alert = {"severity": "critical", "timestamp": alerts.format_timestamp(now - timedelta(days=10)), "task_name": script_name}
+    old_alert = {
+        "severity": "critical",
+        "timestamp": alerts.format_timestamp(now - timedelta(days=10)),
+        "task_name": script_name,
+    }
     new_alert = {"severity": "critical", "timestamp": alerts.format_timestamp(now), "task_name": script_name}
     with open(alert_log, "w") as f:
         f.write(json.dumps(old_alert) + "\n")
@@ -296,8 +370,8 @@ def test_alert_retention_and_summary(tmp_path, monkeypatch):
         lines = f.readlines()
     assert len(lines) == 1
     # Test summary
-    monkeypatch.setattr(alerts, 'load_alerts', lambda **kwargs: [new_alert])
+    monkeypatch.setattr(alerts, "load_alerts", lambda **kwargs: [new_alert])
     summary = alerts.get_alert_summary()
-    assert summary['total'] == 1
-    assert summary['by_severity']['critical'] == 1
-    assert summary['by_task'][script_name] == 1
+    assert summary["total"] == 1
+    assert summary["by_severity"]["critical"] == 1
+    assert summary["by_task"][script_name] == 1

@@ -1,5 +1,5 @@
 """
-Tests for core.executor module.
+Tests for signalbox.executor module.
 
 Tests script execution, timeout handling, parallel/serial group execution,
 logging, and error handling.
@@ -9,21 +9,21 @@ import pytest
 from unittest.mock import Mock, patch
 import subprocess
 
-from core.executor import run_task, run_group_parallel, run_group_serial
-from core.exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError
+from signalbox.executor import run_task, run_group_parallel, run_group_serial
+from signalbox.exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError
 
 
 class TestRunTask:
     """Tests for run_task function."""
 
-    @patch("core.config.load_config")
-    @patch("core.executor.get_config_value")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.save_task_runtime_state")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.subprocess.run")
+    @patch("signalbox.config.load_config")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.save_task_runtime_state")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.subprocess.run")
     def test_run_task_success(
         self,
         mock_subprocess,
@@ -70,14 +70,14 @@ class TestRunTask:
         assert config["tasks"][0]["last_status"] == "success"
         assert "last_run" in config["tasks"][0]
 
-    @patch("core.config.load_config")
-    @patch("core.executor.get_config_value")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.save_task_runtime_state")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.subprocess.run")
+    @patch("signalbox.config.load_config")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.save_task_runtime_state")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.subprocess.run")
     def test_run_task_failure(
         self,
         mock_subprocess,
@@ -128,11 +128,11 @@ class TestRunTask:
 
         assert "nonexistent_task" in str(exc_info.value)
 
-    @patch("core.config.load_config")
-    @patch("core.executor.get_config_value")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.subprocess.run")
+    @patch("signalbox.config.load_config")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.subprocess.run")
     def test_run_task_timeout(self, mock_subprocess, mock_ensure_dir, mock_log_path, mock_get_config, mock_load_config):
         """Test script execution that times out."""
         mock_get_config.side_effect = lambda key, default: {
@@ -155,15 +155,22 @@ class TestRunTask:
         assert "slow_task" in str(exc_info.value)
         assert "5" in str(exc_info.value)
 
-    @patch("core.config.load_config")
-    @patch("core.executor.get_config_value")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.subprocess.run")
+    @patch("signalbox.config.load_config")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.subprocess.run")
     def test_run_task_no_timeout(
-        self, mock_subprocess, mock_write_log, mock_rotate, mock_ensure_dir, mock_log_path, mock_get_config, mock_load_config
+        self,
+        mock_subprocess,
+        mock_write_log,
+        mock_rotate,
+        mock_ensure_dir,
+        mock_log_path,
+        mock_get_config,
+        mock_load_config,
     ):
         """Test script execution with timeout disabled (0 = None)."""
         mock_get_config.side_effect = lambda key, default: {
@@ -189,15 +196,22 @@ class TestRunTask:
         call_args = mock_subprocess.call_args
         assert call_args[1]["timeout"] is None
 
-    @patch("core.config.load_config")
-    @patch("core.executor.get_config_value")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.subprocess.run")
+    @patch("signalbox.config.load_config")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.subprocess.run")
     def test_run_task_no_source_tracking(
-        self, mock_subprocess, mock_write_log, mock_rotate, mock_ensure_dir, mock_log_path, mock_get_config, mock_load_config
+        self,
+        mock_subprocess,
+        mock_write_log,
+        mock_rotate,
+        mock_ensure_dir,
+        mock_log_path,
+        mock_get_config,
+        mock_load_config,
     ):
         """Test script execution when source file is not tracked."""
         mock_get_config.side_effect = lambda key, default: {
@@ -224,12 +238,14 @@ class TestRunTask:
         assert result is True
         assert config["tasks"][0]["last_status"] == "success"
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.get_config_value")
-    @patch("core.config.load_config")
-    def test_run_task_subprocess_exception(self, mock_load_config, mock_get_config, mock_log_path, mock_ensure_dir, mock_subprocess):
+    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.config.load_config")
+    def test_run_task_subprocess_exception(
+        self, mock_load_config, mock_get_config, mock_log_path, mock_ensure_dir, mock_subprocess
+    ):
         """Test script execution when subprocess raises an unexpected exception."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
@@ -250,13 +266,89 @@ class TestRunTask:
 
         assert "error_script" in str(exc_info.value)
 
+    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.save_task_runtime_state")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.get_config_value")
+    def test_run_task_per_task_timeout_override(
+        self,
+        mock_get_config,
+        mock_log_path,
+        mock_ensure_dir,
+        mock_save_state,
+        mock_rotate,
+        mock_write_log,
+        mock_subprocess,
+    ):
+        """A task-level 'timeout' field overrides execution.default_timeout."""
+        mock_get_config.side_effect = lambda key, default: {
+            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
+            "execution.default_timeout": 300,
+        }.get(key, default)
+        mock_log_path.return_value = "/logs/override.log"
+
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "ok"
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        config = {
+            "tasks": [{"name": "slow_task", "command": "sleep 1", "description": "Slow", "timeout": 600}],
+            "_task_sources": {},
+        }
+
+        assert run_task("slow_task", config) is True
+        assert mock_subprocess.call_args[1]["timeout"] == 600
+
+    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.save_task_runtime_state")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.get_config_value")
+    def test_run_task_per_task_timeout_zero_disables(
+        self,
+        mock_get_config,
+        mock_log_path,
+        mock_ensure_dir,
+        mock_save_state,
+        mock_rotate,
+        mock_write_log,
+        mock_subprocess,
+    ):
+        """A task-level timeout of 0 disables the timeout entirely."""
+        mock_get_config.side_effect = lambda key, default: {
+            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
+            "execution.default_timeout": 300,
+        }.get(key, default)
+        mock_log_path.return_value = "/logs/override.log"
+
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "ok"
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        config = {
+            "tasks": [{"name": "forever_task", "command": "sleep 1", "description": "Slow", "timeout": 0}],
+            "_task_sources": {},
+        }
+
+        assert run_task("forever_task", config) is True
+        assert mock_subprocess.call_args[1]["timeout"] is None
+
 
 class TestRunGroupParallel:
     """Tests for run_group_parallel function."""
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
-    @patch("core.executor.get_config_value")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.get_config_value")
     def test_parallel_all_success(self, mock_get_config, mock_notify, mock_run_task):
         """Test parallel execution where all scripts succeed."""
         mock_get_config.return_value = 5  # max_parallel_workers
@@ -277,9 +369,9 @@ class TestRunGroupParallel:
         assert notify_call[1]["passed"] == 3
         assert notify_call[1]["failed"] == 0
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
-    @patch("core.executor.get_config_value")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.get_config_value")
     def test_parallel_some_failures(self, mock_get_config, mock_notify, mock_run_task):
         """Test parallel execution with some failures."""
         mock_get_config.return_value = 5
@@ -303,9 +395,9 @@ class TestRunGroupParallel:
         assert notify_call[1]["failed"] == 1
         assert "script2" in notify_call[1]["failed_names"]
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
-    @patch("core.executor.get_config_value")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.get_config_value")
     def test_parallel_with_exceptions(self, mock_get_config, mock_notify, mock_run_task):
         """Test parallel execution when some scripts raise exceptions."""
         mock_get_config.return_value = 5
@@ -329,9 +421,9 @@ class TestRunGroupParallel:
         assert notify_call[1]["failed"] == 1
         assert "script2" in notify_call[1]["failed_names"]
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
-    @patch("core.executor.get_config_value")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.get_config_value")
     def test_parallel_respects_max_workers(self, mock_get_config, mock_notify, mock_run_task):
         """Test that max_parallel_workers setting is respected."""
         mock_get_config.return_value = 2  # Limit to 2 workers
@@ -349,8 +441,8 @@ class TestRunGroupParallel:
 class TestRunGroupSerial:
     """Tests for run_group_serial function."""
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
     def test_serial_all_success(self, mock_notify, mock_run_task):
         """Test serial execution where all scripts succeed."""
         mock_run_task.return_value = True
@@ -369,8 +461,8 @@ class TestRunGroupSerial:
         assert calls[1][0][0] == "script2"
         assert calls[2][0][0] == "script3"
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
     def test_serial_some_failures_no_stop(self, mock_notify, mock_run_task):
         """Test serial execution with failures but stop_on_error=False."""
         # script2 fails
@@ -388,8 +480,8 @@ class TestRunGroupSerial:
         assert notify_call[1]["passed"] == 2
         assert notify_call[1]["failed"] == 1
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
     def test_serial_stop_on_error(self, mock_notify, mock_run_task):
         """Test serial execution with stop_on_error=True."""
         # script2 fails
@@ -407,8 +499,8 @@ class TestRunGroupSerial:
         assert notify_call[1]["passed"] == 1
         assert notify_call[1]["failed"] == 1
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
     def test_serial_exception_no_stop(self, mock_notify, mock_run_task):
         """Test serial execution when script raises exception, stop_on_error=False."""
 
@@ -427,8 +519,8 @@ class TestRunGroupSerial:
         assert success_count == 2
         assert mock_run_task.call_count == 3  # All 3 attempted
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
     def test_serial_exception_stop_on_error(self, mock_notify, mock_run_task):
         """Test serial execution when script raises exception, stop_on_error=True."""
 
@@ -447,8 +539,8 @@ class TestRunGroupSerial:
         assert success_count == 1
         assert mock_run_task.call_count == 2  # Stops at script2
 
-    @patch("core.executor.run_task")
-    @patch("core.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.run_task")
+    @patch("signalbox.executor.notifications.notify_execution_result")
     def test_serial_all_failures(self, mock_notify, mock_run_task):
         """Test serial execution where all scripts fail."""
         mock_run_task.return_value = False
@@ -469,15 +561,15 @@ class TestRunGroupSerial:
 class TestExecutorIntegration:
     """Integration tests for executor module."""
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.save_task_runtime_state")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.notifications.notify_execution_result")
-    @patch("core.executor.get_config_value")
-    @patch("core.config.load_config")
+    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.save_task_runtime_state")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.config.load_config")
     def test_full_parallel_workflow(
         self,
         mock_load_config,
@@ -491,6 +583,7 @@ class TestExecutorIntegration:
         mock_subprocess,
     ):
         """Test complete parallel execution workflow."""
+
         def get_config_side_effect(key, default=None):
             if key == "execution.max_parallel_workers":
                 return 5
@@ -499,12 +592,15 @@ class TestExecutorIntegration:
             if key == "execution.default_timeout":
                 return 300
             return default
+
         mock_get_config.side_effect = get_config_side_effect
         mock_notify.side_effect = lambda *args, **kwargs: None
+
         def log_path_side_effect(name, *args, **kwargs):
             if name == "execution.max_parallel_workers":
                 return None
             return f"/logs/{name}.log"
+
         mock_log_path.side_effect = log_path_side_effect
 
         mock_result = Mock()
@@ -528,15 +624,15 @@ class TestExecutorIntegration:
         assert mock_subprocess.call_count == 2
         mock_notify.assert_called_once()
 
-    @patch("core.executor.subprocess.run")
-    @patch("core.executor.write_execution_log")
-    @patch("core.executor.rotate_logs")
-    @patch("core.executor.save_task_runtime_state")
-    @patch("core.executor.ensure_log_dir")
-    @patch("core.executor.get_log_path")
-    @patch("core.executor.notifications.notify_execution_result")
-    @patch("core.executor.get_config_value")
-    @patch("core.config.load_config")
+    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.write_execution_log")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.save_task_runtime_state")
+    @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.get_log_path")
+    @patch("signalbox.executor.notifications.notify_execution_result")
+    @patch("signalbox.executor.get_config_value")
+    @patch("signalbox.config.load_config")
     def test_full_serial_workflow(
         self,
         mock_load_config,
@@ -550,18 +646,22 @@ class TestExecutorIntegration:
         mock_subprocess,
     ):
         """Test complete serial execution workflow."""
+
         def get_config_side_effect(key, default=None):
             if key == "logging.timestamp_format":
                 return "%Y%m%d_%H%M%S_%f"
             if key == "execution.default_timeout":
                 return 300
             return default
+
         mock_get_config.side_effect = get_config_side_effect
         mock_notify.side_effect = lambda *args, **kwargs: None
+
         def log_path_side_effect(name, *args, **kwargs):
             if name == "execution.max_parallel_workers":
                 return None
             return f"/logs/{name}.log"
+
         mock_log_path.side_effect = log_path_side_effect
 
         mock_result = Mock()

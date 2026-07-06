@@ -1,62 +1,57 @@
+import os
+
 import yaml
+from click.testing import CliRunner
+from unittest.mock import patch
 
 
 def test_custom_log_dir(tmp_path):
     # Create a custom config with a unique log_dir (absolute paths)
     custom_log_dir = tmp_path / "mylogs"
-    scripts_dir = tmp_path / "scripts"
+    tasks_dir = tmp_path / "tasks"
     groups_dir = tmp_path / "groups"
-    scripts_dir.mkdir()
-    config = {
+    tasks_dir.mkdir()
+    config_data = {
         "paths": {
             "log_dir": str(custom_log_dir.resolve()),
-            "tasks_file": str(scripts_dir.resolve()),
+            "tasks_file": str(tasks_dir.resolve()),
             "groups_file": str(groups_dir.resolve()),
         },
-        "tasks": [{"name": "hello", "command": "echo hi", "description": "test"}],
     }
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     config_file = config_dir / "signalbox.yaml"
     with open(config_file, "w") as f:
-        yaml.dump(config, f)
+        yaml.dump(config_data, f)
     # Create task file
-    with open(scripts_dir / "test.yaml", "w") as f:
-        yaml.dump({"tasks": config["tasks"]}, f)
+    tasks = [{"name": "hello", "command": "echo hi", "description": "test"}]
+    with open(tasks_dir / "test.yaml", "w") as f:
+        yaml.dump({"tasks": tasks}, f)
+
+    from signalbox import config
+    from signalbox.cli import cli
+
+    old_home = os.environ.get("SIGNALBOX_HOME")
+    os.environ["SIGNALBOX_HOME"] = str(tmp_path)
+    config.reset_config()
     try:
-        import sys
-        import os
-
-        os.environ["SIGNALBOX_HOME"] = str(tmp_path)
-        sys.modules.pop("core.config", None)
-        sys.modules.pop("core.cli_commands", None)
-        from core.cli_commands import cli
-        from core import config
-
-        config.reset_config()
-
-        from click.testing import CliRunner
-        from unittest.mock import patch
         runner = CliRunner()
-        # Patch core.config.load_config to return our test config dict, not the config module
         test_config_dict = {
-            "tasks": [{"name": "hello", "command": "echo hi", "description": "test"}],
+            "tasks": tasks,
             "groups": [],
-            "_task_sources": {"hello": str(scripts_dir / "test.yaml")},
+            "_task_sources": {"hello": str(tasks_dir / "test.yaml")},
             "_group_sources": {},
         }
-        with patch("core.cli_commands.load_config", return_value=test_config_dict):
+        with patch("signalbox.commands.task.load_config", return_value=test_config_dict):
             result = runner.invoke(cli, ["--config", str(config_file), "run", "hello"])
-        print("CLI output:", result.output)
         assert result.exit_code == 0, f"CLI failed: {result.output}"
         log_dir = custom_log_dir / "hello"
         assert log_dir.exists(), f"Log dir does not exist: {log_dir}"
         log_files = list(log_dir.glob("*.log"))
         assert log_files, f"No log files found in custom log_dir: {log_dir}"
     finally:
-        import shutil
-
-        shutil.rmtree(str(custom_log_dir), ignore_errors=True)
-        shutil.rmtree(str(scripts_dir), ignore_errors=True)
-        shutil.rmtree(str(groups_dir), ignore_errors=True)
-        shutil.rmtree(str(config_dir), ignore_errors=True)
+        if old_home is None:
+            os.environ.pop("SIGNALBOX_HOME", None)
+        else:
+            os.environ["SIGNALBOX_HOME"] = old_home
+        config.reset_config()

@@ -1,5 +1,5 @@
 """
-Tests for core.runtime module.
+Tests for signalbox.runtime module.
 
 Tests runtime state loading, saving, and merging with configuration.
 """
@@ -8,7 +8,7 @@ import yaml
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-from core.runtime import (
+from signalbox.runtime import (
     load_runtime_state,
     save_task_runtime_state,
     save_group_runtime_state,
@@ -16,19 +16,20 @@ from core.runtime import (
 )
 
 
-
 class TestLoadRuntimeState:
     """Tests for load_runtime_state function."""
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_group_runtime_state_corrupt_yaml(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading group runtime state with corrupt YAML file."""
         mock_resolve.side_effect = lambda path: f"/config/{path}"
+
         def exists_side_effect(path):
             return path == "/config/runtime/groups"
+
         mock_exists.side_effect = exists_side_effect
         mock_listdir.return_value = ["runtime_test_group.yaml"]
         # Simulate YAML error
@@ -37,9 +38,9 @@ class TestLoadRuntimeState:
         # Should return empty state for groups
         assert result["groups"] == {}
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.listdir")
     def test_load_empty_runtime_state(self, mock_listdir, mock_exists, mock_resolve):
         """Test loading runtime state when directories don't exist."""
         mock_resolve.side_effect = lambda path: f"/config/{path}"
@@ -54,9 +55,9 @@ class TestLoadRuntimeState:
             # If loader still returns 'scripts', treat as migration artifact
             assert result == {"scripts": {}, "groups": {}}
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.helpers.os.path.exists")
-    @patch("core.helpers.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_script_runtime_state(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading runtime state for scripts."""
@@ -81,9 +82,9 @@ class TestLoadRuntimeState:
         assert result[key]["test_script"]["last_run"] == "20240101_120000"
         assert result[key]["test_script"]["last_status"] == "success"
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_group_runtime_state(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading runtime state for groups."""
@@ -114,9 +115,9 @@ class TestLoadRuntimeState:
         assert "test_group" in result["groups"]
         assert result["groups"]["test_group"]["execution_count"] == 5
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.helpers.os.path.exists")
-    @patch("core.helpers.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_ignores_non_runtime_files(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test that only runtime_*.yaml files are loaded."""
@@ -140,9 +141,9 @@ class TestLoadRuntimeState:
         key = "tasks" if "tasks" in result else "scripts"
         assert len(result[key]) == 1
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.helpers.os.path.exists")
-    @patch("core.helpers.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_handles_invalid_yaml(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading runtime state with invalid YAML file."""
@@ -161,9 +162,9 @@ class TestLoadRuntimeState:
         # Should return empty state without crashing
         assert result == {"tasks": {}, "groups": {}}
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_handles_missing_scripts_key(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading runtime state when 'scripts' key is missing."""
@@ -184,9 +185,9 @@ class TestLoadRuntimeState:
         # Should still return empty tasks
         assert result["tasks"] == {}
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.helpers.os.path.exists")
-    @patch("core.helpers.os.listdir")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_multiple_runtime_files(self, mock_file, mock_listdir, mock_exists, mock_resolve):
         """Test loading multiple runtime files and merging."""
@@ -219,9 +220,9 @@ class TestLoadRuntimeState:
 class TestSaveScriptRuntimeState:
     """Tests for save_task_runtime_state function."""
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_new_script_state(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test saving runtime state for a new script."""
@@ -245,9 +246,9 @@ class TestSaveScriptRuntimeState:
         assert dumped_data["tasks"]["test_script"]["last_run"] == "20240101_120000"
         assert dumped_data["tasks"]["test_script"]["last_status"] == "success"
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_update_existing_script_state(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test updating runtime state for an existing script."""
@@ -273,9 +274,9 @@ class TestSaveScriptRuntimeState:
         assert dumped_data["tasks"]["test_script"]["last_status"] == "success"
         assert "other_script" in dumped_data["tasks"]
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_handles_corrupted_existing_file(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test saving when existing file is corrupted."""
@@ -291,9 +292,9 @@ class TestSaveScriptRuntimeState:
         assert "tasks" in dumped_data
         assert "test_script" in dumped_data["tasks"]
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_runtime_filename_from_source(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test that runtime filename is correctly derived from source file."""
@@ -310,9 +311,10 @@ class TestSaveScriptRuntimeState:
 
 class TestSaveGroupRuntimeState:
     """Tests for save_group_runtime_state function."""
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_group_state_corrupt_existing_file(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test saving group state when existing file is corrupted."""
@@ -324,9 +326,9 @@ class TestSaveGroupRuntimeState:
         assert "groups" in dumped_data
         assert "test_group" in dumped_data["groups"]
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_group_state_missing_fields(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test saving group state with missing/extra fields in existing data."""
@@ -338,9 +340,10 @@ class TestSaveGroupRuntimeState:
         dumped_data = mock_dump.call_args[0][0]
         assert "last_run" in dumped_data["groups"]["test_group"]
         assert "last_status" in dumped_data["groups"]["test_group"]
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_new_group_state(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test saving runtime state for a new group."""
@@ -369,9 +372,9 @@ class TestSaveGroupRuntimeState:
         assert group_data["tasks_successful"] == 8
         assert group_data["success_rate"] == 80.0
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_increments_execution_count(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test that execution_count is incremented on each save."""
@@ -397,9 +400,9 @@ class TestSaveGroupRuntimeState:
         dumped_data = mock_dump.call_args[0][0]
         assert dumped_data["groups"]["test_group"]["execution_count"] == 4
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_calculates_success_rate(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test that success_rate is correctly calculated."""
@@ -422,9 +425,9 @@ class TestSaveGroupRuntimeState:
             dumped_data = mock_dump.call_args[0][0]
             assert dumped_data["groups"]["test_group"]["success_rate"] == expected_rate
 
-    @patch("core.runtime.resolve_path")
-    @patch("core.runtime.os.path.exists")
-    @patch("core.runtime.os.makedirs")
+    @patch("signalbox.runtime.resolve_path")
+    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.makedirs")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_handles_zero_scripts(self, mock_file, mock_makedirs, mock_exists, mock_resolve):
         """Test handling when scripts_total is 0 (avoid division by zero)."""
@@ -451,6 +454,7 @@ class TestMergeConfigWithRuntimeState:
         result = merge_config_with_runtime_state(config, runtime_state)
         assert result["tasks"][0]["last_status"] == "ok"
         assert "extra" not in result["tasks"][0]  # Should not leak extra fields
+
     def test_merge_scripts_with_runtime_state(self):
         """Test merging script config with runtime state."""
         config = {
@@ -582,7 +586,7 @@ class TestRuntimeIntegration:
 
         runtime_file = runtime_dir / "runtime_test.yaml"
 
-        with patch("core.runtime.resolve_path", return_value=str(runtime_file)):
+        with patch("signalbox.runtime.resolve_path", return_value=str(runtime_file)):
             # Save state
             save_task_runtime_state("test_script", "scripts/test.yaml", "20240101_120000", "success")
 
@@ -602,7 +606,7 @@ class TestRuntimeIntegration:
 
         runtime_file = runtime_dir / "runtime_test_group.yaml"
 
-        with patch("core.runtime.resolve_path", return_value=str(runtime_file)):
+        with patch("signalbox.runtime.resolve_path", return_value=str(runtime_file)):
             # Save state
             save_group_runtime_state("test_group", "groups/test_group.yaml", "20240101_120000", "success", 45.5, 10, 8)
 

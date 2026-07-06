@@ -1,0 +1,23 @@
+# Alert Pattern Demonstration
+#
+# ⚠️  IMPORTANT: These are EXAMPLE tasks for learning and getting started.
+# These tasks are NOT meant for production use - they are educational tools!
+#
+# alert_test prints messages that match its alert patterns, so running it
+# demonstrates alert logging and (optionally) desktop notifications.
+tasks:
+- name: alert_test
+  description: Test alert pattern matching (INTENTIONALLY triggers alerts for demo purposes)
+  command: echo "WARNING demo threshold exceeded" && echo "CRITICAL demo failure detected"
+  log_limit:
+    type: count
+    value: 3
+  alerts:
+  - pattern: "WARNING"
+    title: "Demo Warning Alert"
+    message: "A demo warning pattern was matched"
+    severity: warning
+  - pattern: "CRITICAL"
+    title: "Demo Critical Alert"
+    message: "A demo critical pattern was matched"
+    severity: critical
