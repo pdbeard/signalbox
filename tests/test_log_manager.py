@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_rotate_by_count(tmp_path):
     d = tmp_path / "logs"
     d.mkdir()
@@ -75,21 +78,39 @@ def test_clear_script_logs(tmp_path, monkeypatch):
 
 
 def test_clear_all_logs(tmp_path, monkeypatch):
-    monkeypatch.setattr(log_manager, "get_config_value", lambda k, d=None: str(tmp_path))
+    monkeypatch.setattr(log_manager, "get_resolved_log_dir", lambda: str(tmp_path))
     d = tmp_path / "foo"
-    d.mkdir()
+    (d / "alerts").mkdir(parents=True)
     (d / "a.log").write_text("x")
+    (d / "alerts" / "alerts.jsonl").write_text("{}")
     assert log_manager.clear_all_logs()
-    assert not list(d.iterdir())
+    assert not (d / "a.log").exists()
+    assert not (d / "alerts" / "alerts.jsonl").exists()
+
+
+def test_clear_all_logs_leaves_other_files(tmp_path, monkeypatch):
+    """Only logs and alert history are removed, even if log_dir points somewhere broad."""
+    monkeypatch.setattr(log_manager, "get_resolved_log_dir", lambda: str(tmp_path))
+    (tmp_path / "notes.txt").write_text("keep")
+    (tmp_path / "project").mkdir()
+    (tmp_path / "project" / "main.py").write_text("keep")
+    (tmp_path / "project" / "run.log").write_text("x")
+    assert log_manager.clear_all_logs()
+    assert (tmp_path / "notes.txt").exists()
+    assert (tmp_path / "project" / "main.py").exists()
 
 
 def test_format_log_with_colors():
-    content = "[ERROR] fail\n[SUCCESS] ok\n[START] run\nother"
-    lines = log_manager.format_log_with_colors(content)
-    assert lines[0][1] == "red"
-    assert lines[1][1] == "green"
-    assert lines[2][1] == "blue"
-    assert lines[3][1] is None
+    content = "Command: echo hi\nReturn code: 0\nSTDOUT:\nhi\nSTDERR:\n"
+    colors = [color for _, color in log_manager.format_log_with_colors(content)]
+    assert colors == ["blue", "green", "blue", None, "blue", None]
+
+
+def test_format_log_with_colors_failure():
+    content = "Return code: 1\n[TIMED OUT after 5s]\n[OUTPUT TRUNCATED - exceeded 5.0MB limit]"
+    colors = [color for _, color in log_manager.format_log_with_colors(content)]
+    assert colors == ["red", "red", "yellow"]
+    assert all(color is None for _, color in log_manager.format_log_with_colors(content, show_colors=False))
 
 
 import os
@@ -100,13 +121,21 @@ from signalbox import log_manager
 
 
 def test_get_task_log_dir(monkeypatch):
-    monkeypatch.setattr(log_manager, "get_config_value", lambda k, d=None: "logs")
-    path = log_manager.get_task_log_dir("mytask")
-    assert path.endswith("logs/mytask")
+    monkeypatch.setattr(log_manager, "get_resolved_log_dir", lambda: "/home/u/logs")
+    assert log_manager.get_task_log_dir("mytask") == "/home/u/logs/mytask"
+
+
+@pytest.mark.parametrize("name", ["../escape", "a/b", "..", ".hidden", "-flag", "", None])
+def test_get_task_log_dir_rejects_unsafe_names(monkeypatch, name):
+    from signalbox.exceptions import ConfigurationError
+
+    monkeypatch.setattr(log_manager, "get_resolved_log_dir", lambda: "/home/u/logs")
+    with pytest.raises(ConfigurationError):
+        log_manager.get_task_log_dir(name)
 
 
 def test_ensure_log_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(log_manager, "get_config_value", lambda k, d=None: str(tmp_path))
+    monkeypatch.setattr(log_manager, "get_resolved_log_dir", lambda: str(tmp_path))
     task_name = "testtask"
     log_dir = os.path.join(tmp_path, task_name)
     if os.path.exists(log_dir):
@@ -116,10 +145,9 @@ def test_ensure_log_dir(tmp_path, monkeypatch):
 
 
 def test_get_log_path(monkeypatch):
-    monkeypatch.setattr(log_manager, "get_config_value", lambda k, d=None: "logs")
-    monkeypatch.setattr(log_manager, "format_timestamp", lambda dt: "20260126_120000")
+    monkeypatch.setattr(log_manager, "get_resolved_log_dir", lambda: "/home/u/logs")
     path = log_manager.get_log_path("mytask", "20260126_120000")
-    assert path.endswith("logs/mytask/20260126_120000.log")
+    assert path == "/home/u/logs/mytask/20260126_120000.log"
 
 
 def test_write_execution_log(tmp_path, monkeypatch):

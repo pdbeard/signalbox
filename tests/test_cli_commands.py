@@ -94,50 +94,62 @@ class TestHandleExceptions:
 
 
 class TestInitCommand:
-    """Tests for init command."""
+    """Tests for init command (real filesystem, isolated SIGNALBOX_HOME)."""
 
-    @patch("signalbox.commands.misc.os.path.exists")
-    @patch("signalbox.commands.misc.os.makedirs")
-    @patch("signalbox.commands.misc.shutil.copytree")
-    @patch("builtins.open", new_callable=mock_open)
-    def test_init_creates_new_config(self, mock_file, mock_copytree, mock_makedirs, mock_exists, runner):
+    def test_init_creates_new_config(self, runner, isolate_signalbox_home, monkeypatch):
         """Test init command creates new configuration."""
-        # Return False for the config home check (no existing config to backup),
-        # True for the template_config check (so the copytree branch is taken).
-        mock_exists.side_effect = lambda path: str(path).endswith("signalbox/config")
+        home = isolate_signalbox_home / "fresh"
+        monkeypatch.setenv("SIGNALBOX_HOME", str(home))
 
         result = runner.invoke(cli, ["init"])
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert "Signalbox initialized successfully!" in result.output
-        assert "Created logs directory" in result.output
+        assert (home / "config" / "signalbox.yaml").exists()
+        assert (home / "logs").is_dir()
 
-    @patch("signalbox.commands.misc.os.path.exists")
-    @patch("signalbox.commands.misc.shutil.move")
-    @patch("signalbox.commands.misc.shutil.copytree")
-    @patch("signalbox.commands.misc.os.makedirs")
-    def test_init_with_existing_config_confirms_backup(
-        self, mock_makedirs, mock_copytree, mock_move, mock_exists, runner
-    ):
-        """Test init command handles existing config with confirmation."""
-        mock_exists.return_value = True
+    def test_init_with_existing_config_backs_up_by_copy(self, runner, sb_home):
+        """Reinitializing copies the old home, resets config/ and runtime/, and keeps logs."""
+        sb_home.write_tasks([{"name": "mine", "command": "true", "description": "d"}])
+        (sb_home.path / "logs" / "mine").mkdir(parents=True)
+        (sb_home.path / "logs" / "mine" / "1.log").write_text("x")
 
-        # User confirms backup
         result = runner.invoke(cli, ["init"], input="y\n")
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert "Backed up existing config" in result.output
+        backups = list(sb_home.path.parent.glob(sb_home.path.name + ".backup.*"))
+        assert len(backups) == 1
+        assert (backups[0] / "config" / "tasks" / "tasks.yaml").exists()
+        assert not (sb_home.config_dir / "tasks" / "tasks.yaml").exists()  # reset to template
+        assert (sb_home.path / "logs" / "mine" / "1.log").exists()  # logs kept
 
-    @patch("signalbox.commands.misc.os.path.exists")
-    def test_init_with_existing_config_cancels(self, mock_exists, runner):
+    def test_init_with_existing_config_cancels(self, runner, sb_home):
         """Test init command respects cancellation."""
-        mock_exists.return_value = True
+        sb_home.write_tasks([{"name": "mine", "command": "true", "description": "d"}])
 
-        # User cancels
         result = runner.invoke(cli, ["init"], input="n\n")
 
         assert result.exit_code == 0
         assert "Backed up" not in result.output
+        assert (sb_home.config_dir / "tasks" / "tasks.yaml").exists()
+
+    def test_init_never_targets_current_directory(self, runner, tmp_path, monkeypatch):
+        """A project dir containing config/signalbox.yaml must not be treated as the init target."""
+        project = tmp_path / "project"
+        (project / "config").mkdir(parents=True)
+        (project / "config" / "signalbox.yaml").write_text("{}")
+        (project / "important.txt").write_text("keep me")
+        monkeypatch.delenv("SIGNALBOX_HOME")
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(project)
+
+        result = runner.invoke(cli, ["init"], input="y\n")
+
+        assert result.exit_code == 0, result.output
+        assert str(project) not in result.output
+        assert (project / "important.txt").exists()
+        assert (tmp_path / "home" / ".config" / "signalbox" / "config" / "signalbox.yaml").exists()
 
 
 class TestListCommand:
@@ -408,7 +420,7 @@ class TestClearAllLogsCommand:
         """Test log clear --all removes all logs."""
         mock_clear.return_value = True
 
-        result = runner.invoke(cli, ["log", "clear", "--all"])
+        result = runner.invoke(cli, ["log", "clear", "--all", "--yes"])
 
         assert result.exit_code == 0
         assert "Cleared all logs" in result.output
@@ -418,7 +430,7 @@ class TestClearAllLogsCommand:
         """Test log clear --all handles missing directory."""
         mock_clear.return_value = False
 
-        result = runner.invoke(cli, ["log", "clear", "--all"])
+        result = runner.invoke(cli, ["log", "clear", "--all", "--yes"])
 
         assert result.exit_code == 0
         assert "No logs directory found" in result.output
@@ -569,7 +581,7 @@ class TestExportSystemdCommand:
 
         result = runner.invoke(cli, ["export-systemd", "test_group"])
 
-        assert result.exit_code == 0
+        assert result.exit_code == 1
         assert "Error" in result.output
 
 

@@ -3,39 +3,28 @@
 import os
 from datetime import datetime, timedelta
 from .config import get_config_value
-from .helpers import format_timestamp, get_resolved_log_dir
+from .helpers import format_timestamp, get_resolved_log_dir, check_name, is_valid_name, parse_timestamp
 
 
 def get_task_log_dir(task_name):
-    """Get the log directory path for a task, relative to config file directory."""
-    log_dir = get_config_value("paths.log_dir", "logs")
-    # Try to resolve log_dir relative to config home
-    from .config import _default_config_manager
+    """Get the log directory path for a task.
 
-    config_home = _default_config_manager.find_config_home()
-    if not os.path.isabs(log_dir):
-        log_dir = os.path.join(config_home, log_dir)
-    return os.path.join(log_dir, task_name)
+    Raises:
+        ConfigurationError: If task_name could escape the log directory (e.g. contains '/' or '..')
+    """
+    return os.path.join(get_resolved_log_dir(), check_name(task_name))
 
 
 def ensure_log_dir(task_name):
     """Ensure the log directory exists for a task."""
-    task_log_dir = get_task_log_dir(task_name)
-    if not os.path.exists(task_log_dir):
-        os.makedirs(task_log_dir)
+    os.makedirs(get_task_log_dir(task_name), exist_ok=True)
 
 
 def get_log_path(task_name, timestamp=None):
-    """Get the full path for a log file, relative to config file directory."""
+    """Get the full path for a log file."""
     if timestamp is None:
         timestamp = format_timestamp(datetime.now())
-    log_dir = get_config_value("paths.log_dir", "logs")
-    from .config import _default_config_manager
-
-    config_home = _default_config_manager.find_config_home()
-    if not os.path.isabs(log_dir):
-        log_dir = os.path.join(config_home, log_dir)
-    return os.path.join(log_dir, task_name, f"{timestamp}.log")
+    return os.path.join(get_task_log_dir(task_name), f"{timestamp}.log")
 
 
 def _list_log_files(task_log_dir):
@@ -203,21 +192,23 @@ def read_log_content(log_path):
 
 
 def format_log_with_colors(content, show_colors=True):
-    """Format log content with color coding.
+    """Format log content with color coding matching the format written by write_execution_log.
 
     Returns:
-            list: List of tuples (line_text, color) where color can be 'red', 'green', 'blue', or None
+            list: List of tuples (line_text, color) where color can be 'red', 'green', 'blue', 'yellow' or None
     """
     formatted_lines = []
 
     for line in content.split("\n"):
         color = None
         if show_colors:
-            if "[ERROR]" in line or ("exit_code:" in line and "exit_code: 0" not in line):
+            if line.startswith("Return code: "):
+                color = "green" if line == "Return code: 0" else "red"
+            elif line.startswith("[TIMED OUT"):
                 color = "red"
-            elif "[SUCCESS]" in line or "exit_code: 0" in line:
-                color = "green"
-            elif "[START]" in line:
+            elif line.startswith("[OUTPUT TRUNCATED"):
+                color = "yellow"
+            elif line.startswith("Command: ") or line in ("STDOUT:", "STDERR:"):
                 color = "blue"
 
         formatted_lines.append((line, color))
@@ -273,25 +264,27 @@ def clear_task_logs(task_name):
 
 
 def clear_all_logs():
-    """Clear all log files for all tasks.
+    """Clear execution logs and alert history for all tasks.
+
+    Only removes *.log files and alerts/alerts.jsonl inside per-task
+    directories, so a misconfigured paths.log_dir can't wipe unrelated files.
 
     Returns:
             bool: True if log directory was found and cleared, False otherwise
     """
-    log_dir = get_config_value("paths.log_dir", "logs")
-    from .config import _default_config_manager
-
-    config_home = _default_config_manager.find_config_home()
-    if not os.path.isabs(log_dir):
-        log_dir = os.path.join(config_home, log_dir)
-
-    if not os.path.exists(log_dir):
+    log_dir = get_resolved_log_dir()
+    if not os.path.isdir(log_dir):
         return False
 
-    # Recursively delete files but keep directories
-    for root, dirs, files in os.walk(log_dir):
-        for filename in files:
-            os.remove(os.path.join(root, filename))
+    for task_name in os.listdir(log_dir):
+        task_log_dir = os.path.join(log_dir, task_name)
+        if not is_valid_name(task_name) or not os.path.isdir(task_log_dir):
+            continue
+        for filename in _list_log_files(task_log_dir):
+            os.remove(os.path.join(task_log_dir, filename))
+        alert_log = os.path.join(task_log_dir, "alerts", "alerts.jsonl")
+        if os.path.isfile(alert_log):
+            os.remove(alert_log)
 
     return True
 
@@ -302,8 +295,6 @@ def get_all_log_files():
     Returns:
         list: List of dicts with task, log_file, timestamp, path
     """
-    from .helpers import parse_timestamp
-
     log_dir = get_resolved_log_dir()
 
     if not os.path.exists(log_dir):
@@ -453,24 +444,18 @@ def filter_logs(logs, task=None, status=None, since=None, until=None, limit=None
     if until:
         filtered = [entry for entry in filtered if entry["timestamp"] <= until]
 
-    if status:
-        # Need to parse each log to check status
-        filtered_with_status = []
-        for log_entry in filtered:
-            metadata = parse_log_metadata(log_entry["path"])
-            log_entry["metadata"] = metadata
-            if metadata["status"] == status:
-                filtered_with_status.append(log_entry)
-        filtered = filtered_with_status
-    else:
-        # Add metadata to all logs
-        for log_entry in filtered:
-            log_entry["metadata"] = parse_log_metadata(log_entry["path"])
+    # Sort by timestamp descending (newest first) before reading any files, so
+    # only as many logs as `limit` needs are opened and parsed.
+    filtered = sorted(filtered, key=lambda x: x["timestamp"], reverse=True)
 
-    # Sort by timestamp descending (newest first)
-    filtered.sort(key=lambda x: x["timestamp"], reverse=True)
-
-    if limit:
-        filtered = filtered[:limit]
+    selected = []
+    for log_entry in filtered:
+        if limit and len(selected) >= limit:
+            break
+        log_entry["metadata"] = parse_log_metadata(log_entry["path"])
+        if status and log_entry["metadata"]["status"] != status:
+            continue
+        selected.append(log_entry)
+    filtered = selected
 
     return filtered

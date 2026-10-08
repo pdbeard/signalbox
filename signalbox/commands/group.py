@@ -7,7 +7,8 @@ import click
 from ..config import load_config
 from ..executor import run_group_parallel, run_group_serial
 from ..runtime import save_group_runtime_state
-from ..exceptions import GroupNotFoundError
+from ..exceptions import GroupNotFoundError, ValidationError
+from ..validator import validate_group
 from ..helpers import format_timestamp
 from .utils import handle_exceptions
 from .task import _latest_log_name
@@ -33,9 +34,19 @@ def group_run(name):
     """Run a group of tasks."""
     config = load_config()
     groups = config.get("groups", [])
-    group_item = next((g for g in groups if g["name"] == name), None)
+    group_item = next((g for g in groups if isinstance(g, dict) and g.get("name") == name), None)
     if not group_item:
         raise GroupNotFoundError(name)
+    errors = validate_group(group_item)
+    known_tasks = {t.get("name") for t in config.get("tasks", []) if isinstance(t, dict)}
+    task_refs = group_item.get("tasks") if isinstance(group_item.get("tasks"), list) else []
+    errors += [
+        f"Group '{name}' references non-existent task '{t}'"
+        for t in task_refs
+        if isinstance(t, str) and t not in known_tasks
+    ]
+    if errors:
+        raise ValidationError("; ".join(errors))
     execution_mode = group_item.get("execution", "serial")
     stop_on_error = group_item.get("stop_on_error", False)
     click.echo(f"Running group {name}: {group_item['description']}")
@@ -46,7 +57,7 @@ def group_run(name):
     task_names = group_item["tasks"]
     start_time = datetime.now()
     timestamp = format_timestamp(start_time)
-    from ..cli_output_run import print_group_run_table
+    from ..cli_output import print_run_table
 
     # Run all tasks in a single call so parallel/serial semantics are correct.
     if execution_mode == "parallel":
@@ -79,7 +90,7 @@ def group_run(name):
             tasks_successful=tasks_successful,
         )
 
-    print_group_run_table(results)
+    print_run_table(results)
     click.echo(f"Group {name} executed.")
     if group_status != "success":
         sys.exit(1)
@@ -93,7 +104,7 @@ def group_list():
     if not groups:
         click.echo("No groups defined.")
         return
-    from ..cli_output_group import print_group_list_table
+    from ..cli_output import print_group_list_table
 
     group_rows = []
     for group_item in groups:

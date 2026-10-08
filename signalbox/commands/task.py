@@ -102,7 +102,7 @@ def task_run(name, run_all_tasks, quiet):
     if run_all_tasks:
         config = load_config(suppress_warnings=True)
         click.echo("Running all tasks...")
-        from ..cli_output_run import print_task_run_table
+        from ..cli_output import print_run_table
 
         results = []
         for task_item in config["tasks"]:
@@ -126,7 +126,7 @@ def task_run(name, run_all_tasks, quiet):
                     "error": error,
                 }
             )
-        print_task_run_table(results)
+        print_run_table(results)
         failed_tasks = [r["name"] for r in results if r["status"] != "success"]
         if failed_tasks:
             click.echo(f"\n{len(failed_tasks)} task(s) failed: {', '.join(failed_tasks)}", err=True)

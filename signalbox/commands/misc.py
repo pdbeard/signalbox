@@ -6,7 +6,7 @@ from datetime import datetime
 
 import click
 
-from ..config import load_config, get_config_value, find_config_home
+from ..config import load_config, get_config_value, find_init_home
 from .. import exporters
 from .. import notifications
 from .. import alerts
@@ -17,33 +17,28 @@ from .utils import handle_exceptions
 @click.command()
 def init():
     """Initialize signalbox configuration in the appropriate config directory (XDG/SIGNALBOX_HOME supported)"""
-    config_dir = find_config_home()
+    # Never the current directory: reinitializing replaces what is there.
+    config_dir = find_init_home()
 
     if os.path.exists(config_dir):
         click.echo(f"Configuration directory already exists: {config_dir}")
-        if not click.confirm("Do you want to reinitialize (this will backup existing config)?"):
-            return
-        # Backup existing config
         backup_dir = f"{config_dir}.backup.{format_timestamp(datetime.now())}"
-        shutil.move(config_dir, backup_dir)
+        if not click.confirm(
+            f"Reinitialize? The whole directory is first copied to {backup_dir}; config/ and runtime/ are then reset"
+        ):
+            return
+        # Copy (not move) so nothing is lost if anything below fails; logs stay in place.
+        shutil.copytree(config_dir, backup_dir, symlinks=True)
         click.echo(f"Backed up existing config to: {backup_dir}")
+        for subdir in ("config", "runtime"):
+            path = os.path.join(config_dir, subdir)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
 
-    # Find the installed package's config templates.
     # The template config directory ships inside the signalbox package
     # (signalbox/config), one level above this commands/ subpackage.
     package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     template_config = os.path.join(package_dir, "config")
-
-    # If not found there, try using pkg_resources (older installations)
-    if not os.path.exists(template_config):
-        try:
-            import pkg_resources
-
-            package_path = pkg_resources.resource_filename("signalbox", "config")
-            if os.path.exists(package_path):
-                template_config = package_path
-        except Exception:
-            pass
 
     if os.path.exists(template_config):
         # Copy the entire config directory
@@ -71,6 +66,7 @@ def init():
     click.echo("Next steps:")
     click.echo(f"  1. Review configuration: {config_dir}/config/signalbox.yaml")
     click.echo(f"  2. Add your tasks: {config_dir}/config/tasks/")
+    click.echo("     (example tasks are in config/catalog/; set include_catalog: true to load them)")
     click.echo("  3. Run: signalbox list")
     click.echo("SECURITY: Signalbox executes commands with full shell access.")
     click.echo("   Only use trusted YAML files. See SECURITY.md for details.")
@@ -88,13 +84,13 @@ def list_schedules():
         click.echo("No scheduled groups defined.")
         return
 
-    from ..cli_output_tables import print_schedule_list_table
+    from ..cli_output import print_schedule_list_table, get_schedule_display
 
     schedule_rows = []
     for group in scheduled:
         # Ensure all values are strings for rich table rendering
         group_name = str(group.get("name", ""))
-        schedule = str(group.get("schedule", ""))
+        schedule = str(get_schedule_display(group.get("schedule")))
         description = str(group.get("description", "N/A"))
         tasks_list = group.get("tasks", [])
         if isinstance(tasks_list, (list, tuple)):
@@ -121,13 +117,13 @@ def export_systemd(group_name, user):
     """Generate systemd service and timer files for a scheduled group."""
     config = load_config()
     groups = config.get("groups", [])
-    group = next((g for g in groups if g["name"] == group_name), None)
+    group = next((g for g in groups if isinstance(g, dict) and g.get("name") == group_name), None)
 
     result = exporters.export_systemd(group, group_name)
 
     if not result.success:
-        click.echo(f"Error: {result.error}")
-        return
+        click.echo(f"Error: {result.error}", err=True)
+        sys.exit(1)
 
     # Show generated files
     for file_path in result.files:
@@ -146,13 +142,13 @@ def export_cron(group_name):
     """Generate crontab entry for a scheduled group."""
     config = load_config()
     groups = config.get("groups", [])
-    group = next((g for g in groups if g["name"] == group_name), None)
+    group = next((g for g in groups if isinstance(g, dict) and g.get("name") == group_name), None)
 
     result = exporters.export_cron(group, group_name)
 
     if not result.success:
-        click.echo(f"Error: {result.error}")
-        return
+        click.echo(f"Error: {result.error}", err=True)
+        sys.exit(1)
 
     # Show generated file
     click.echo(f"✓ Generated {result.files[0]}")

@@ -1,8 +1,8 @@
 # Log commands: signalbox log show / history / list / tail / clear
 import os
-import subprocess
 import sys
 import time
+from collections import deque
 from datetime import datetime
 
 import click
@@ -10,12 +10,13 @@ import click
 from ..config import load_config, get_config_value
 from .. import log_manager
 from ..exceptions import TaskNotFoundError
+from ..helpers import get_resolved_log_dir
 from .utils import handle_exceptions
 
 
 def _find_task_or_raise(config, name):
     """Return the task dict for name or raise TaskNotFoundError."""
-    task = next((t for t in config["tasks"] if t["name"] == name), None)
+    task = next((t for t in config["tasks"] if isinstance(t, dict) and t.get("name") == name), None)
     if not task:
         raise TaskNotFoundError(name)
     return task
@@ -153,7 +154,7 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
     date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
 
     if verbose:
-        from ..cli_output_tables import print_log_list_verbose
+        from ..cli_output import print_log_list_verbose
 
         log_rows = []
         for log_entry in filtered_logs:
@@ -172,7 +173,7 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
                 click.echo(f"[LOG ERROR] {e}", err=True)
         print_log_list_verbose(log_rows)
     else:
-        from ..cli_output_tables import print_log_list_table
+        from ..cli_output import print_log_list_table
 
         log_rows = []
         for log_entry in filtered_logs:
@@ -194,66 +195,68 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
 
 @log.command(name="tail")
 @click.argument("name")
-@click.option("-f", "--follow", is_flag=True, default=True, help="Follow log output (default)")
+@click.option("-f/-F", "--follow/--no-follow", default=True, help="Keep following new runs (default: follow)")
 @click.option("-n", "--lines", type=int, default=10, help="Number of lines to show initially (default: 10)")
 @handle_exceptions
 def log_tail_cmd(name, follow, lines):
-    """Follow log output in real-time (like tail -f)."""
+    """Show the latest log for a task and follow new runs (like tail -f).
+
+    Each run writes a new log file, so when a newer log appears the output
+    switches to it instead of watching the old file forever.
+    """
     config = load_config()
     _find_task_or_raise(config, name)
 
     log_path, exists = log_manager.get_latest_log(name)
     if not exists:
         click.echo(f"No logs found for task '{name}'")
+        if not follow:
+            return
         click.echo("Waiting for new logs... (Ctrl+C to stop)")
 
-        # Wait for log file to appear
+    try:
         while not exists:
             time.sleep(0.5)
             log_path, exists = log_manager.get_latest_log(name)
 
-    click.echo(f"Following log: {log_path}")
-    click.echo("─" * 50)
+        click.echo(f"Following log: {log_path}")
+        click.echo("─" * 50)
 
-    # Use tail -f on Unix-like systems
-    if os.name != "nt":  # Not Windows
+        f = open(log_path, "r")
         try:
-            subprocess.run(["tail", f"-n{lines}", "-f", log_path])
-        except KeyboardInterrupt:
-            click.echo("\nStopped following log")
-    else:
-        # Simple Python implementation for cross-platform
-        try:
-            with open(log_path, "r") as f:
-                # Show last N lines
-                lines_buffer = []
-                for line in f:
-                    lines_buffer.append(line)
-                    if len(lines_buffer) > lines:
-                        lines_buffer.pop(0)
+            for line in deque(f, maxlen=lines):
+                click.echo(line, nl=False)
 
-                for line in lines_buffer:
+            while follow:
+                line = f.readline()
+                if line:
                     click.echo(line, nl=False)
-
-                # Follow new content
-                if follow:
-                    while True:
-                        line = f.readline()
-                        if line:
-                            click.echo(line, nl=False)
-                        else:
-                            time.sleep(0.1)
-        except KeyboardInterrupt:
-            click.echo("\nStopped following log")
+                    continue
+                newest, _ = log_manager.get_latest_log(name)
+                if newest and newest != log_path:
+                    f.close()
+                    log_path = newest
+                    f = open(log_path, "r")
+                    click.echo(f"\n── New run: {os.path.basename(log_path)} ──")
+                    continue
+                time.sleep(0.5)
+        finally:
+            f.close()
+    except KeyboardInterrupt:
+        click.echo("\nStopped following log")
 
 
 @log.command(name="clear")
 @click.option("--task", "task_name", help="Clear logs for specific task")
 @click.option("--all", "clear_all", is_flag=True, help="Clear all logs for all tasks")
+@click.option("--yes", "-y", is_flag=True, help="Don't ask for confirmation")
 @handle_exceptions
-def log_clear(task_name, clear_all):
-    """Clear logs for a specific task or all tasks."""
+def log_clear(task_name, clear_all, yes):
+    """Clear logs and alert history for a specific task or all tasks."""
     if clear_all:
+        log_dir = get_resolved_log_dir()
+        if not yes and not click.confirm(f"Delete all task logs and alert history under {log_dir}?"):
+            return
         if log_manager.clear_all_logs():
             click.echo("Cleared all logs")
         else:

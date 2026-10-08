@@ -5,7 +5,8 @@ import sys
 import click
 import yaml
 
-from ..config import get_config_value, load_global_config, find_config_home
+from ..config import get_config_value, load_global_config, find_config_home, resolve_path, config_sources, CONFIG_FILE
+from ..helpers import get_resolved_log_dir
 from .. import validator
 from .utils import handle_exceptions
 
@@ -58,48 +59,47 @@ def config_path():
 def config_check_permissions():
     """Check that config and log directories have secure permissions.
 
-    Warns if the config directory, task files, or log directory are readable
-    or writable by users other than the owner. Config files should be treated
-    as shell scripts — if they can be written by others, arbitrary commands
-    can be injected into scheduled tasks.
+    Warns if anything that decides which commands run is writable by users
+    other than the owner: signalbox.yaml (it can point paths.tasks_file
+    anywhere), every configured task/group directory and the files in it,
+    including the catalog when it is enabled. Directories count too, since
+    anyone who can write to one can add a task file. Config files should be
+    treated as shell scripts.
     """
     config_home = find_config_home()
-    log_dir = get_config_value("paths.log_dir", "logs")
-    if not os.path.isabs(log_dir):
-        log_dir = os.path.join(config_home, log_dir)
-
     issues = []
 
-    def check_dir(path, label):
-        if not os.path.exists(path):
-            return
-        mode = os.stat(path).st_mode & 0o777
-        if mode & 0o077:
-            issues.append(f"{label} is accessible by group/others: {path}  (current: {oct(mode)}, recommended: 0o700)")
+    def mode_of(path):
+        return os.stat(path).st_mode & 0o777
 
-    def check_file(path, label):
-        if not os.path.exists(path):
-            return
-        mode = os.stat(path).st_mode & 0o777
-        if mode & 0o022:
-            issues.append(f"{label} is writable by group/others: {path}  (current: {oct(mode)}, recommended: 0o600)")
+    def check_private_dir(path, label):
+        """Directories holding logs/config should not be readable by others at all."""
+        if os.path.isdir(path) and mode_of(path) & 0o077:
+            issues.append(
+                f"{label} is accessible by group/others: {path}  (current: {oct(mode_of(path))}, recommended: 0o700)"
+            )
 
-    check_dir(config_home, "Config home")
-    check_dir(log_dir, "Log directory")
+    def check_not_writable(path, label, recommended):
+        if os.path.exists(path) and mode_of(path) & 0o022:
+            issues.append(
+                f"{label} is writable by group/others: {path}  "
+                f"(current: {oct(mode_of(path))}, recommended: {recommended})"
+            )
 
-    tasks_dir = os.path.join(config_home, "config", "tasks")
-    if os.path.exists(tasks_dir):
-        for fname in os.listdir(tasks_dir):
-            fpath = os.path.join(tasks_dir, fname)
+    check_private_dir(config_home, "Config home")
+    check_private_dir(get_resolved_log_dir(), "Log directory")
+    check_not_writable(os.path.join(config_home, "config"), "Config directory", "0o700")
+    check_not_writable(resolve_path(CONFIG_FILE), "Global config signalbox.yaml", "0o600")
+
+    for directory, kind, is_catalog in config_sources():
+        label = f"{'Catalog ' if is_catalog else ''}{kind[:-1]}"
+        if not os.path.isdir(directory):
+            continue
+        check_not_writable(directory, f"{label.capitalize()} directory", "0o700")
+        for fname in sorted(os.listdir(directory)):
+            fpath = os.path.join(directory, fname)
             if os.path.isfile(fpath):
-                check_file(fpath, f"Task file '{fname}'")
-
-    groups_dir = os.path.join(config_home, "config", "groups")
-    if os.path.exists(groups_dir):
-        for fname in os.listdir(groups_dir):
-            fpath = os.path.join(groups_dir, fname)
-            if os.path.isfile(fpath):
-                check_file(fpath, f"Group file '{fname}'")
+                check_not_writable(fpath, f"{label.capitalize()} file '{fname}'", "0o600")
 
     if issues:
         click.echo("Permission issues found:", err=True)

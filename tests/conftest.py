@@ -10,6 +10,65 @@ import shutil
 import yaml
 from pathlib import Path
 
+from signalbox.config import reset_config
+
+
+@pytest.fixture(autouse=True)
+def isolate_signalbox_home(tmp_path_factory, monkeypatch):
+    """Point every test at a throwaway SIGNALBOX_HOME.
+
+    Without this, any code path a test forgets to mock (log dirs, init,
+    runtime state) resolves to the developer's real ~/.config/signalbox.
+    """
+    home = tmp_path_factory.mktemp("signalbox_home")
+    monkeypatch.setenv("SIGNALBOX_HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    reset_config()
+    yield home
+    reset_config()
+
+
+class SignalboxHome:
+    """A real signalbox home on disk for end-to-end CLI tests."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.config_dir = self.path / "config"
+        (self.config_dir / "tasks").mkdir(parents=True)
+        (self.config_dir / "groups").mkdir(parents=True)
+        self.write_settings({})
+
+    def write_settings(self, overrides):
+        """Write signalbox.yaml with notifications off, plus any overrides (shallow-merged)."""
+        settings = {
+            "alerts": {"notifications": {"enabled": False}},
+            "group_notifications": {"enabled": False},
+        }
+        settings.update(overrides)
+        self._dump(self.config_dir / "signalbox.yaml", settings)
+        reset_config()
+
+    def write_tasks(self, tasks, filename="tasks.yaml"):
+        self._dump(self.config_dir / "tasks" / filename, {"tasks": tasks})
+
+    def write_groups(self, groups, filename="groups.yaml"):
+        self._dump(self.config_dir / "groups" / filename, {"groups": groups})
+
+    def logs(self, task_name):
+        log_dir = self.path / "logs" / task_name
+        return sorted(p for p in log_dir.glob("*.log")) if log_dir.exists() else []
+
+    @staticmethod
+    def _dump(path, data):
+        with open(path, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+@pytest.fixture
+def sb_home(isolate_signalbox_home):
+    """A real, empty signalbox home (SIGNALBOX_HOME already points at it)."""
+    return SignalboxHome(isolate_signalbox_home)
+
 
 @pytest.fixture
 def temp_dir():
@@ -132,13 +191,13 @@ def sample_groups_yaml(temp_config_dir):
                 "name": "basic",
                 "description": "Basic test group",
                 "tasks": ["hello", "show_date"],
-                "execution": {"mode": "serial"},
+                "execution": "serial",
             },
             {
                 "name": "parallel_test",
                 "description": "Parallel execution test",
                 "tasks": ["hello", "uptime"],
-                "execution": {"mode": "parallel"},
+                "execution": "parallel",
             },
         ]
     }
