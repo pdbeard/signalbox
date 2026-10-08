@@ -24,16 +24,17 @@ def init():
         click.echo(f"Configuration directory already exists: {config_dir}")
         backup_dir = f"{config_dir}.backup.{format_timestamp(datetime.now())}"
         if not click.confirm(
-            f"Reinitialize? The whole directory is first copied to {backup_dir}; config/ and runtime/ are then reset"
+            f"Reinitialize? config/ and runtime/ are copied to {backup_dir}, then reset (logs are kept)"
         ):
             return
-        # Copy (not move) so nothing is lost if anything below fails; logs stay in place.
-        shutil.copytree(config_dir, backup_dir, symlinks=True)
+        # Only the directories being replaced are backed up; logs stay where they are.
+        # Copy first and delete only after every copy succeeded, so nothing can be lost.
+        replaced = [d for d in ("config", "runtime") if os.path.isdir(os.path.join(config_dir, d))]
+        for subdir in replaced:
+            shutil.copytree(os.path.join(config_dir, subdir), os.path.join(backup_dir, subdir), symlinks=True)
         click.echo(f"Backed up existing config to: {backup_dir}")
-        for subdir in ("config", "runtime"):
-            path = os.path.join(config_dir, subdir)
-            if os.path.isdir(path):
-                shutil.rmtree(path)
+        for subdir in replaced:
+            shutil.rmtree(os.path.join(config_dir, subdir))
 
     # The template config directory ships inside the signalbox package
     # (signalbox/config), one level above this commands/ subpackage.
@@ -119,7 +120,7 @@ def export_systemd(group_name, user):
     groups = config.get("groups", [])
     group = next((g for g in groups if isinstance(g, dict) and g.get("name") == group_name), None)
 
-    result = exporters.export_systemd(group, group_name)
+    result = exporters.export_systemd(group, group_name, user=user)
 
     if not result.success:
         click.echo(f"Error: {result.error}", err=True)

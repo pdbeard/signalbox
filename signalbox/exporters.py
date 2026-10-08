@@ -1,5 +1,6 @@
 # Export functionality for systemd and cron
 
+import getpass
 import os
 import shlex
 import shutil
@@ -190,33 +191,40 @@ def cron_to_oncalendar(cron_schedule):
     return f"{weekday} {calendar}" if weekday else calendar
 
 
-def generate_systemd_service(group, group_name):
+def _unit_description(group, group_name):
+    """Single-line description for a unit file (a newline would start a new directive)."""
+    return " ".join(str(group.get("description", group_name)).split())
+
+
+def generate_systemd_service(group, group_name, user=False):
     """Generate systemd service file content.
 
     Args:
             group: Group configuration dict
             group_name: Name of the group
+            user: True for a user unit (~/.config/systemd/user). A system unit
+                  gets User= set to the exporting user, so tasks never run as root
+                  and files in the signalbox home keep their owner.
 
     Returns:
             str: Service file content
     """
     task_dir = get_task_dir()
     signalbox_cmd = get_signalbox_command()
+    run_as = "" if user else f"User={getpass.getuser()}\n"
 
+    # No [Install] section: the service is started by its timer, which is what gets enabled.
     return f"""[Unit]
-Description=signalbox - {group.get('description', group_name)}
+Description=signalbox - {_unit_description(group, group_name)}
 After=network.target
 
 [Service]
 Type=oneshot
-WorkingDirectory={task_dir}
+{run_as}WorkingDirectory={task_dir}
 Environment={shlex.quote(f"SIGNALBOX_HOME={task_dir}")}
 ExecStart={signalbox_cmd} group run {group_name}
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
 """
 
 
@@ -238,7 +246,7 @@ def generate_systemd_timer(group, group_name):
     on_calendar = cron_to_oncalendar(cron_schedule)
 
     return f"""[Unit]
-Description=Timer for signalbox - {group.get('description', group_name)}
+Description=Timer for signalbox - {_unit_description(group, group_name)}
 Requires={service_name}.service
 
 [Timer]
@@ -251,12 +259,13 @@ WantedBy=timers.target
 """
 
 
-def export_systemd(group, group_name):
+def export_systemd(group, group_name, user=False):
     """Export systemd service and timer files for a group.
 
     Args:
             group: Group configuration dict
             group_name: Name of the group
+            user: True to generate a user unit instead of a system unit
 
     Returns:
             ExportResult: Result of the export operation
@@ -271,7 +280,7 @@ def export_systemd(group, group_name):
         timer_content = generate_systemd_timer(group, group_name)
     except ValueError as e:
         return ExportResult(success=False, error=f"Group '{group_name}' schedule can't be converted for systemd: {e}")
-    service_content = generate_systemd_service(group, group_name)
+    service_content = generate_systemd_service(group, group_name, user=user)
 
     # Create export directory
     export_base_dir = resolve_path(get_config_value("paths.systemd_export_dir", "systemd"))
