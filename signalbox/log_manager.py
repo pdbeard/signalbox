@@ -79,9 +79,11 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
 def rotate_logs(task):
     """Rotate logs for a task based on configured limits.
 
-    Supports two rotation types:
+    Supports three rotation types:
     - 'count': Keep only the N most recent log files
     - 'age': Delete log files older than N days
+    - 'size': Keep the most recent logs whose combined size is at most N MB
+      (the newest log is always kept)
 
     Args:
             task: Task configuration dict with optional 'log_limit' setting
@@ -114,10 +116,12 @@ def rotate_logs(task):
 
             log_files = _list_log_files(task_log_dir)
 
-            if log_limit["type"] == "count":
-                _rotate_by_count(task_log_dir, log_files, log_limit["value"])
-            elif log_limit["type"] == "age":
-                _rotate_by_age(task_log_dir, log_files, log_limit["value"])
+            rotate = {"count": _rotate_by_count, "age": _rotate_by_age, "size": _rotate_by_size}.get(
+                log_limit.get("type")
+            )
+            if rotate is None:
+                raise ValueError(f"unknown log_limit type {log_limit.get('type')!r} (use count, age or size)")
+            rotate(task_log_dir, log_files, log_limit["value"])
 
             # Lock is automatically released when file is closed
     except Exception as e:
@@ -163,6 +167,23 @@ def _rotate_by_age(task_log_dir, log_files, max_age_days):
 
         if file_time < cutoff:
             os.remove(filepath)
+
+
+def _rotate_by_size(task_log_dir, log_files, max_size_mb):
+    """Delete the oldest log files until the rest fit in max_size_mb (the newest is always kept).
+
+    Args:
+            task_log_dir: Directory containing log files
+            log_files: List of log filenames
+            max_size_mb: Maximum combined size of kept logs, in megabytes
+    """
+    max_bytes = max_size_mb * 1024 * 1024
+    paths = sorted((os.path.join(task_log_dir, f) for f in log_files), key=os.path.getmtime, reverse=True)
+    total = 0
+    for index, path in enumerate(paths):
+        total += os.path.getsize(path)
+        if index > 0 and total > max_bytes:
+            os.remove(path)
 
 
 def get_latest_log(task_name):

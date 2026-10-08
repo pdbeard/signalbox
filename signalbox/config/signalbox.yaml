@@ -61,6 +61,8 @@ alerts:
     enabled: true          # Enable/disable alert notifications globally
     on_failure_only: true  # Only send notifications for critical/warning alerts (not info)
                            # Can be overridden per-alert with "notify: true/false" or "on_failure_only: true/false"
+    cooldown_minutes: 60   # Don't repeat a notification for the same task + pattern within this window
+                           # (the alert is still recorded each time; 0 = notify on every run)
 
 # Group notification settings (summary notifications after running groups)
 group_notifications:

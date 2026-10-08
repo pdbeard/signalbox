@@ -80,6 +80,18 @@ def save_alert(task_name, alert_data):
         f.write(json.dumps(alert_data) + "\n")
 
 
+def notified_within(task_name, pattern, minutes):
+    """Return True if an alert for this task and pattern sent a notification in the last N minutes."""
+    cutoff = datetime.now() - timedelta(minutes=minutes)
+    for alert in load_alerts(task_name=task_name):  # newest first
+        timestamp = parse_timestamp(alert.get("timestamp", ""))
+        if timestamp is None or timestamp < cutoff:
+            break
+        if alert.get("pattern") == pattern and alert.get("notified"):
+            return True
+    return False
+
+
 def load_alerts(task_name=None, severity=None, max_days=None):
     """Load alerts from storage, optionally filtered.
 

@@ -10,6 +10,7 @@ from .helpers import is_valid_name
 
 SEVERITIES = ("info", "warning", "critical")
 EXECUTION_MODES = ("serial", "parallel")
+LOG_LIMIT_TYPES = ("count", "age", "size")
 
 
 class ValidationResult:
@@ -41,13 +42,15 @@ def _name_error(kind, name):
     )
 
 
-def validate_task(task):
-    """Check a single task definition.
+def validate_task_for_run(task):
+    """Check only what would stop a task from running correctly.
 
-    Used both by `config validate` and before a task is run.
+    Run before every execution. Problems that don't affect running (a missing
+    description, a bad alert pattern) are left to `signalbox validate`, so they
+    never block a scheduled run.
 
     Returns:
-        list: Error messages (empty if the task is valid)
+        list: Error messages (empty if the task can run)
     """
     if not isinstance(task, dict):
         return [f"Task entry must be a mapping, got {type(task).__name__}"]
@@ -58,16 +61,52 @@ def validate_task(task):
         errors.append("Task missing 'name' field")
     elif not is_valid_name(task["name"]):
         errors.append(_name_error("Task", task["name"]))
-    for field in ("command", "description"):
-        if field not in task:
-            errors.append(f"{label} missing '{field}' field")
-    if "command" in task and not isinstance(task["command"], str):
+    if "command" not in task:
+        errors.append(f"{label} missing 'command' field")
+    elif not isinstance(task["command"], str):
         errors.append(f"{label} 'command' must be a string")
 
     if "timeout" in task:
         timeout = task["timeout"]
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout < 0:
             errors.append(f"{label} has invalid timeout (must be a number >= 0, got {timeout!r})")
+
+    if "cwd" in task and not isinstance(task["cwd"], str):
+        errors.append(f"{label} 'cwd' must be a path string")
+
+    return errors
+
+
+def validate_log_limit(log_limit, label):
+    """Check a log_limit mapping ({type: count|age|size, value: N})."""
+    if not isinstance(log_limit, dict):
+        return [f"{label} log_limit must be a mapping with 'type' and 'value'"]
+    errors = []
+    if log_limit.get("type") not in LOG_LIMIT_TYPES:
+        errors.append(
+            f"{label} log_limit type must be one of {', '.join(LOG_LIMIT_TYPES)}, got {log_limit.get('type')!r}"
+        )
+    value = log_limit.get("value")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 1:
+        errors.append(f"{label} log_limit value must be a number >= 1, got {value!r}")
+    return errors
+
+
+def validate_task(task):
+    """Check a single task definition fully (used by `signalbox validate`).
+
+    Returns:
+        list: Error messages (empty if the task is valid)
+    """
+    errors = validate_task_for_run(task)
+    if not isinstance(task, dict):
+        return errors
+
+    label = f"Task '{task.get('name', 'unknown')}'"
+    if "description" not in task:
+        errors.append(f"{label} missing 'description' field")
+    if "log_limit" in task:
+        errors.extend(validate_log_limit(task["log_limit"], label))
 
     if "alerts" in task:
         alerts_list = task["alerts"]
@@ -289,6 +328,10 @@ def _validate_global_config(result):
     timeout = get_config_value("execution.default_timeout", 300)
     if not isinstance(timeout, (int, float)) or timeout < 0:
         result.warnings.append("Invalid timeout value: {} (should be >= 0)".format(timeout))
+
+    default_limit = get_config_value("default_log_limit", None)
+    if default_limit is not None:
+        result.errors.extend(validate_log_limit(default_limit, "Global default"))
 
 
 def get_validation_summary(result):

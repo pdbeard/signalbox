@@ -6,7 +6,7 @@ logging, and error handling.
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 import subprocess
 
 from signalbox.executor import run_task, run_group_parallel, run_group_serial
@@ -23,7 +23,7 @@ class TestRunTask:
     @patch("signalbox.executor.save_task_runtime_state")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.write_execution_log")
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     def test_run_task_success(
         self,
         mock_subprocess,
@@ -61,7 +61,7 @@ class TestRunTask:
         # Verify
         assert result is True
         mock_ensure_dir.assert_called_once_with("test_task")
-        mock_subprocess.assert_called_once_with("echo 'hello'", shell=True, capture_output=True, text=True, timeout=300)
+        mock_subprocess.assert_called_once_with("echo 'hello'", timeout=300, cwd=ANY)
         mock_write_log.assert_called_once()
         mock_rotate.assert_called_once()
         mock_save_state.assert_called_once()
@@ -77,7 +77,7 @@ class TestRunTask:
     @patch("signalbox.executor.save_task_runtime_state")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.write_execution_log")
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     def test_run_task_failure(
         self,
         mock_subprocess,
@@ -135,7 +135,7 @@ class TestRunTask:
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.save_task_runtime_state")
     @patch("signalbox.executor.write_execution_log")
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     def test_run_task_timeout(
         self,
         mock_subprocess,
@@ -182,7 +182,7 @@ class TestRunTask:
     @patch("signalbox.executor.ensure_log_dir")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.write_execution_log")
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     def test_run_task_no_timeout(
         self,
         mock_subprocess,
@@ -223,7 +223,7 @@ class TestRunTask:
     @patch("signalbox.executor.ensure_log_dir")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.write_execution_log")
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     def test_run_task_no_source_tracking(
         self,
         mock_subprocess,
@@ -259,7 +259,7 @@ class TestRunTask:
         assert result is True
         assert config["tasks"][0]["last_status"] == "success"
 
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     @patch("signalbox.executor.ensure_log_dir")
     @patch("signalbox.executor.get_log_path")
     @patch("signalbox.executor.get_config_value")
@@ -287,7 +287,7 @@ class TestRunTask:
 
         assert "error_script" in str(exc_info.value)
 
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     @patch("signalbox.executor.write_execution_log")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.save_task_runtime_state")
@@ -325,7 +325,7 @@ class TestRunTask:
         assert run_task("slow_task", config) is True
         assert mock_subprocess.call_args[1]["timeout"] == 600
 
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     @patch("signalbox.executor.write_execution_log")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.save_task_runtime_state")
@@ -606,7 +606,7 @@ class TestRunGroupSerial:
 class TestExecutorIntegration:
     """Integration tests for executor module."""
 
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     @patch("signalbox.executor.write_execution_log")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.save_task_runtime_state")
@@ -670,7 +670,7 @@ class TestExecutorIntegration:
         assert mock_subprocess.call_count == 2
         mock_notify.assert_called_once()
 
-    @patch("signalbox.executor.subprocess.run")
+    @patch("signalbox.executor.run_command")
     @patch("signalbox.executor.write_execution_log")
     @patch("signalbox.executor.rotate_logs")
     @patch("signalbox.executor.save_task_runtime_state")
@@ -735,3 +735,49 @@ class TestExecutorIntegration:
         calls = mock_subprocess.call_args_list
         assert calls[0][0][0] == "echo 1"
         assert calls[1][0][0] == "echo 2"
+
+
+class TestRunCommand:
+    """run_command against real processes (no mocking)."""
+
+    def test_timeout_kills_the_whole_process_group(self, tmp_path):
+        import os
+        import time
+
+        from signalbox.executor import run_command
+
+        pidfile = tmp_path / "child.pid"
+        with pytest.raises(subprocess.TimeoutExpired):
+            run_command(f"sleep 30 & echo $! > {pidfile}; wait", timeout=1)
+
+        child = int(pidfile.read_text())
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            try:
+                os.kill(child, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.1)
+        pytest.fail("background child of a timed-out task is still running")
+
+    def test_timeout_keeps_partial_output(self):
+        from signalbox.executor import run_command
+
+        with pytest.raises(subprocess.TimeoutExpired) as exc_info:
+            run_command("echo before; sleep 30", timeout=1)
+        assert "before" in exc_info.value.output
+
+    def test_stdin_is_empty(self):
+        from signalbox.executor import run_command
+
+        result = run_command("read line || echo no-stdin", timeout=5)
+        assert result.stdout.strip() == "no-stdin"
+
+    def test_runs_in_given_directory(self, tmp_path):
+        import os
+
+        from signalbox.executor import run_command
+
+        result = run_command("pwd -P", timeout=5, cwd=str(tmp_path))
+        assert result.stdout.strip() == os.path.realpath(tmp_path)
+        assert result.returncode == 0

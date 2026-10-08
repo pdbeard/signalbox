@@ -6,19 +6,88 @@
 #
 # Configuration files MUST be trusted. See SECURITY.md for details.
 #
+import os
+import signal
 import subprocess
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import click
 
-from .config import get_config_value
+from .config import get_config_value, find_config_home
 from .runtime import save_task_runtime_state
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
-from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError, ValidationError
+from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError, ValidationError, ConfigurationError
 from . import notifications
 from . import alerts
 from .helpers import format_timestamp
-from .validator import validate_task
+from .validator import validate_task_for_run
+
+# After a timeout kill, how long to wait for the pipes to close before giving up on the output
+KILL_GRACE_SECONDS = 5
+
+
+def _kill_process_group(proc):
+    """SIGKILL every process in the task's process group (the shell and anything it started)."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def run_command(command, timeout=None, cwd=None):
+    """Run a shell command the way signalbox runs every task.
+
+    - The command gets its own session/process group, so a timeout (or Ctrl+C)
+      kills everything it started, not just the shell.
+    - stdin is /dev/null: a command that prompts fails fast instead of hanging
+      invisibly (its output is captured) until the timeout.
+    - cwd is explicit, so manual and scheduled runs behave the same.
+
+    Returns:
+        subprocess.CompletedProcess with text stdout/stderr
+
+    Raises:
+        subprocess.TimeoutExpired: With whatever output was captured before the kill
+    """
+    proc = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_process_group(proc)
+        try:
+            # Retrying communicate() keeps the output read so far
+            stdout, stderr = proc.communicate(timeout=KILL_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            # Something escaped the process group (e.g. daemonized) and still holds the pipes
+            proc.stdout.close()
+            proc.stderr.close()
+            proc.wait()
+            stdout, stderr = "", ""
+        raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr)
+    except BaseException:
+        # The task is in its own session, so Ctrl+C no longer reaches it directly
+        _kill_process_group(proc)
+        proc.wait()
+        raise
+    return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
+
+
+def resolve_task_cwd(task):
+    """Working directory for a task: its 'cwd' (relative to the signalbox home), or the home itself."""
+    home = find_config_home()
+    cwd = task.get("cwd")
+    if not cwd:
+        return home
+    return os.path.join(home, os.path.expanduser(cwd))
 
 
 def _find_task(name, config):
@@ -57,7 +126,7 @@ def _execute(task, name, config):
     log_file = get_log_path(name, timestamp)
 
     try:
-        result = subprocess.run(task["command"], shell=True, capture_output=True, text=True, timeout=timeout)
+        result = run_command(task["command"], timeout=timeout, cwd=resolve_task_cwd(task))
     except subprocess.TimeoutExpired as e:
         _record_timeout(name, task, e, log_file, timestamp, config)
         raise ExecutionTimeoutError(name, timeout)
@@ -78,7 +147,7 @@ def _record_timeout(name, task, error, log_file, timestamp, config):
     """Write a log and mark the task failed so a timeout is visible in logs and the tray."""
     stdout = _as_text(error.stdout)
     stderr = _as_text(error.stderr) + f"\n[TIMED OUT after {error.timeout}s]"
-    # subprocess.run kills the child with SIGKILL on timeout, so -9 is the honest return code
+    # run_command kills the process group with SIGKILL on timeout, so -9 is the honest return code
     write_execution_log(log_file, task["command"], -9, stdout, stderr)
     rotate_logs(task)
 
@@ -87,6 +156,31 @@ def _record_timeout(name, task, error, log_file, timestamp, config):
         save_task_runtime_state(name, task_source_file, timestamp, "failed")
     task["last_status"] = "failed"
     task["last_run"] = timestamp
+
+
+def _should_notify(name, alert):
+    """Decide whether a triggered alert sends a desktop notification.
+
+    Per-alert 'notify' / 'on_failure_only' override the global settings
+    (on_failure_only skips info-severity alerts). An alert that already
+    notified for the same task and pattern within
+    alerts.notifications.cooldown_minutes is recorded but not re-sent, so a
+    task that runs every few minutes doesn't notify on every run.
+    """
+    notify = alert.get("notify")
+    if notify is None:
+        notify = get_config_value("alerts.notifications.enabled", True)
+    if not notify:
+        return False
+
+    on_failure_only = alert.get("on_failure_only")
+    if on_failure_only is None:
+        on_failure_only = get_config_value("alerts.notifications.on_failure_only", True)
+    if on_failure_only and alert.get("severity", "info") == "info":
+        return False
+
+    cooldown = get_config_value("alerts.notifications.cooldown_minutes", 60)
+    return not (cooldown and alerts.notified_within(name, alert["pattern"], cooldown))
 
 
 def _post_execution(name, task, result, log_file, timestamp, config):
@@ -98,33 +192,16 @@ def _post_execution(name, task, result, log_file, timestamp, config):
     triggered_alerts = alerts.check_alert_patterns(name, task, combined_output)
 
     # Save and optionally notify for each triggered alert
-    if triggered_alerts:
-        global_alerts_enabled = get_config_value("alerts.notifications.enabled", True)
-        global_on_failure_only = get_config_value("alerts.notifications.on_failure_only", True)
-
-        for alert in triggered_alerts:
-            alerts.save_alert(name, alert)
-
-            severity_label = alert["severity"].upper()
-            click.echo(f"  [{severity_label}] {alert['message']}")
-
-            alert_notify = alert.get("notify")
-            if alert_notify is False:
-                continue
-            alerts_enabled = alert_notify if alert_notify is not None else global_alerts_enabled
-
-            if alerts_enabled:
-                alert_on_failure_only = alert.get("on_failure_only")
-                on_failure_only = alert_on_failure_only if alert_on_failure_only is not None else global_on_failure_only
-                alert_severity = alert.get("severity", "info")
-                if on_failure_only and alert_severity == "info":
-                    continue
-                alert_title = alert.get("title") or f"Alert: {name}"
-                notifications.send_notification(
-                    title=alert_title,
-                    message=alert["message"],
-                    urgency="critical" if alert_severity == "critical" else "normal",
-                )
+    for alert in triggered_alerts:
+        alert["notified"] = _should_notify(name, alert)
+        alerts.save_alert(name, alert)
+        click.echo(f"  [{alert['severity'].upper()}] {alert['message']}")
+        if alert["notified"]:
+            notifications.send_notification(
+                title=alert.get("title") or f"Alert: {name}",
+                message=alert["message"],
+                urgency="critical" if alert.get("severity") == "critical" else "normal",
+            )
 
     rotate_logs(task)
 
@@ -159,14 +236,18 @@ def run_task(name, config):
 
     Raises:
         TaskNotFoundError: If task not found in configuration
-        ValidationError: If the task definition is invalid (e.g. missing 'command')
+        ValidationError: If the task can't be run (e.g. missing 'command')
+        ConfigurationError: If the task's working directory does not exist
         ExecutionTimeoutError: If task execution times out
         ExecutionError: If task execution fails for any other reason
     """
     task = _find_task(name, config)
-    errors = validate_task(task)
+    errors = validate_task_for_run(task)
     if errors:
         raise ValidationError("; ".join(errors))
+    cwd = resolve_task_cwd(task)
+    if not os.path.isdir(cwd):
+        raise ConfigurationError(f"Working directory for task '{name}' does not exist: {cwd}")
     try:
         result, log_file, timestamp = _execute(task, name, config)
         _post_execution(name, task, result, log_file, timestamp, config)
