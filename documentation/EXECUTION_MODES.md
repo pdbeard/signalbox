@@ -24,7 +24,7 @@ groups:
   - name: deployment
     description: Deploy application
     execution: serial  # Run one at a time
-    scripts:
+    tasks:
       - pre_deploy_check
       - build_app
       - deploy_app
@@ -41,7 +41,7 @@ groups:
     description: Deploy application
     execution: serial
     stop_on_error: true  # Stop if any script fails
-    scripts:
+    tasks:
       - pre_deploy_check  # If this fails, stop here
       - build_app         # Won't run if previous failed
       - deploy_app
@@ -83,7 +83,7 @@ groups:
   - name: monitoring
     description: Check all services
     execution: parallel  # Run simultaneously
-    scripts:
+    tasks:
       - check_web_server
       - check_database
       - check_cache
@@ -125,7 +125,7 @@ groups:
   - name: health_checks
     execution: parallel
     schedule: "* * * * *"  # Every minute
-    scripts:
+    tasks:
       - check_api_health
       - check_db_health
       - check_cache_health
@@ -134,7 +134,7 @@ groups:
   - name: deploy_api
     execution: serial
     stop_on_error: true
-    scripts:
+    tasks:
       - run_api_tests
       - build_api
       - deploy_api
@@ -144,7 +144,7 @@ groups:
   - name: metrics_collection
     execution: parallel
     schedule: "*/10 * * * *"  # Every 10 minutes
-    scripts:
+    tasks:
       - collect_cpu_metrics
       - collect_memory_metrics
       - collect_disk_metrics

@@ -166,9 +166,12 @@ Each task requires:
 
 Optional fields:
 
-- `timeout` — per-task timeout in seconds; overrides `execution.default_timeout` (0 disables the timeout)
-- `log_limit` — log rotation: `type: count` keeps the N most recent logs, `type: age` keeps logs for N days
+- `timeout` — per-task timeout in seconds; overrides `execution.default_timeout` (0 disables the timeout). On timeout the task and every process it started are killed
+- `cwd` — working directory, absolute or relative to the signalbox home (default: the signalbox home, for manual and scheduled runs alike)
+- `log_limit` — log rotation: `type: count` keeps the N most recent logs, `type: age` keeps logs for N days, `type: size` keeps the newest logs that fit in N MB
 - `alerts` — output pattern alerts (see Alerting below)
+
+Commands run with no stdin (`/dev/null`), so anything that prompts for input fails immediately instead of waiting for the timeout.
 
 **Organization tips:** split files by functionality (`basic.yaml`, `backup.yaml`), by environment (`production.yaml`, `staging.yaml`), or by team.
 
@@ -222,26 +225,27 @@ groups:
 
 Signalbox does not run its own scheduler daemon — it generates systemd or cron configuration for you to review and install. Only groups with a `schedule` field can be exported.
 
-### Option 1: systemd
+Exported files are written under the signalbox home (`~/.config/signalbox` by default); the export command prints the exact paths and install steps.
+
+### Option 1: systemd (user units, recommended)
 
 ```bash
-# Generate files (creates systemd/<group>/ directory)
-signalbox export-systemd daily
+# Generate files in ~/.config/signalbox/systemd/daily/
+signalbox export-systemd daily --user
 
-# Install (requires root)
-sudo cp systemd/daily/signalbox-daily.service systemd/daily/signalbox-daily.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now signalbox-daily.timer
+# Install
+mkdir -p ~/.config/systemd/user
+cp ~/.config/signalbox/systemd/daily/signalbox-daily.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now signalbox-daily.timer
 
 # Check status
-sudo systemctl status signalbox-daily.timer
+systemctl --user status signalbox-daily.timer
 ```
 
-For user-level units (no root):
+User units only run while you're logged in unless lingering is enabled (`loginctl enable-linger $USER`).
 
-```bash
-signalbox export-systemd daily --user
-```
+For a system-wide unit, run `signalbox export-systemd daily` without `--user` and copy the files to `/etc/systemd/system/` with `sudo`. The service includes `User=<you>`, so tasks still run as your user, not root.
 
 ### Option 2: cron
 

@@ -36,6 +36,9 @@ group_notifications:
 
 - **`alerts.notifications.enabled`** (default: `true`): Enable/disable alert notifications globally
 - **`alerts.notifications.on_failure_only`** (default: `true`): If true, only send notifications for critical/warning alerts (not info severity)
+- **`alerts.notifications.cooldown_minutes`** (default: `60`): After an alert notifies, the same task + pattern won't notify again within this window. Every occurrence is still recorded and shown by `signalbox alerts`. Set to `0` to notify on every run.
+
+On Linux, scheduled runs (cron, systemd) usually don't have `DBUS_SESSION_BUS_ADDRESS` set; signalbox falls back to `/run/user/<uid>/bus`, so notifications reach your desktop while you're logged in.
 
 ### Group Notification Options
 
@@ -73,14 +76,14 @@ Message: All scripts ran successfully (5/5)
 ### Partial Failure
 ```
 Title: Signalbox - Failures Detected
-Message: Ran 5 scripts: 3 passed, 2 failed
+Message: Ran 5 tasks: 3 passed, 2 failed
 Failed: backup.sh, sync.py
 ```
 
 ### Complete Failure
 ```
 Title: Signalbox - Failures Detected
-Message: Ran 3 scripts: 0 passed, 3 failed
+Message: Ran 3 tasks: 0 passed, 3 failed
 ```
 
 ## Platform Requirements

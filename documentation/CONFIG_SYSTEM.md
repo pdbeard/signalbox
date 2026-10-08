@@ -71,14 +71,15 @@ The validate command now:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `default_log_limit.type` | string | count | Log rotation type: `count` or `size` |
-| `default_log_limit.value` | number | 10 | Number of logs or MB |
+| `default_log_limit.type` | string | count | Log rotation type: `count`, `age` or `size` |
+| `default_log_limit.value` | number | 10 | Number of logs, days, or MB (depending on type) |
 | `paths.log_dir` | string | logs | Directory for log files |
 | `paths.tasks_file` | string | config/tasks | Directory of task YAML files |
 | `paths.groups_file` | string | config/groups | Directory of group YAML files |
 | `include_catalog` | boolean | false | Also load the example tasks/groups in `config/catalog/` |
 | `paths.systemd_export_dir` | string | systemd | Directory for exported systemd files (relative to the signalbox home) |
 | `paths.cron_export_dir` | string | cron | Directory for exported cron files (relative to the signalbox home) |
+| `alerts.notifications.cooldown_minutes` | number | 60 | Don't repeat a notification for the same task and alert pattern within this many minutes (0 = every run) |
 | `tray.notify_on_success` | boolean | false | Show a tray message when a run started from the tray succeeds |
 | `execution.default_timeout` | number | 300 | Script timeout in seconds (0=none) |
 | `execution.capture_stdout` | boolean | true | Capture stdout in logs |

@@ -13,7 +13,7 @@ groups:
   - name: daily-maintenance
     description: Daily cleanup and backup tasks
     schedule: "0 2 * * *"
-    scripts:
+    tasks:
       - cleanup_temp
       - rotate_logs
       - backup_database
@@ -26,7 +26,7 @@ groups:
 When a single script needs a unique schedule, create a dedicated group:
 ```yaml
 # WRONG - Don't do this
-scripts:
+tasks:
   - name: backup
     command: /backup.sh
     schedule: "*/15 * * * *" 
@@ -38,7 +38,7 @@ groups:
   - name: backup-group
     description: 
     schedule: "*/15 * * * *"
-    scripts:
+    tasks:
       - backup
 ```
 

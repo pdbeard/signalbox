@@ -46,8 +46,9 @@ Single file containing global settings like timeouts, log limits, and paths.
 - `name` (required) - Unique identifier; letters, digits, `_`, `-` and `.` only, not starting with `.` or `-`
 - `description` (required) - Human-readable description
 - `command` (required) - Shell command to execute
-- `timeout` (optional) - Seconds before the task is killed (0 = no timeout)
-- `log_limit` (optional) - Log rotation configuration
+- `timeout` (optional) - Seconds before the task and everything it started are killed (0 = no timeout)
+- `cwd` (optional) - Working directory, absolute or relative to the signalbox home (default: the signalbox home)
+- `log_limit` (optional) - Log rotation: `{type: count|age|size, value: N}`
 - `alerts` (optional) - Regex patterns to match in the output
 
 **Note:** Field order in YAML doesn't affect functionality. Run state (`last_run`, `last_status`) is kept in `runtime/`, never in your config files.
