@@ -1,5 +1,8 @@
 # Runtime state management for signalbox
+import fcntl
 import os
+import tempfile
+
 import yaml
 from .config import resolve_path
 from .helpers import load_yaml_dict_from_dir
@@ -20,60 +23,77 @@ def load_runtime_state():
     return runtime_state
 
 
-def save_task_runtime_state(task_name, source_file, last_run, last_status):
-    """Save runtime state for a task to the appropriate runtime file."""
+def _update_runtime_file(runtime_dir, source_file, section, update):
+    """Apply update(section_dict) to a runtime state file under an exclusive lock.
+
+    Tasks from the same config file share one runtime file, and parallel groups
+    update it from several threads at once. The flock serializes the
+    read-modify-write so no update is lost, and the temp-file + rename keeps
+    readers (e.g. the tray app) from ever seeing a half-written file.
+    """
     config_filename = os.path.basename(source_file)
     config_basename = os.path.splitext(config_filename)[0]
-    runtime_filename = f"runtime_{config_basename}.yaml"
-    runtime_filepath = resolve_path(os.path.join("runtime/tasks", runtime_filename))
-    runtime_data = {"tasks": {}}
-    if os.path.exists(runtime_filepath):
+    runtime_filepath = resolve_path(os.path.join(runtime_dir, f"runtime_{config_basename}.yaml"))
+    directory = os.path.dirname(runtime_filepath)
+    os.makedirs(directory, exist_ok=True)
+
+    # Dotfile so load_yaml_dict_from_dir skips it
+    lock_path = os.path.join(directory, f".runtime_{config_basename}.lock")
+    with open(lock_path, "w") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+
+        runtime_data = {}
+        if os.path.exists(runtime_filepath):
+            try:
+                with open(runtime_filepath, "r") as f:
+                    runtime_data = yaml.safe_load(f) or {}
+            except Exception:
+                runtime_data = {}
+        if not isinstance(runtime_data.get(section), dict):
+            runtime_data[section] = {}
+        update(runtime_data[section])
+
+        fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".runtime_", suffix=".tmp")
         try:
-            with open(runtime_filepath, "r") as f:
-                runtime_data = yaml.safe_load(f) or {"tasks": {}}
+            with os.fdopen(fd, "w") as f:
+                f.write(f"# Runtime state for {config_filename} - auto-generated, do not edit manually\n")
+                yaml.dump(runtime_data, f, default_flow_style=False, sort_keys=False)
+            os.replace(tmp_path, runtime_filepath)
         except Exception:
-            runtime_data = {"tasks": {}}
-    if "tasks" not in runtime_data:
-        runtime_data["tasks"] = {}
-    runtime_data["tasks"][task_name] = {"last_run": last_run, "last_status": last_status}
-    os.makedirs(os.path.dirname(runtime_filepath), exist_ok=True)
-    with open(runtime_filepath, "w") as f:
-        f.write(f"# Runtime state for {config_filename} - auto-generated, do not edit manually\n")
-        yaml.dump(runtime_data, f, default_flow_style=False, sort_keys=False)
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+
+def save_task_runtime_state(task_name, source_file, last_run, last_status):
+    """Save runtime state for a task to the appropriate runtime file."""
+
+    def update(tasks):
+        tasks[task_name] = {"last_run": last_run, "last_status": last_status}
+
+    _update_runtime_file("runtime/tasks", source_file, "tasks", update)
 
 
 def save_group_runtime_state(
     group_name, source_file, last_run, last_status, execution_time, tasks_total, tasks_successful
 ):
     """Save runtime state for a group to the appropriate runtime file."""
-    config_filename = os.path.basename(source_file)
-    config_basename = os.path.splitext(config_filename)[0]
-    runtime_filename = f"runtime_{config_basename}.yaml"
-    runtime_filepath = resolve_path(os.path.join("runtime/groups", runtime_filename))
-    runtime_data = {"groups": {}}
-    if os.path.exists(runtime_filepath):
-        try:
-            with open(runtime_filepath, "r") as f:
-                runtime_data = yaml.safe_load(f) or {"groups": {}}
-        except Exception:
-            runtime_data = {"groups": {}}
-    if "groups" not in runtime_data:
-        runtime_data["groups"] = {}
-    prev_state = runtime_data["groups"].get(group_name, {})
-    execution_count = prev_state.get("execution_count", 0) + 1
-    runtime_data["groups"][group_name] = {
-        "last_run": last_run,
-        "last_status": last_status,
-        "execution_time_seconds": execution_time,
-        "execution_count": execution_count,
-        "tasks_total": tasks_total,
-        "tasks_successful": tasks_successful,
-        "success_rate": round((tasks_successful / tasks_total * 100), 1) if tasks_total > 0 else 0.0,
-    }
-    os.makedirs(os.path.dirname(runtime_filepath), exist_ok=True)
-    with open(runtime_filepath, "w") as f:
-        f.write(f"# Runtime state for {config_filename} - auto-generated, do not edit manually\n")
-        yaml.dump(runtime_data, f, default_flow_style=False, sort_keys=False)
+
+    def update(groups):
+        prev_state = groups.get(group_name, {})
+        groups[group_name] = {
+            "last_run": last_run,
+            "last_status": last_status,
+            "execution_time_seconds": execution_time,
+            "execution_count": prev_state.get("execution_count", 0) + 1,
+            "tasks_total": tasks_total,
+            "tasks_successful": tasks_successful,
+            "success_rate": round((tasks_successful / tasks_total * 100), 1) if tasks_total > 0 else 0.0,
+        }
+
+    _update_runtime_file("runtime/groups", source_file, "groups", update)
 
 
 def merge_config_with_runtime_state(config, runtime_state):
