@@ -76,8 +76,8 @@ The validate command now:
 | `paths.log_dir` | string | logs | Directory for log files |
 | `paths.scripts_file` | string | scripts.yaml | Path to scripts config |
 | `paths.groups_file` | string | groups.yaml | Path to groups config |
-| `paths.systemd_export_dir` | string | systemd | Directory for exported systemd files |
-| `paths.cron_export_dir` | string | cron | Directory for exported cron files |
+| `paths.systemd_export_dir` | string | systemd | Directory for exported systemd files (relative to the signalbox home) |
+| `paths.cron_export_dir` | string | cron | Directory for exported cron files (relative to the signalbox home) |
 | `execution.default_timeout` | number | 300 | Script timeout in seconds (0=none) |
 | `execution.capture_stdout` | boolean | true | Capture stdout in logs |
 | `execution.capture_stderr` | boolean | true | Capture stderr in logs |

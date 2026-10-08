@@ -1,7 +1,22 @@
 # Export functionality for systemd and cron
 
 import os
-from .config import get_config_value
+import shlex
+import shutil
+import sys
+
+from .config import get_config_value, find_config_home, resolve_path
+
+CRON_MACROS = {
+    "@hourly": "hourly",
+    "@daily": "daily",
+    "@midnight": "daily",
+    "@weekly": "weekly",
+    "@monthly": "monthly",
+    "@yearly": "yearly",
+    "@annually": "yearly",
+}
+WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 class ExportResult:
@@ -53,55 +68,122 @@ def get_python_executable():
     Returns:
             str: Path to Python executable
     """
-    import sys
-
     return sys.executable
 
 
 def get_signalbox_command():
-    """Determine the signalbox command to use for exported tasks.
+    """Determine the absolute command used to invoke signalbox from cron/systemd.
+
+    Both run with a minimal PATH (pipx installs to ~/.local/bin, which cron
+    does not search), and systemd requires an absolute ExecStart path, so the
+    resolved path is used rather than a bare "signalbox".
 
     Returns:
-            str: Command to invoke signalbox (either CLI entry point or task path)
+            str: Shell-quoted command to invoke signalbox
     """
-    import shutil
-
-    # Check if signalbox is installed as a CLI command
     signalbox_cmd = shutil.which("signalbox")
     if signalbox_cmd:
-        return "signalbox"
+        return shlex.quote(os.path.abspath(signalbox_cmd))
 
-    # Fall back to development mode - use the root signalbox.py
-    # Find the project root (parent of core directory)
-    core_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(core_dir)
-    signalbox_py = os.path.join(project_root, "signalbox.py")
-
-    if os.path.exists(signalbox_py):
-        python_exec = get_python_executable()
-        return f"{python_exec} {signalbox_py}"
-
-    # Last resort fallback
-    return "signalbox"
+    # Not on PATH (e.g. running from a source checkout): run the package module
+    return f"{shlex.quote(get_python_executable())} -m signalbox"
 
 
 def get_task_dir():
-    """Get the absolute path to the task directory.
+    """Get the absolute path of the signalbox home that exported jobs should use.
 
-    Returns the directory where tasks should be executed from.
-    In production, this is typically the user's home or config directory.
-    In development, this is the project root.
+    This is the same directory the current CLI invocation resolved, so
+    SIGNALBOX_HOME, XDG_CONFIG_HOME and --config are honoured.
     """
-    import shutil
+    return os.path.abspath(find_config_home())
 
-    # If signalbox is installed, use the config directory
-    if shutil.which("signalbox"):
-        return os.path.expanduser("~/.config/signalbox")
 
-    # In development mode, use project root
-    core_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(core_dir)
-    return project_root
+def _convert_cron_field(value, field, start):
+    """Convert one numeric cron field to systemd calendar syntax.
+
+    Args:
+        value: Cron field text, e.g. "*", "*/5", "1-5", "0,30"
+        field: Field name, used in error messages
+        start: First value of the field, used for "*/N" (0 for minute/hour, 1 for day/month)
+    """
+    parts = []
+    for item in value.split(","):
+        if item == "*":
+            parts.append("*")
+        elif item.startswith("*/") and item[2:].isdigit():
+            parts.append(f"{start}/{item[2:]}")
+        elif "-" in item and "/" not in item:
+            low, high = item.split("-", 1)
+            if not (low.isdigit() and high.isdigit()):
+                raise ValueError(f"unsupported {field} field '{value}'")
+            parts.append(f"{low}..{high}")
+        elif "/" in item and "-" not in item:
+            base, step = item.split("/", 1)
+            if not (base.isdigit() and step.isdigit()):
+                raise ValueError(f"unsupported {field} field '{value}'")
+            parts.append(item)
+        elif item.isdigit():
+            parts.append(item)
+        else:
+            raise ValueError(f"unsupported {field} field '{value}'")
+    return ",".join(parts)
+
+
+def _convert_cron_weekday(value):
+    """Convert a cron day-of-week field to systemd syntax ('' means any day)."""
+    if value == "*":
+        return ""
+
+    def name(day):
+        if day.isdigit() and 0 <= int(day) <= 7:
+            return WEEKDAYS[int(day)]
+        if day[:3].capitalize() in WEEKDAYS:
+            return day[:3].capitalize()
+        raise ValueError(f"unsupported day-of-week field '{value}'")
+
+    parts = []
+    for item in value.split(","):
+        if "/" in item:
+            raise ValueError(f"unsupported day-of-week field '{value}'")
+        if "-" in item:
+            low, high = item.split("-", 1)
+            parts.append(f"{name(low)}..{name(high)}")
+        else:
+            parts.append(name(item))
+    return ",".join(parts)
+
+
+def cron_to_oncalendar(cron_schedule):
+    """Convert a cron expression to a systemd OnCalendar value.
+
+    Supports the common cron syntax: *, numbers, lists, ranges, */N and N/M
+    steps, weekday names and @hourly-style macros.
+
+    Raises:
+        ValueError: If the expression uses syntax that has no systemd equivalent
+    """
+    cron_schedule = cron_schedule.strip()
+    if cron_schedule in CRON_MACROS:
+        return CRON_MACROS[cron_schedule]
+
+    fields = cron_schedule.split()
+    if len(fields) != 5:
+        raise ValueError(f"expected 5 cron fields, got {len(fields)} in '{cron_schedule}'")
+    minute, hour, day, month, weekday = fields
+
+    # cron fires when EITHER day-of-month or day-of-week matches if both are
+    # restricted; systemd requires both, so the result would silently differ.
+    if day != "*" and weekday != "*":
+        raise ValueError("schedules restricting both day-of-month and day-of-week have no systemd equivalent")
+
+    calendar = "*-{}-{} {}:{}:00".format(
+        _convert_cron_field(month, "month", 1),
+        _convert_cron_field(day, "day-of-month", 1),
+        _convert_cron_field(hour, "hour", 0),
+        _convert_cron_field(minute, "minute", 0),
+    )
+    weekday = _convert_cron_weekday(weekday)
+    return f"{weekday} {calendar}" if weekday else calendar
 
 
 def generate_systemd_service(group, group_name):
@@ -124,7 +206,8 @@ After=network.target
 [Service]
 Type=oneshot
 WorkingDirectory={task_dir}
-ExecStart={signalbox_cmd} run-group {group_name}
+Environment={shlex.quote(f"SIGNALBOX_HOME={task_dir}")}
+ExecStart={signalbox_cmd} group run {group_name}
 StandardOutput=journal
 StandardError=journal
 
@@ -142,23 +225,22 @@ def generate_systemd_timer(group, group_name):
 
     Returns:
             str: Timer file content
+
+    Raises:
+            ValueError: If the group's cron schedule cannot be expressed as OnCalendar
     """
     service_name = f"signalbox-{group_name}"
     cron_schedule = get_schedule_string(group)
+    on_calendar = cron_to_oncalendar(cron_schedule)
 
     return f"""[Unit]
 Description=Timer for signalbox - {group.get('description', group_name)}
 Requires={service_name}.service
 
 [Timer]
-# Cron schedule: {cron_schedule}
-OnCalendar=*-*-* *:00:00
-# For custom timing, edit the OnCalendar line above
-# Examples:
-#   Every 5 minutes: *:0/5
-#   Hourly: hourly
-#   Daily at 2 AM: 02:00
-#   See: man systemd.time
+# Converted from cron schedule: {cron_schedule}
+# Verify with: systemd-analyze calendar '{on_calendar}'
+OnCalendar={on_calendar}
 
 [Install]
 WantedBy=timers.target
@@ -180,8 +262,15 @@ def export_systemd(group, group_name):
     if not is_valid:
         return ExportResult(success=False, error=error)
 
+    # Generate both files before writing anything so a bad schedule leaves no partial export
+    try:
+        timer_content = generate_systemd_timer(group, group_name)
+    except ValueError as e:
+        return ExportResult(success=False, error=f"Group '{group_name}' schedule can't be converted for systemd: {e}")
+    service_content = generate_systemd_service(group, group_name)
+
     # Create export directory
-    export_base_dir = get_config_value("paths.systemd_export_dir", "systemd")
+    export_base_dir = resolve_path(get_config_value("paths.systemd_export_dir", "systemd"))
     export_dir = os.path.join(export_base_dir, group_name)
     os.makedirs(export_dir, exist_ok=True)
 
@@ -189,13 +278,9 @@ def export_systemd(group, group_name):
     service_file = os.path.join(export_dir, f"{service_name}.service")
     timer_file = os.path.join(export_dir, f"{service_name}.timer")
 
-    # Generate and write service file
-    service_content = generate_systemd_service(group, group_name)
     with open(service_file, "w") as f:
         f.write(service_content)
 
-    # Generate and write timer file
-    timer_content = generate_systemd_timer(group, group_name)
     with open(timer_file, "w") as f:
         f.write(timer_content)
 
@@ -256,7 +341,8 @@ def generate_cron_entry(group, group_name):
     task_dir = get_task_dir()
     signalbox_cmd = get_signalbox_command()
 
-    return f"{get_schedule_string(group)} cd {task_dir} && {signalbox_cmd} group run {group_name}"
+    home = shlex.quote(task_dir)
+    return f"{get_schedule_string(group)} cd {home} && SIGNALBOX_HOME={home} {signalbox_cmd} group run {group_name}"
 
 
 def export_cron(group, group_name):
@@ -275,7 +361,7 @@ def export_cron(group, group_name):
         return ExportResult(success=False, error=error)
 
     # Create export directory
-    export_base_dir = get_config_value("paths.cron_export_dir", "cron")
+    export_base_dir = resolve_path(get_config_value("paths.cron_export_dir", "cron"))
     export_dir = os.path.join(export_base_dir, group_name)
     os.makedirs(export_dir, exist_ok=True)
 
