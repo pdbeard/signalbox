@@ -8,6 +8,16 @@ CONFIG_FILE = "config/signalbox.yaml"
 # paths.groups_file. Kept identical to the values in the shipped signalbox.yaml.
 TASKS_FILE = "config/tasks"
 GROUPS_FILE = "config/groups"
+CATALOG_TASKS_FILE = "config/catalog/tasks"
+CATALOG_GROUPS_FILE = "config/catalog/groups"
+
+# (config key, kind, fallback directory, is_catalog) for every place tasks/groups are loaded from
+CONFIG_SOURCES = [
+    ("paths.tasks_file", "tasks", TASKS_FILE, False),
+    ("paths.catalog_tasks_file", "tasks", CATALOG_TASKS_FILE, True),
+    ("paths.groups_file", "groups", GROUPS_FILE, False),
+    ("paths.catalog_groups_file", "groups", CATALOG_GROUPS_FILE, True),
+]
 
 
 class ConfigManager:
@@ -30,7 +40,25 @@ class ConfigManager:
                 config_home: Override config home directory (useful for testing)
         """
         self._config_home = config_home
+        self._explicit_home = config_home is not None
         self._global_config = None
+
+    def find_init_home(self):
+        """Find the directory that `signalbox init` should create or reinitialize.
+
+        Same order as find_config_home but without the current-directory
+        fallback: init replaces what it finds, so it must never pick an
+        arbitrary project directory just because it contains config/signalbox.yaml.
+        """
+        if self._explicit_home:
+            return self._config_home
+        env_home = os.environ.get("SIGNALBOX_HOME")
+        if env_home:
+            return os.path.expanduser(env_home)
+        xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+        if xdg_config_home:
+            return os.path.expanduser(os.path.join(xdg_config_home, "signalbox"))
+        return os.path.expanduser("~/.config/signalbox")
 
     def find_config_home(self):
         """
@@ -110,111 +138,59 @@ class ConfigManager:
                 return default
         return value
 
+    def include_catalog(self):
+        """Whether catalog tasks/groups are loaded. Off by default: catalog entries are examples."""
+        return self.get_config_value("include_catalog", False)
+
+    def config_sources(self):
+        """Return (directory, kind, is_catalog) for each enabled task/group directory."""
+        include_catalog = self.include_catalog()
+        return [
+            (self.resolve_path(self.get_config_value(key, fallback)), kind, is_catalog)
+            for key, kind, fallback, is_catalog in CONFIG_SOURCES
+            if include_catalog or not is_catalog
+        ]
+
     def load_config(self, suppress_warnings=False):
         """Load configuration from tasks and groups directories."""
         config = {"tasks": [], "groups": [], "_task_sources": {}, "_group_sources": {}}
+        sources_key = {"tasks": "_task_sources", "groups": "_group_sources"}
 
-        # Load user tasks from directory (only 'tasks_file' config key supported)
-        user_tasks_dir = self.get_config_value("paths.tasks_file", TASKS_FILE)
-        user_tasks_dir = self.resolve_path(user_tasks_dir)
-        if os.path.isdir(user_tasks_dir):
-            tasks_list = load_yaml_files_from_dir(
-                user_tasks_dir, key="tasks", track_sources=True, suppress_warnings=suppress_warnings
+        for directory, kind, _ in self.config_sources():
+            if not os.path.isdir(directory):
+                continue
+            items = load_yaml_files_from_dir(
+                directory, key=kind, track_sources=True, suppress_warnings=suppress_warnings
             )
-            for item in tasks_list:
-                task_name = item["data"].get("name")
-                if task_name:
-                    config["_task_sources"][task_name] = item["source"]
-                config["tasks"].append(item["data"])
-
-        # Load catalog tasks if enabled
-        include_catalog = self.get_config_value("include_catalog", True)
-        if include_catalog:
-            catalog_tasks_path = self.get_config_value("paths.catalog_tasks_file", "config/catalog/tasks")
-            catalog_tasks_path = self.resolve_path(catalog_tasks_path)
-            if os.path.isdir(catalog_tasks_path):
-                catalog_tasks_list = load_yaml_files_from_dir(
-                    catalog_tasks_path, key="tasks", track_sources=True, suppress_warnings=suppress_warnings
-                )
-                for item in catalog_tasks_list:
-                    task_name = item["data"].get("name")
-                    if task_name:
-                        config["_task_sources"][task_name] = item["source"]
-                    config["tasks"].append(item["data"])
-
-        # Load user groups from directory
-        groups_path = self.get_config_value("paths.groups_file", GROUPS_FILE)
-        groups_path = self.resolve_path(groups_path)
-        if os.path.isdir(groups_path):
-            groups_list = load_yaml_files_from_dir(
-                groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings
-            )
-            for item in groups_list:
-                group_name = item["data"].get("name")
-                if group_name:
-                    config["_group_sources"][group_name] = item["source"]
-                config["groups"].append(item["data"])
-
-        # Load catalog groups if enabled
-        if include_catalog:
-            catalog_groups_path = self.get_config_value("paths.catalog_groups_file", "config/catalog/groups")
-            catalog_groups_path = self.resolve_path(catalog_groups_path)
-            if os.path.isdir(catalog_groups_path):
-                catalog_groups_list = load_yaml_files_from_dir(
-                    catalog_groups_path, key="groups", track_sources=True, suppress_warnings=suppress_warnings
-                )
-                for item in catalog_groups_list:
-                    group_name = item["data"].get("name")
-                    if group_name:
-                        config["_group_sources"][group_name] = item["source"]
-                    config["groups"].append(item["data"])
+            for item in items:
+                name = item["data"].get("name") if isinstance(item["data"], dict) else None
+                if name:
+                    config[sources_key[kind]][name] = item["source"]
+                config[kind].append(item["data"])
 
         # Note: runtime state merging should be handled in runtime.py
         return config
 
+    def _save_items(self, config, kind, directory_key, fallback):
+        """Write config[kind] back to the files they were loaded from (new items go to _new.yaml)."""
+        directory = self.resolve_path(self.get_config_value(directory_key, fallback))
+        if kind not in config or not os.path.isdir(directory):
+            return
+        sources = config.get("_task_sources" if kind == "tasks" else "_group_sources", {})
+        files_to_save = {}
+        for item in config[kind]:
+            source_file = sources.get(item.get("name"))
+            if not (source_file and os.path.exists(source_file)):
+                source_file = os.path.join(directory, "_new.yaml")
+            files_to_save.setdefault(source_file, []).append(item)
+        for filepath, items in files_to_save.items():
+            with open(filepath, "w") as f:
+                yaml.dump({kind: items}, f, default_flow_style=False, sort_keys=False)
+
     def save_config(self, config):
         """Save configuration back to original source files."""
-        tasks_path = self.get_config_value("paths.tasks_file", TASKS_FILE)
-        tasks_path = self.resolve_path(tasks_path)
-        task_sources = config.get("_task_sources", {})
-        if "tasks" in config and os.path.isdir(tasks_path):
-            files_to_save = {}
-            for task in config["tasks"]:
-                task_name = task.get("name")
-                source_file = task_sources.get(task_name)
-                if source_file and os.path.exists(source_file):
-                    if source_file not in files_to_save:
-                        files_to_save[source_file] = []
-                    files_to_save[source_file].append(task)
-                else:
-                    new_file = os.path.join(tasks_path, "_new.yaml")
-                    if new_file not in files_to_save:
-                        files_to_save[new_file] = []
-                    files_to_save[new_file].append(task)
-            for filepath, tasks in files_to_save.items():
-                with open(filepath, "w") as f:
-                    yaml.dump({"tasks": tasks}, f, default_flow_style=False, sort_keys=False)
-        if "groups" in config:
-            groups_path = self.get_config_value("paths.groups_file", GROUPS_FILE)
-            groups_path = self.resolve_path(groups_path)
-            group_sources = config.get("_group_sources", {})
-            if os.path.isdir(groups_path):
-                files_to_save = {}
-                for group in config["groups"]:
-                    group_name = group.get("name")
-                    source_file = group_sources.get(group_name)
-                    if source_file and os.path.exists(source_file):
-                        if source_file not in files_to_save:
-                            files_to_save[source_file] = []
-                        files_to_save[source_file].append(group)
-                    else:
-                        new_file = os.path.join(groups_path, "_new.yaml")
-                        if new_file not in files_to_save:
-                            files_to_save[new_file] = []
-                        files_to_save[new_file].append(group)
-                for filepath, groups in files_to_save.items():
-                    with open(filepath, "w") as f:
-                        yaml.dump({"groups": groups}, f, default_flow_style=False, sort_keys=False)
+        self._save_items(config, "tasks", "paths.tasks_file", TASKS_FILE)
+        self._save_items(config, "groups", "paths.groups_file", GROUPS_FILE)
 
     def save_global_config_value(self, path, value):
         """Write a single value into signalbox.yaml using dot notation.
@@ -268,12 +244,14 @@ class ConfigManager:
         callers reaching into private attributes.
         """
         self._config_home = config_home
+        self._explicit_home = config_home is not None
         self._global_config = None
 
     def reset(self):
         """Reset cached configuration (useful for testing or reload)."""
         self._global_config = None
         self._config_home = None
+        self._explicit_home = False
 
 
 # Global instance for backward compatibility
@@ -286,6 +264,11 @@ _default_config_manager = ConfigManager()
 def find_config_home():
     """Find the signalbox configuration directory."""
     return _default_config_manager.find_config_home()
+
+
+def find_init_home():
+    """Find the directory `signalbox init` should create (never the current directory)."""
+    return _default_config_manager.find_init_home()
 
 
 def resolve_path(path):
@@ -306,6 +289,11 @@ def get_config_value(path, default=None):
 def load_config(suppress_warnings=False):
     """Load configuration from tasks and groups directories."""
     return _default_config_manager.load_config(suppress_warnings=suppress_warnings)
+
+
+def config_sources():
+    """Return (directory, kind, is_catalog) for each enabled task/group directory."""
+    return _default_config_manager.config_sources()
 
 
 def save_config(config):
