@@ -5,9 +5,10 @@ Supports macOS (via osascript) and Linux (via notify-send).
 Falls back gracefully if notification systems are unavailable.
 """
 
+import logging
+import os
 import platform
 import subprocess
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,22 @@ def _send_macos_notification(title, message):
     return True
 
 
+def _notification_env():
+    """Environment for notify-send, pointing it at the user's session bus if needed.
+
+    cron jobs and systemd system units don't inherit DBUS_SESSION_BUS_ADDRESS,
+    so notify-send can't reach the desktop from a scheduled run. When it is
+    missing, fall back to the standard per-user bus socket if it exists (it
+    does while the user is logged in).
+    """
+    env = dict(os.environ)
+    if not env.get("DBUS_SESSION_BUS_ADDRESS"):
+        bus = f"/run/user/{os.getuid()}/bus"
+        if os.path.exists(bus):
+            env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={bus}"
+    return env
+
+
 def _send_linux_notification(title, message, urgency="normal"):
     """Send notification on Linux using notify-send."""
     # Check if notify-send is available
@@ -64,7 +81,13 @@ def _send_linux_notification(title, message, urgency="normal"):
         logger.warning("notify-send not found. Install libnotify-bin or notification-daemon.")
         return False
 
-    result = subprocess.run(["notify-send", "-u", urgency, title, message], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(
+        ["notify-send", "-u", urgency, title, message],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        env=_notification_env(),
+    )
 
     if result.returncode != 0:
         logger.warning(f"notify-send failed: {result.stderr}")

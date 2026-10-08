@@ -135,3 +135,21 @@ def test_notify_execution_result_failure_only(monkeypatch):
         2, 1, 1, context="scripts", failed_names=["fail"], config={"enabled": True, "on_failure_only": True}
     )
     assert called.get("sent")
+
+
+def test_notification_env_falls_back_to_user_bus(monkeypatch, tmp_path):
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setattr(notifications.os, "getuid", lambda: 4242)
+    monkeypatch.setattr(notifications.os.path, "exists", lambda p: p == "/run/user/4242/bus")
+    assert notifications._notification_env()["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/4242/bus"
+
+
+def test_notification_env_keeps_existing_bus(monkeypatch):
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/custom")
+    assert notifications._notification_env()["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/custom"
+
+
+def test_notification_env_without_session(monkeypatch):
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setattr(notifications.os.path, "exists", lambda p: False)
+    assert "DBUS_SESSION_BUS_ADDRESS" not in notifications._notification_env()
