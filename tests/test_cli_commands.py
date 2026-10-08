@@ -244,18 +244,21 @@ class TestRunAllCommand:
 class TestRunGroupCommand:
     """Tests for group run command."""
 
+    @staticmethod
+    def _results(*statuses):
+        names = ["test_task", "another_task"]
+        return [{"name": n, "status": st, "error": ""} for n, st in zip(names, statuses)]
+
     @patch("signalbox.commands.group._latest_log_name", return_value="")
     @patch("signalbox.commands.group.load_config")
     @patch("signalbox.commands.group.run_group_serial")
-    @patch("signalbox.commands.group.load_runtime_state")
     @patch("signalbox.commands.group.save_group_runtime_state")
     def test_run_group_serial_execution(
-        self, mock_save, mock_runtime, mock_run_serial, mock_load, mock_log_name, runner, sample_config
+        self, mock_save, mock_run_serial, mock_load, mock_log_name, runner, sample_config
     ):
         """Test group run with serial execution."""
         mock_load.return_value = sample_config
-        mock_run_serial.return_value = 1
-        mock_runtime.return_value = {"tasks": {}, "groups": {}}
+        mock_run_serial.return_value = self._results("success", "success")
 
         result = runner.invoke(cli, ["group", "run", "test_group"])
 
@@ -267,17 +270,15 @@ class TestRunGroupCommand:
     @patch("signalbox.commands.group._latest_log_name", return_value="")
     @patch("signalbox.commands.group.load_config")
     @patch("signalbox.commands.group.run_group_parallel")
-    @patch("signalbox.commands.group.load_runtime_state")
     @patch("signalbox.commands.group.save_group_runtime_state")
     def test_run_group_parallel_execution(
-        self, mock_save, mock_runtime, mock_run_parallel, mock_load, mock_log_name, runner, sample_config
+        self, mock_save, mock_run_parallel, mock_load, mock_log_name, runner, sample_config
     ):
         """Test group run with parallel execution."""
         # Modify config for parallel execution
         sample_config["groups"][0]["execution"] = "parallel"
         mock_load.return_value = sample_config
-        mock_run_parallel.return_value = 1
-        mock_runtime.return_value = {"tasks": {}, "groups": {}}
+        mock_run_parallel.return_value = self._results("success", "success")
 
         result = runner.invoke(cli, ["group", "run", "test_group"])
 
@@ -298,34 +299,32 @@ class TestRunGroupCommand:
     @patch("signalbox.commands.group._latest_log_name", return_value="")
     @patch("signalbox.commands.group.load_config")
     @patch("signalbox.commands.group.run_group_serial")
-    @patch("signalbox.commands.group.load_runtime_state")
     @patch("signalbox.commands.group.save_group_runtime_state")
     def test_run_group_calculates_status(
-        self, mock_save, mock_runtime, mock_run_serial, mock_load, mock_log_name, runner, sample_config
+        self, mock_save, mock_run_serial, mock_load, mock_log_name, runner, sample_config
     ):
-        """Test group run calculates correct status based on results."""
+        """Test group run derives status and exit code from this run's results."""
         mock_load.return_value = sample_config
 
-        # All tasks succeed → "success"
-        mock_runtime.return_value = {
-            "tasks": {"test_task": {"last_status": "success"}, "another_task": {"last_status": "success"}}
-        }
-        runner.invoke(cli, ["group", "run", "test_group"])
+        # All tasks succeed → "success", exit 0
+        mock_run_serial.return_value = self._results("success", "success")
+        result = runner.invoke(cli, ["group", "run", "test_group"])
         assert mock_save.call_args[1]["last_status"] == "success"
+        assert result.exit_code == 0
 
-        # First task succeeds, second fails → "partial"
-        mock_runtime.return_value = {
-            "tasks": {"test_task": {"last_status": "success"}, "another_task": {"last_status": "failed"}}
-        }
-        runner.invoke(cli, ["group", "run", "test_group"])
+        # First task succeeds, second fails → "partial", exit 1
+        mock_run_serial.return_value = self._results("success", "failed")
+        result = runner.invoke(cli, ["group", "run", "test_group"])
         assert mock_save.call_args[1]["last_status"] == "partial"
+        assert result.exit_code == 1
 
-        # All tasks fail → "failed"
-        mock_runtime.return_value = {
-            "tasks": {"test_task": {"last_status": "failed"}, "another_task": {"last_status": "failed"}}
-        }
-        runner.invoke(cli, ["group", "run", "test_group"])
+        # First fails, second skipped by stop_on_error → "failed", skipped task not counted as success
+        mock_run_serial.return_value = self._results("failed", "skipped")
+        result = runner.invoke(cli, ["group", "run", "test_group"])
         assert mock_save.call_args[1]["last_status"] == "failed"
+        assert mock_save.call_args[1]["tasks_successful"] == 0
+        assert "skipped" in result.output
+        assert result.exit_code == 1
 
 
 class TestLogsCommand:

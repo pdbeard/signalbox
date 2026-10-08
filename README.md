@@ -329,12 +329,12 @@ Signalbox follows POSIX conventions for exit codes:
 | Code | Meaning | Example |
 |------|---------|---------|
 | 0 | Success | All tasks completed successfully |
-| 1 | Task execution failure | One or more tasks failed (for `task run --all`) |
+| 1 | Task execution failure | A task failed (`task run`), or one or more tasks in the run failed (`task run --all`, `group run`) |
 | 2 | Usage/configuration error | Invalid config, bad arguments, validation failed |
 | 126 | Permission denied | Cannot execute command due to permissions |
 | 130 | Interrupted | User pressed Ctrl+C |
 
-**Note:** `signalbox task run --all` attempts every task even if some fail, and exits with code 1 only after all tasks have been attempted.
+**Note:** `signalbox task run --all` attempts every task even if some fail, and exits with code 1 only after all tasks have been attempted. `signalbox group run` exits with code 1 if any task in the group failed or was skipped by `stop_on_error`, so cron and systemd see the failure.
 
 ## Security
 

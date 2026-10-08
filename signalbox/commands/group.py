@@ -1,11 +1,12 @@
 # Group commands: signalbox group run / list
+import sys
 from datetime import datetime
 
 import click
 
 from ..config import load_config
 from ..executor import run_group_parallel, run_group_serial
-from ..runtime import save_group_runtime_state, load_runtime_state
+from ..runtime import save_group_runtime_state
 from ..exceptions import GroupNotFoundError
 from ..helpers import format_timestamp
 from .utils import handle_exceptions
@@ -49,24 +50,11 @@ def group_run(name):
 
     # Run all tasks in a single call so parallel/serial semantics are correct.
     if execution_mode == "parallel":
-        run_group_parallel(task_names, config)
+        results = run_group_parallel(task_names, config)
     else:
-        run_group_serial(task_names, config, stop_on_error)
-
-    # Collect per-task results for the status table from runtime state + log files.
-    runtime = load_runtime_state()
-    results = []
-    for task_name in task_names:
-        task_state = runtime.get("tasks", {}).get(task_name, {})
-        status = task_state.get("last_status", "unknown")
-        results.append(
-            {
-                "name": task_name,
-                "status": status,
-                "log_file": _latest_log_name(task_name),
-                "error": "",
-            }
-        )
+        results = run_group_serial(task_names, config, stop_on_error)
+    for result in results:
+        result["log_file"] = _latest_log_name(result["name"]) if result["status"] != "skipped" else ""
     end_time = datetime.now()
     execution_time = (end_time - start_time).total_seconds()
     tasks_total = len(task_names)
@@ -93,6 +81,8 @@ def group_run(name):
 
     print_group_run_table(results)
     click.echo(f"Group {name} executed.")
+    if group_status != "success":
+        sys.exit(1)
 
 
 @group.command(name="list")

@@ -132,9 +132,22 @@ class TestRunTask:
     @patch("signalbox.executor.get_config_value")
     @patch("signalbox.executor.get_log_path")
     @patch("signalbox.executor.ensure_log_dir")
+    @patch("signalbox.executor.rotate_logs")
+    @patch("signalbox.executor.save_task_runtime_state")
+    @patch("signalbox.executor.write_execution_log")
     @patch("signalbox.executor.subprocess.run")
-    def test_run_task_timeout(self, mock_subprocess, mock_ensure_dir, mock_log_path, mock_get_config, mock_load_config):
-        """Test script execution that times out."""
+    def test_run_task_timeout(
+        self,
+        mock_subprocess,
+        mock_write_log,
+        mock_save_state,
+        mock_rotate,
+        mock_ensure_dir,
+        mock_log_path,
+        mock_get_config,
+        mock_load_config,
+    ):
+        """Test script execution that times out is logged and recorded as failed."""
         mock_get_config.side_effect = lambda key, default: {
             "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 5,
@@ -154,6 +167,14 @@ class TestRunTask:
 
         assert "slow_task" in str(exc_info.value)
         assert "5" in str(exc_info.value)
+
+        # The timeout must leave a log and a failed runtime state, not vanish silently
+        log_args = mock_write_log.call_args[0]
+        assert log_args[0] == "/logs/timeout.log"
+        assert log_args[2] == -9
+        assert "TIMED OUT" in log_args[4]
+        assert mock_save_state.call_args[0][0] == "slow_task"
+        assert mock_save_state.call_args[0][3] == "failed"
 
     @patch("signalbox.config.load_config")
     @patch("signalbox.executor.get_config_value")
@@ -357,7 +378,9 @@ class TestRunGroupParallel:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_parallel(script_names, config)
+        results = run_group_parallel(script_names, config)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 3
         assert mock_run_task.call_count == 3
@@ -385,7 +408,9 @@ class TestRunGroupParallel:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_parallel(script_names, config)
+        results = run_group_parallel(script_names, config)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 2
 
@@ -413,13 +438,18 @@ class TestRunGroupParallel:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_parallel(script_names, config)
+        results = run_group_parallel(script_names, config)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 2
 
         notify_call = mock_notify.call_args
         assert notify_call[1]["failed"] == 1
         assert "script2" in notify_call[1]["failed_names"]
+        # Results keep task order and carry the error message
+        assert [r["name"] for r in results] == script_names
+        assert "script2" in results[1]["error"]
 
     @patch("signalbox.executor.run_task")
     @patch("signalbox.executor.notifications.notify_execution_result")
@@ -432,7 +462,9 @@ class TestRunGroupParallel:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["s1", "s2", "s3", "s4", "s5"]
 
-        success_count = run_group_parallel(script_names, config)
+        results = run_group_parallel(script_names, config)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 5
         assert mock_get_config.called
@@ -450,7 +482,9 @@ class TestRunGroupSerial:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_serial(script_names, config, stop_on_error=False)
+        results = run_group_serial(script_names, config, stop_on_error=False)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 3
         assert mock_run_task.call_count == 3
@@ -471,7 +505,9 @@ class TestRunGroupSerial:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_serial(script_names, config, stop_on_error=False)
+        results = run_group_serial(script_names, config, stop_on_error=False)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 2
         assert mock_run_task.call_count == 3  # All 3 should run
@@ -490,10 +526,13 @@ class TestRunGroupSerial:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_serial(script_names, config, stop_on_error=True)
+        results = run_group_serial(script_names, config, stop_on_error=True)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 1
         assert mock_run_task.call_count == 2  # Should stop after script2
+        assert [r["status"] for r in results] == ["success", "failed", "skipped"]
 
         notify_call = mock_notify.call_args
         assert notify_call[1]["passed"] == 1
@@ -514,7 +553,9 @@ class TestRunGroupSerial:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_serial(script_names, config, stop_on_error=False)
+        results = run_group_serial(script_names, config, stop_on_error=False)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 2
         assert mock_run_task.call_count == 3  # All 3 attempted
@@ -534,7 +575,9 @@ class TestRunGroupSerial:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_serial(script_names, config, stop_on_error=True)
+        results = run_group_serial(script_names, config, stop_on_error=True)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 1
         assert mock_run_task.call_count == 2  # Stops at script2
@@ -548,7 +591,9 @@ class TestRunGroupSerial:
         config = {"tasks": [], "_task_sources": {}}
         script_names = ["script1", "script2", "script3"]
 
-        success_count = run_group_serial(script_names, config, stop_on_error=False)
+        results = run_group_serial(script_names, config, stop_on_error=False)
+
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 0
 
@@ -618,7 +663,8 @@ class TestExecutorIntegration:
         }
         mock_load_config.side_effect = lambda *args, **kwargs: config
         mock_notify.side_effect = lambda *args, **kwargs: None
-        success_count = run_group_parallel(["script1", "script2"], config)
+        results = run_group_parallel(["script1", "script2"], config)
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 2
         assert mock_subprocess.call_count == 2
@@ -679,7 +725,8 @@ class TestExecutorIntegration:
         }
         mock_load_config.side_effect = lambda *args, **kwargs: config
         mock_notify.side_effect = lambda *args, **kwargs: None
-        success_count = run_group_serial(["script1", "script2"], config, stop_on_error=False)
+        results = run_group_serial(["script1", "script2"], config, stop_on_error=False)
+        success_count = sum(1 for r in results if r["status"] == "success")
 
         assert success_count == 2
 
