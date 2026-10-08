@@ -5,54 +5,59 @@ This document explains the directory-based configuration system for signalbox.
 ## File Structure Overview
 
 ```
-signalbox/
-├── scripts/           # Script definitions directory
-│   ├── *.yaml         # Any and all script definition files
-├── groups/            # Group definitions directory
-│   ├── *.yaml         # Any and all group definition files
-├── signalbox.yaml     # Global configuration
-├── signalbox.py            # CLI application
-└── logs/              # Execution logs
+~/.config/signalbox/          # The signalbox home (or $SIGNALBOX_HOME / $XDG_CONFIG_HOME/signalbox)
+├── config/
+│   ├── signalbox.yaml        # Global configuration
+│   ├── tasks/                # Task definitions: any number of *.yaml / *.yml files
+│   ├── groups/               # Group definitions: any number of *.yaml / *.yml files
+│   └── catalog/              # Example tasks/groups (loaded only with include_catalog: true)
+├── logs/
+│   └── <task>/
+│       ├── <timestamp>.log   # One file per run
+│       └── alerts/alerts.jsonl
+├── runtime/                  # last_run / last_status state, written by signalbox
+│   ├── tasks/
+│   ├── groups/
+│   └── tray_state.json
+├── systemd/                  # Output of `signalbox export-systemd`
+└── cron/                     # Output of `signalbox export-cron`
 ```
 
 ## Configuration System
 
 signalbox uses **directory-based configuration** for easy organization:
 
-### **Scripts Directory** (`scripts/`)
-Contains YAML files defining scripts to execute.
- - All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically)
- - Scripts from all files are combined into a single list
+### **Tasks Directory** (`config/tasks/`)
+Contains YAML files defining tasks to execute.
+ - All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically); dotfiles are skipped
+ - Tasks from all files are combined into a single list
 
-### **Groups Directory** (`groups/`)
-Contains YAML files defining groups of scripts and scheduling. 
-- All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically)
+### **Groups Directory** (`config/groups/`)
+Contains YAML files defining groups of tasks and scheduling.
+- All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically); dotfiles are skipped
 - Groups from all files are combined into a single list
 
-### **Global Config** (`signalbox.yaml`)
+### **Global Config** (`config/signalbox.yaml`)
 Single file containing global settings like timeouts, log limits, and paths.
 
-## Scripts Directory Configuration
-
-### Script Format
+## Task Format
 
 **Fields:**
-- `name` (required) - Unique identifier
+- `name` (required) - Unique identifier; letters, digits, `_`, `-` and `.` only, not starting with `.` or `-`
 - `description` (required) - Human-readable description
 - `command` (required) - Shell command to execute
+- `timeout` (optional) - Seconds before the task is killed (0 = no timeout)
 - `log_limit` (optional) - Log rotation configuration
-- `last_run` (auto) - Last execution timestamp
-- `last_status` (auto) - Last execution status
+- `alerts` (optional) - Regex patterns to match in the output
 
-**Note:** Field order in YAML doesn't affect functionality.
+**Note:** Field order in YAML doesn't affect functionality. Run state (`last_run`, `last_status`) is kept in `runtime/`, never in your config files.
 
-## Groups Directory Configuration
+## Group Format
 
 **Fields:**
-- `name` (required) - Unique identifier
+- `name` (required) - Unique identifier (same rules as task names)
 - `description` (required) - Purpose of the group
-- `scripts` (required) - List of script names
+- `tasks` (required) - List of task names
 - `schedule` (optional) - Cron expression for automation
 - `execution` (optional) - Execution mode: `serial` (default) or `parallel`
-- `stop_on_error` (optional) - For serial execution only: stop if a script fails (default: false)
-
+- `stop_on_error` (optional) - For serial execution only: stop if a task fails (default: false)

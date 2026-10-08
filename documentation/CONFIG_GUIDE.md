@@ -31,7 +31,7 @@ default_log_limit:
 
 paths:
   log_dir: logs                  # Where to store log files (relative to config home)
-  scripts_file: config/scripts   # Path to scripts directory (relative to config home)
+  tasks_file: config/tasks       # Path to tasks directory (relative to config home)
   groups_file: config/groups     # Path to groups directory (relative to config home)
 
 execution:
@@ -100,7 +100,7 @@ Customize where files are located:
 ```yaml
 paths:
   log_dir: logs                    # Directory for log files
-  scripts_file: config/scripts     # Directory containing script YAML files
+  tasks_file: config/tasks         # Directory containing task YAML files
   groups_file: config/groups       # Directory containing group YAML files
 ```
 
@@ -115,7 +115,7 @@ See [FILE_STRUCTURE.md](FILE_STRUCTURE.md) for directory organization examples.
 ### Validate Configuration
 
 ```bash
-python signalbox.py validate
+signalbox validate
 ```
 
 Shows configuration summary and validates all YAML files.

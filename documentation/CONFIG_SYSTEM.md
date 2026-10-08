@@ -32,26 +32,26 @@ Organize scripts into groups and define when they run
 
 ```bash
 # Show all global settings
-python signalbox.py show-config
+signalbox config show
 
 # Get a specific setting
 # See Reference Table
-python signalbox.py get-setting execution.default_timeout 
+signalbox config show execution.default_timeout
 
 # Get nested objects
-python signalbox.py get-setting execution
+signalbox config show execution
 ```
 
 ### Validate Configuration
 
 ```bash
 # Check all config files for errors
-python signalbox.py validate
+signalbox validate
 ```
 
 The validate command now:
-- Checks `config.yaml` for valid values
-- Validates `scripts/*.yaml` for required fields
+- Checks `signalbox.yaml` for valid values
+- Validates `tasks/*.yaml` for required fields, safe names, timeouts and alert patterns
 - Validates `groups/*.yaml` structure and references
 - Warns about unused scripts (configurable)
 - Warns about empty groups (configurable)
@@ -74,10 +74,12 @@ The validate command now:
 | `default_log_limit.type` | string | count | Log rotation type: `count` or `size` |
 | `default_log_limit.value` | number | 10 | Number of logs or MB |
 | `paths.log_dir` | string | logs | Directory for log files |
-| `paths.scripts_file` | string | scripts.yaml | Path to scripts config |
-| `paths.groups_file` | string | groups.yaml | Path to groups config |
+| `paths.tasks_file` | string | config/tasks | Directory of task YAML files |
+| `paths.groups_file` | string | config/groups | Directory of group YAML files |
+| `include_catalog` | boolean | false | Also load the example tasks/groups in `config/catalog/` |
 | `paths.systemd_export_dir` | string | systemd | Directory for exported systemd files (relative to the signalbox home) |
 | `paths.cron_export_dir` | string | cron | Directory for exported cron files (relative to the signalbox home) |
+| `tray.notify_on_success` | boolean | false | Show a tray message when a run started from the tray succeeds |
 | `execution.default_timeout` | number | 300 | Script timeout in seconds (0=none) |
 | `execution.capture_stdout` | boolean | true | Capture stdout in logs |
 | `execution.capture_stderr` | boolean | true | Capture stderr in logs |

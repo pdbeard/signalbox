@@ -58,7 +58,7 @@ This creates `~/.config/signalbox/` with:
 - Global configuration file (`config/signalbox.yaml`)
 - Task definitions directory (`config/tasks/`)
 - Group definitions directory (`config/groups/`)
-- Pre-built example tasks and groups (`config/catalog/`)
+- Pre-built example tasks and groups (`config/catalog/`, off by default; set `include_catalog: true` to load them)
 - Log directory (`logs/`)
 - Runtime state directory (`runtime/`)
 

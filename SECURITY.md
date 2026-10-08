@@ -27,11 +27,11 @@ Signalbox executes shell commands defined in YAML configuration files using Pyth
 ### What Signalbox Protects Against
 
 ✅ **Python object deserialization attacks** - Uses `yaml.safe_load()` only  
-✅ **Directory traversal in logs** - Validates log paths  
-✅ **Infinite execution** - Configurable timeouts with minimum enforcement  
+✅ **Directory traversal in logs** - Task and group names are restricted to letters, digits, `_`, `-` and `.` (no `/`, no leading `.`), so they can't point log, alert or export paths outside their directories  
+✅ **Runaway execution** - Every task gets a timeout (default: 300 seconds) unless it explicitly sets `timeout: 0`  
 ✅ **Resource exhaustion** - Log rotation, size limits, and disk protection  
-✅ **DOS via timeout bypass** - Minimum timeout enforced (default: 1 second)  
-✅ **Disk filling attacks** - Maximum log file size limit (default: 100MB)  
+✅ **Accidental near-zero timeouts** - Timeouts below `execution.min_timeout` (default: 1 second) are raised to it  
+✅ **Disk filling attacks** - Maximum log file size limit (default: 5MB). Output is still held in memory while the task runs  
 ✅ **Unauthorized log access** - Log files created with restrictive permissions (0o600)  
 ✅ **Log rotation race conditions** - File locking prevents concurrent corruption
 
@@ -227,12 +227,15 @@ Before deploying Signalbox in production:
 
 Signalbox implements several protections against common attack vectors:
 
-### 1. Timeout DOS Prevention
-**Issue:** Setting `timeout: 0` could allow infinite script execution  
-**Mitigation:** Enforces minimum timeout (default: 1 second)
+### 1. Timeouts
+**Issue:** A hung command would otherwise block its group forever  
+**Mitigation:** Every task runs with `execution.default_timeout` (300 seconds) unless it sets its own `timeout`.
+Values below `min_timeout` are raised to it. `timeout: 0` is an explicit opt-out and disables the timeout
+entirely; `min_timeout` does not prevent that, so review any task that uses it.
 ```yaml
 execution:
-  min_timeout: 1  # Minimum timeout in seconds
+  default_timeout: 300  # Applied to every task without its own timeout
+  min_timeout: 1        # Smallest non-zero timeout allowed
 ```
 
 ### 2. Disk Exhaustion Protection  
@@ -240,7 +243,7 @@ execution:
 **Mitigation:** Maximum log file size with automatic truncation
 ```yaml
 logging:
-  max_file_size_mb: 100  # Truncates output exceeding this size
+  max_file_size_mb: 5  # Truncates output exceeding this size
 ```
 
 ### 3. Log File Access Control

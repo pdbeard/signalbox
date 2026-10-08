@@ -43,6 +43,10 @@ group_notifications:
 - **`group_notifications.on_failure_only`** (default: `true`): If true, only send notifications when tasks fail; if false, always notify
 - **`group_notifications.show_failed_names`** (default: `true`): If true and ≤3 tasks failed, include their names in the notification message
 
+### Tray Notification Options
+
+- **`tray.notify_on_success`** (default: `false`): If true, the tray shows a message when a run it started succeeds (failures are always shown while notifications are enabled). This is what the tray's "Notify on Success & Failure" toggle changes; it does not affect alert notifications.
+
 ## Testing Notifications
 
 Test your notification system without running any scripts:

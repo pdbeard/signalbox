@@ -46,6 +46,8 @@ pytest tests/test_executor.py
 pytest tests/test_executor.py::test_function_name -v
 ```
 
+An autouse fixture in `tests/conftest.py` points every test at a temporary `SIGNALBOX_HOME`, so tests can never touch the real `~/.config/signalbox`. For behaviour changes, prefer the `sb_home` fixture and `tests/test_end_to_end.py`, which run the real CLI against real files, over mocking internals.
+
 ## Code Style
 
 - **Formatter:** black, max line length **120** characters
@@ -80,14 +82,14 @@ pytest tests/test_executor.py::test_function_name -v
 | Module | Responsibility |
 |--------|----------------|
 | `config.py` | `ConfigManager` class + module-level convenience functions; loads global config + all task/group YAML files from the config directory |
-| `validator.py` | Validates YAML syntax, required fields, duplicates, per-task timeout, cron expressions |
+| `validator.py` | `validate_task`/`validate_group` per-entry checks (also run before execution) plus cross-file checks: duplicates, missing task references, cron expressions |
 | `executor.py` | Runs shell commands via `subprocess.run(shell=True)`, captures output, applies timeouts (per-task `timeout:` overrides `execution.default_timeout`) |
 | `log_manager.py` | Writes logs to `logs/<task>/<timestamp>.log`, handles rotation by count or age |
 | `alerts.py` | Matches regex patterns against task output, appends to `logs/<task>/alerts/alerts.jsonl` |
 | `notifications.py` | Sends desktop notifications on alert/failure |
 | `runtime.py` | Reads/writes `runtime/tasks/` and `runtime/groups/` state files (last_run, last_status) |
 | `exporters.py` | Generates systemd service/timer files and crontab entries for groups with `schedule` field |
-| `cli_output*.py` | Rich-based terminal output formatting split across multiple files |
+| `cli_output.py` | Rich-based terminal output (tables, status colours) for all CLI commands |
 
 ### Configuration Discovery Order
 
@@ -96,7 +98,7 @@ pytest tests/test_executor.py::test_function_name -v
 3. `~/.config/signalbox/`
 4. `./config/` (current directory — used during development)
 
-Config loads `signalbox.yaml` for global settings, then all `*.yaml`/`*.yml` files from `tasks/` and `groups/` subdirectories (hidden dotfiles are skipped). The `catalog/` subdirectory provides pre-built task/group templates. Code fallback defaults for `get_config_value` must stay identical to the values in the shipped `signalbox/config/signalbox.yaml`.
+Config loads `signalbox.yaml` for global settings, then all `*.yaml`/`*.yml` files from `tasks/` and `groups/` subdirectories (hidden dotfiles are skipped). The `catalog/` subdirectory provides example task/group templates, loaded only when `include_catalog: true` (off by default, since `task run --all` would run them). `signalbox init` never uses step 4: it only targets `$SIGNALBOX_HOME`, XDG or `~/.config/signalbox`. Code fallback defaults for `get_config_value` must stay identical to the values in the shipped `signalbox/config/signalbox.yaml`.
 
 ### Execution Flow
 
@@ -106,7 +108,8 @@ CLI command → `config.py` (load) → `validator.py` (validate) → `executor.p
 
 - Tasks run with `shell=True` to support pipes, redirection, and complex scripts
 - Logs are write-once (never modified, only rotated/pruned)
-- Runtime state is kept separate from config files
+- Runtime state is kept separate from config files; writes are locked and atomic (parallel groups share runtime files)
+- Task and group names become paths, so they must match `helpers.NAME_PATTERN`; `check_name()` guards every path built from a name
 - No built-in scheduler daemon: scheduling is exported to systemd/cron
 - PyQt6 is an optional extra (`[tray]`), not a hard dependency
 - The tray app polls runtime state on a configurable interval (default 30s)

@@ -93,22 +93,26 @@ groups:
 
 ## Deployment
 
-After defining schedules in config.yaml:
+After adding a `schedule` to groups in `config/groups/*.yaml`:
 
 ```bash
 # Validate configuration
-python signalbox.py validate
+signalbox validate
 
 # List all schedules
-python signalbox.py list-schedules
+signalbox list-schedules
 
 # Generate systemd files for each scheduled group
-python signalbox.py export-systemd monitoring
-python signalbox.py export-systemd daily-maintenance
-python signalbox.py export-systemd critical-backup-15min
+# (the cron schedule is converted to OnCalendar; files go to <signalbox home>/systemd/<group>/)
+signalbox export-systemd monitoring
+signalbox export-systemd daily-maintenance
+signalbox export-systemd critical-backup-15min
 
-# Or generate crontab entries
-python signalbox.py export-cron monitoring >> my-crontab
-python signalbox.py export-cron daily-maintenance >> my-crontab
+# Or generate crontab entries (written to <signalbox home>/cron/<group>/<group>.cron)
+signalbox export-cron monitoring
+signalbox export-cron daily-maintenance
+crontab -l > my-crontab
+cat ~/.config/signalbox/cron/monitoring/monitoring.cron >> my-crontab
+cat ~/.config/signalbox/cron/daily-maintenance/daily-maintenance.cron >> my-crontab
 crontab my-crontab
 ```
