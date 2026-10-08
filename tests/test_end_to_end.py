@@ -260,3 +260,134 @@ class TestCheckPermissions:
         assert result.exit_code == 1
         assert "signalbox.yaml" in result.output
         assert "Task directory" in result.output
+
+
+class TestTaskEnvironment:
+    def test_default_working_directory_is_signalbox_home(self, sb_home, run, tmp_path, monkeypatch):
+        sb_home.write_tasks([task("where", "pwd -P")])
+        monkeypatch.chdir(tmp_path)  # where the user happens to be must not matter
+
+        result = run("task", "run", "where")
+
+        assert result.exit_code == 0
+        assert os.path.realpath(sb_home.path) in result.output
+
+    def test_task_cwd_relative_to_home(self, sb_home, run):
+        (sb_home.path / "work").mkdir()
+        sb_home.write_tasks([task("where", "pwd -P", cwd="work")])
+
+        result = run("task", "run", "where")
+
+        assert os.path.realpath(sb_home.path / "work") in result.output
+
+    def test_missing_cwd_is_an_error(self, sb_home, run):
+        sb_home.write_tasks([task("where", "pwd", cwd="does-not-exist")])
+
+        result = run("task", "run", "where")
+
+        assert result.exit_code == 2
+        assert "does not exist" in result.output
+
+    def test_stdin_is_not_inherited(self, sb_home, run):
+        sb_home.write_tasks([task("reader", "read line || echo no-stdin")])
+
+        result = run("task", "run", "reader", input="SECRET\n")
+
+        assert "no-stdin" in result.output
+        assert "SECRET" not in sb_home.logs("reader")[0].read_text()
+
+
+class TestRunTimeValidation:
+    def test_missing_description_still_runs(self, sb_home, run):
+        sb_home.write_tasks([{"name": "nodesc", "command": "echo ran"}])
+
+        result = run("task", "run", "nodesc")
+
+        assert result.exit_code == 0
+        assert "ran" in result.output
+        assert run("validate").exit_code == 2  # still reported by validate
+
+    def test_bad_alert_pattern_does_not_block_run(self, sb_home, run):
+        sb_home.write_tasks([task("a", "echo ok", alerts=[{"pattern": "[bad", "message": "m"}])])
+
+        result = run("task", "run", "a")
+
+        assert result.exit_code == 0
+        assert "Invalid alert pattern" in result.output
+
+
+class TestLogRotation:
+    def test_size_rotation_keeps_logs_within_limit(self, sb_home, run):
+        # ~0.4 MB of output per run with a 1 MB limit: at most 2-3 logs survive
+        sb_home.write_tasks([task("big", "yes x | head -c 400000", log_limit={"type": "size", "value": 1})])
+
+        for _ in range(6):
+            run("task", "run", "big", "-q")
+
+        logs = sb_home.logs("big")
+        assert 1 <= len(logs) <= 3
+        assert sum(p.stat().st_size for p in logs) <= 1024 * 1024
+
+    def test_validate_rejects_unknown_log_limit_type(self, sb_home, run):
+        sb_home.write_tasks([task("a", log_limit={"type": "megabytes", "value": 1})])
+
+        result = run("validate")
+
+        assert result.exit_code == 2
+        assert "log_limit type must be one of count, age, size" in result.output
+
+
+class TestAlertCooldown:
+    def test_repeated_alert_notifies_once_within_cooldown(self, sb_home, run, monkeypatch):
+        from signalbox import notifications
+
+        sent = []
+        monkeypatch.setattr(notifications, "send_notification", lambda **kw: sent.append(kw) or True)
+        sb_home.write_settings({"alerts": {"notifications": {"enabled": True}}})
+        sb_home.write_tasks(
+            [task("disk", "echo FULL", alerts=[{"pattern": "FULL", "message": "full", "severity": "warning"}])]
+        )
+
+        for _ in range(3):
+            run("task", "run", "disk", "-q")
+
+        assert len(sent) == 1
+        lines = (sb_home.path / "logs" / "disk" / "alerts" / "alerts.jsonl").read_text().splitlines()
+        assert len(lines) == 3  # every occurrence is still recorded
+
+    def test_cooldown_zero_notifies_every_run(self, sb_home, run, monkeypatch):
+        from signalbox import notifications
+
+        sent = []
+        monkeypatch.setattr(notifications, "send_notification", lambda **kw: sent.append(kw) or True)
+        sb_home.write_settings({"alerts": {"notifications": {"enabled": True, "cooldown_minutes": 0}}})
+        sb_home.write_tasks(
+            [task("disk", "echo FULL", alerts=[{"pattern": "FULL", "message": "full", "severity": "warning"}])]
+        )
+
+        for _ in range(3):
+            run("task", "run", "disk", "-q")
+
+        assert len(sent) == 3
+
+
+class TestSystemdUnits:
+    def _export(self, sb_home, run, *flags):
+        sb_home.write_tasks([task("a")])
+        sb_home.write_groups([{"name": "g", "description": "line one\nline two", "tasks": ["a"], "schedule": "@daily"}])
+        assert run("export-systemd", "g", *flags).exit_code == 0
+        return (sb_home.path / "systemd" / "g" / "signalbox-g.service").read_text()
+
+    def test_system_unit_runs_as_exporting_user(self, sb_home, run):
+        import getpass
+
+        service = self._export(sb_home, run)
+
+        assert f"User={getpass.getuser()}" in service
+        assert "[Install]" not in service  # started by the timer
+        assert "Description=signalbox - line one line two" in service
+
+    def test_user_unit_has_no_user_directive(self, sb_home, run):
+        service = self._export(sb_home, run, "--user")
+
+        assert "User=" not in service

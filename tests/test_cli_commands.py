@@ -121,6 +121,7 @@ class TestInitCommand:
         backups = list(sb_home.path.parent.glob(sb_home.path.name + ".backup.*"))
         assert len(backups) == 1
         assert (backups[0] / "config" / "tasks" / "tasks.yaml").exists()
+        assert not (backups[0] / "logs").exists()  # logs are not duplicated
         assert not (sb_home.config_dir / "tasks" / "tasks.yaml").exists()  # reset to template
         assert (sb_home.path / "logs" / "mine" / "1.log").exists()  # logs kept
 
