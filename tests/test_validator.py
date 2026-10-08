@@ -84,6 +84,41 @@ def test_validate_configuration_invalid_task_timeout(monkeypatch):
     assert any("invalid timeout" in e for e in result.errors)
 
 
+def test_validate_configuration_invalid_alert_regex(monkeypatch):
+    """An alert pattern that is not a valid regex should produce an error."""
+    from unittest.mock import mock_open, patch
+
+    def mock_config_value(k, d=None):
+        if k == "paths.tasks_file":
+            return "dummy_tasks"
+        if k == "paths.groups_file":
+            return "dummy_groups"
+        if str(k).startswith("paths.catalog"):
+            return "nonexistent_catalog"
+        return "dummy"
+
+    monkeypatch.setattr(validator, "get_config_value", mock_config_value)
+    monkeypatch.setattr(validator, "resolve_path", lambda p: p)
+    monkeypatch.setattr(validator, "load_config", lambda *a, **kw: {"tasks": [], "groups": []})
+    monkeypatch.setattr(validator, "load_global_config", lambda *a, **kw: {})
+    monkeypatch.setattr(validator.os.path, "isdir", lambda p: p == "dummy_tasks")
+    monkeypatch.setattr(validator.os.path, "exists", lambda p: p == "dummy_tasks")
+    monkeypatch.setattr(validator.os, "listdir", lambda p: ["tasks.yaml"])
+    bad_data = {
+        "tasks": [
+            {
+                "name": "s1",
+                "command": "echo 1",
+                "description": "Test",
+                "alerts": [{"pattern": "[unclosed", "message": "bad"}],
+            }
+        ]
+    }
+    with patch("builtins.open", mock_open()), patch("yaml.safe_load", return_value=bad_data):
+        result = validator.validate_configuration()
+    assert any("invalid regex pattern" in e for e in result.errors)
+
+
 def test_validate_configuration_missing_script(monkeypatch):
     monkeypatch.setattr(validator, "get_config_value", lambda k, d=None: "dummy")
     monkeypatch.setattr(validator, "resolve_path", lambda p: p)

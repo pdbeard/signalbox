@@ -95,12 +95,18 @@ def test_alert_summary_only_infos(tmp_path, monkeypatch):
     assert summary["total"] == 2
 
 
-def test_check_alert_patterns_invalid_regex(monkeypatch):
+def test_check_alert_patterns_invalid_regex(capsys):
+    """An invalid pattern is skipped with a warning; valid patterns still match."""
     script_name = "s"
-    script_config = {"alerts": [{"pattern": "[unclosed", "message": "bad regex"}]}
-    output = "anything"
-    with pytest.raises(Exception):
-        alerts.check_alert_patterns(script_name, script_config, output)
+    script_config = {
+        "alerts": [
+            {"pattern": "[unclosed", "message": "bad regex"},
+            {"pattern": "any", "message": "good"},
+        ]
+    }
+    triggered = alerts.check_alert_patterns(script_name, script_config, "anything")
+    assert [a["message"] for a in triggered] == ["good"]
+    assert "Invalid alert pattern" in capsys.readouterr().err
 
 
 def test_load_alerts_with_corrupt_json(tmp_path, monkeypatch):

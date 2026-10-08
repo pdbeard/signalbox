@@ -3,6 +3,9 @@ import os
 import re
 import json
 from datetime import datetime, timedelta
+
+import click
+
 from .helpers import format_timestamp, parse_timestamp, get_resolved_log_dir
 
 
@@ -39,8 +42,13 @@ def check_alert_patterns(task_name, task_config, output):
         if not pattern:
             continue
 
-        # Check if pattern matches
-        if re.search(pattern, output):
+        # Check if pattern matches; a bad pattern must not abort post-run bookkeeping
+        try:
+            matched = re.search(pattern, output)
+        except re.error as e:
+            click.echo(f"Warning: Invalid alert pattern {pattern!r} for task {task_name}: {e}", err=True)
+            continue
+        if matched:
             triggered.append(
                 {
                     "pattern": pattern,

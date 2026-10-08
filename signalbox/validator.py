@@ -1,6 +1,8 @@
 # Configuration validation for signalbox
 
 import os
+import re
+
 import yaml
 from .config import load_config, get_config_value, load_global_config, resolve_path
 
@@ -105,6 +107,14 @@ def validate_configuration(include_catalog=True):
                                                     file_errors.append(
                                                         f"Task '{task.get('name', 'unknown')}' alert #{idx+1} missing 'pattern' field"
                                                     )
+                                                else:
+                                                    try:
+                                                        re.compile(alert["pattern"])
+                                                    except (re.error, TypeError) as e:
+                                                        file_errors.append(
+                                                            f"Task '{task.get('name', 'unknown')}' alert #{idx+1} "
+                                                            f"has invalid regex pattern: {e}"
+                                                        )
                                                 if "message" not in alert:
                                                     file_errors.append(
                                                         f"Task '{task.get('name', 'unknown')}' alert #{idx+1} missing 'message' field"
