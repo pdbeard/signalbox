@@ -18,6 +18,8 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "Topic :: System :: Systems Administration",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

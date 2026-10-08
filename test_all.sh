@@ -27,7 +27,8 @@ echo ""
 
 # CLI smoke test in an isolated config home seeded from the packaged defaults
 SMOKE_HOME="$(mktemp -d)"
-trap 'rm -rf "$SMOKE_HOME"' EXIT
+OUTPUT_FILE="$(mktemp)"
+trap 'rm -rf "$SMOKE_HOME" "$OUTPUT_FILE"' EXIT
 mkdir -p "$SMOKE_HOME/config" "$SMOKE_HOME/logs" "$SMOKE_HOME/runtime/tasks" "$SMOKE_HOME/runtime/groups"
 cp -R signalbox/config/. "$SMOKE_HOME/config/"
 export SIGNALBOX_HOME="$SMOKE_HOME"
@@ -40,13 +41,13 @@ run_test() {
     local command="$2"
 
     echo "Testing: $test_name"
-    if eval "$command" > /tmp/signalbox_test_output 2>&1; then
+    if eval "$command" > "$OUTPUT_FILE" 2>&1; then
         echo "✓ $test_name passed"
         PASSED_TESTS=$((PASSED_TESTS + 1))
     else
         echo "❌ $test_name FAILED"
         echo "   Output:"
-        head -10 /tmp/signalbox_test_output
+        head -10 "$OUTPUT_FILE"
         FAILED_TESTS=$((FAILED_TESTS + 1))
     fi
     echo ""

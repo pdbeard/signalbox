@@ -1,4 +1,0 @@
-click
-pyyaml
-PyQt6>=6.4.0
-rich
