@@ -6,6 +6,7 @@ import shutil
 import sys
 
 from .config import get_config_value, find_config_home, resolve_path
+from .helpers import is_valid_name
 
 CRON_MACROS = {
     "@hourly": "hourly",
@@ -36,6 +37,9 @@ def validate_group_for_export(group, group_name):
     """
     if not group:
         return False, f"Group '{group_name}' not found"
+
+    if not is_valid_name(group_name):
+        return False, f"Group name {group_name!r} is not safe to use in file names"
 
     if "schedule" not in group:
         return False, f"Group '{group_name}' has no schedule defined. Add a 'schedule' field with a cron expression."

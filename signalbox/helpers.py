@@ -3,9 +3,17 @@ Helper utilities for signalbox to reduce code duplication.
 """
 
 import os
-import yaml
-import click
+import re
 from typing import Dict, Optional, Callable
+
+import click
+import yaml
+
+from .exceptions import ConfigurationError
+
+# Task and group names become directory and file names (logs/<task>/,
+# signalbox-<group>.service), so they are restricted to a safe character set.
+NAME_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
 
 def load_yaml_files_from_dir(
@@ -17,11 +25,6 @@ def load_yaml_files_from_dir(
     track_sources: bool = False,
     suppress_warnings: bool = False,
 ) -> list:
-    import os
-
-    # Allow global suppression via env var
-    if os.environ.get("SIGNALBOX_SUPPRESS_CONFIG_WARNINGS", "0") == "1":
-        suppress_warnings = True
     """
     Load and merge YAML files from a directory.
 
@@ -57,6 +60,10 @@ def load_yaml_files_from_dir(
         )
         # Returns: [{"data": {...}, "source": "path/to/file.yaml"}, ...]
     """
+    # Allow global suppression via env var
+    if os.environ.get("SIGNALBOX_SUPPRESS_CONFIG_WARNINGS", "0") == "1":
+        suppress_warnings = True
+
     items = []
 
     if not os.path.exists(directory):
@@ -175,7 +182,6 @@ def get_resolved_log_dir() -> str:
     Returns:
         Absolute path to the log directory
     """
-    import os
     from .config import get_config_value, _default_config_manager
 
     log_dir = get_config_value("paths.log_dir", "logs")
@@ -230,3 +236,22 @@ def parse_timestamp(timestamp_str: str):
         return datetime.strptime(timestamp_str, get_timestamp_format())
     except ValueError:
         return None
+
+
+def is_valid_name(name) -> bool:
+    """Return True if name is safe to use as a task or group name."""
+    return isinstance(name, str) and bool(NAME_PATTERN.match(name))
+
+
+def check_name(name, kind="task"):
+    """Raise ConfigurationError unless name is a safe task/group name.
+
+    Names are used to build paths, so anything containing a path separator
+    or '..' could read, write or delete files outside the log directory.
+    """
+    if not is_valid_name(name):
+        raise ConfigurationError(
+            f"Invalid {kind} name {name!r}: use only letters, digits, '_', '-' and '.', "
+            "and do not start with '.' or '-'"
+        )
+    return name

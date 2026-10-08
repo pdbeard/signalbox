@@ -6,12 +6,12 @@ from datetime import datetime, timedelta
 
 import click
 
-from .helpers import format_timestamp, parse_timestamp, get_resolved_log_dir
+from .helpers import format_timestamp, parse_timestamp, get_resolved_log_dir, check_name, is_valid_name
 
 
 def get_alerts_dir(task_name):
     """Get the alerts directory for a task."""
-    return os.path.join(get_resolved_log_dir(), task_name, "alerts")
+    return os.path.join(get_resolved_log_dir(), check_name(task_name), "alerts")
 
 
 def ensure_alerts_dir(task_name):
@@ -97,12 +97,12 @@ def load_alerts(task_name=None, severity=None, max_days=None):
     log_dir = get_resolved_log_dir()
 
     if task_name:
-        task_dirs = [task_name]
+        task_dirs = [check_name(task_name)]
     else:
         # Get all task directories
         if not os.path.exists(log_dir):
             return []
-        task_dirs = [d for d in os.listdir(log_dir) if os.path.isdir(os.path.join(log_dir, d))]
+        task_dirs = [d for d in os.listdir(log_dir) if is_valid_name(d) and os.path.isdir(os.path.join(log_dir, d))]
 
     # Load alerts from each task
     for tname in task_dirs:
