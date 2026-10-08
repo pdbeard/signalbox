@@ -32,8 +32,12 @@ except ImportError:
     )
     raise SystemExit(1)
 
-from .config import load_config, get_config_value, find_config_home, save_global_config_value
-from .runtime import load_runtime_state
+from .config import load_config, get_config_value, find_config_home, save_global_config_value, resolve_path
+from .helpers import parse_timestamp
+from .runtime import load_runtime_state, filter_runtime_to_config
+
+TRAY_STATE_FILE = "runtime/tray_state.json"
+LEGACY_TRAY_STATE_FILE = "~/.signalbox_tray_state.json"
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
@@ -46,6 +50,9 @@ def _parse_last_run_to_ts(last_run):
         return int(last_run)
     if not last_run or last_run == "Never":
         return 0
+    dt = parse_timestamp(str(last_run))
+    if dt is not None:
+        return int(dt.timestamp())
     m = re.match(r"(\d{8})_(\d{6})_\d+", str(last_run))
     if m:
         date_str, time_str = m.group(1), m.group(2)
@@ -78,16 +85,20 @@ def _human_delta(ts):
 
 
 def _load_tray_state():
-    """Load tray-specific state (ignore_failures_before) from the state file."""
+    """Load tray-specific state (ignore_failures_before) from the state file.
+
+    State lives in the config home's runtime/ directory; the old
+    ~/.signalbox_tray_state.json is still read if no new file exists yet.
+    """
     import json
 
-    state_file = os.path.expanduser("~/.signalbox_tray_state.json")
-    if os.path.exists(state_file):
-        try:
-            with open(state_file, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
+    for state_file in (resolve_path(TRAY_STATE_FILE), os.path.expanduser(LEGACY_TRAY_STATE_FILE)):
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    return json.load(f)
+            except Exception:
+                pass
     return {}
 
 
@@ -95,8 +106,9 @@ def _save_tray_state(state):
     """Save tray-specific state atomically to the state file."""
     import json
 
-    state_file = os.path.expanduser("~/.signalbox_tray_state.json")
+    state_file = resolve_path(TRAY_STATE_FILE)
     state_dir = os.path.dirname(state_file)
+    os.makedirs(state_dir, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(dir=state_dir, suffix=".json.tmp")
     try:
         with os.fdopen(fd, "w") as f:
@@ -108,6 +120,23 @@ def _save_tray_state(state):
         except OSError:
             pass
         raise
+
+
+def _signalbox_command(*args):
+    """Command and environment for running the signalbox CLI from the tray.
+
+    Uses this same Python installation (a bare "signalbox" may be missing
+    from the tray's PATH or be a different install) and pins SIGNALBOX_HOME
+    so the subprocess reads the same config the tray is showing.
+    """
+    env = dict(os.environ, SIGNALBOX_HOME=find_config_home())
+    return [sys.executable, "-m", "signalbox", *args], env
+
+
+def _current_state():
+    """Load config and runtime state, dropping runtime entries for tasks/groups no longer configured."""
+    config = load_config(suppress_warnings=True)
+    return config, filter_runtime_to_config(load_runtime_state(), config)
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +277,7 @@ class SignalboxTray:
         if self.verbose:
             if icon_path is None:
                 print(
-                    f"[VERBOSE] Icon path could not be resolved (None). Expected icons directory: {Path(__file__).parent.parent / 'icons'}"
+                    f"[VERBOSE] Icon path could not be resolved (None). Expected icons directory: {Path(__file__).parent / 'icons'}"
                 )
             else:
                 print(f"[VERBOSE] Looking for icon at: {icon_path} (exists: {icon_path.exists()})")
@@ -273,7 +302,13 @@ class SignalboxTray:
             return
 
         menu = QMenu()
-        runtime_state = load_runtime_state()
+        try:
+            config, runtime_state = _current_state()
+            self.config = config
+        except Exception:
+            # Keep showing the last good config if a file is mid-edit
+            config = self.config
+            runtime_state = filter_runtime_to_config(load_runtime_state(), config)
 
         # --- Inline task status ---
         menu.addSection("Task Status")
@@ -325,7 +360,6 @@ class SignalboxTray:
 
         # --- Run Group submenu ---
         group_menu = QMenu("Run Group", menu)
-        config = self.config if hasattr(self, "config") else load_config()
         group_sources = config.get("_group_sources", {})
         groups_by_file = {}
         for group in config.get("groups", []):
@@ -363,7 +397,7 @@ class SignalboxTray:
         # --- Notification toggles — read from and write to signalbox.yaml ---
         # Changes here are immediately visible to the CLI too.
         notifications_enabled = get_config_value("alerts.notifications.enabled", True)
-        notify_failures_only = get_config_value("alerts.notifications.on_failure_only", True)
+        notify_on_success = get_config_value("tray.notify_on_success", False)
 
         notif_toggle = QAction("Enable Notifications", menu)
         notif_toggle.setCheckable(True)
@@ -375,13 +409,14 @@ class SignalboxTray:
         notif_toggle.toggled.connect(toggle_notifications)
         menu.addAction(notif_toggle)
 
+        # Tray-only setting: alerts.notifications.on_failure_only means "skip info-severity
+        # alerts" to the CLI, so sharing it would also change which alerts notify.
         notify_mode_toggle = QAction("Notify on Success & Failure", menu)
         notify_mode_toggle.setCheckable(True)
-        # Checked = notify on success AND failure (failures_only is False)
-        notify_mode_toggle.setChecked(not notify_failures_only)
+        notify_mode_toggle.setChecked(notify_on_success)
 
         def toggle_notify_mode(checked):
-            save_global_config_value("alerts.notifications.on_failure_only", not checked)
+            save_global_config_value("tray.notify_on_success", checked)
 
         notify_mode_toggle.toggled.connect(toggle_notify_mode)
         menu.addAction(notify_mode_toggle)
@@ -422,11 +457,8 @@ class SignalboxTray:
 
         def run_group_bg():
             try:
-                result = subprocess.run(
-                    ["signalbox", "group", "run", group_name],
-                    capture_output=True,
-                    text=True,
-                )
+                command, env = _signalbox_command("group", "run", group_name)
+                result = subprocess.run(command, capture_output=True, text=True, env=env)
                 self.signals.finished.emit(result.returncode == 0)
             except Exception as e:
                 self.signals.show_message.emit("Error", f"Could not run group {group_name}: {e}")
@@ -447,11 +479,8 @@ class SignalboxTray:
 
         def run_task_bg():
             try:
-                result = subprocess.run(
-                    ["signalbox", "task", "run", task_name],
-                    capture_output=True,
-                    text=True,
-                )
+                command, env = _signalbox_command("task", "run", task_name)
+                result = subprocess.run(command, capture_output=True, text=True, env=env)
                 self.signals.finished.emit(result.returncode == 0)
             except Exception as e:
                 self.signals.show_message.emit("Error", f"Could not run task {task_name}: {e}")
@@ -474,11 +503,8 @@ class SignalboxTray:
             try:
                 if self.verbose:
                     print("[VERBOSE] Running all tasks in background...")
-                result = subprocess.run(
-                    ["signalbox", "task", "run", "--all"],
-                    capture_output=True,
-                    text=True,
-                )
+                command, env = _signalbox_command("task", "run", "--all")
+                result = subprocess.run(command, capture_output=True, text=True, env=env)
                 if self.verbose:
                     print(f"[VERBOSE] Task run completed with return code: {result.returncode}")
                     if result.stdout:
@@ -510,12 +536,8 @@ class SignalboxTray:
     def get_icon_path(self, status):
         """Get the path to the icon file for the given status ('green', 'red', 'yellow').
 
-        Returns a Path object. Prefers the development workspace location, then
-        falls back to the installed package directory.
+        Returns a Path object inside the package's icons/ directory.
         """
-        workspace_icons = Path.cwd() / "core" / "icons" / f"{status}.png"
-        if workspace_icons.exists():
-            return workspace_icons
         return Path(__file__).parent / "icons" / f"{status}.png"
 
     def update_status(self):
@@ -543,7 +565,7 @@ class SignalboxTray:
         ignore_before = _load_tray_state().get("ignore_failures_before", 0)
 
         try:
-            runtime_state = load_runtime_state()
+            _, runtime_state = _current_state()
 
             task_count = 0
             success_count = 0
@@ -597,7 +619,7 @@ class SignalboxTray:
     def show_status(self):
         """Show the status dialog."""
         try:
-            runtime_state = load_runtime_state()
+            _, runtime_state = _current_state()
             dialog = StatusDialog(runtime_state, parent=None)
             dialog.exec()
         except Exception as e:
@@ -633,10 +655,10 @@ class SignalboxTray:
         self.set_loading_state(False)
 
         notifications_enabled = get_config_value("alerts.notifications.enabled", True)
-        notify_failures_only = get_config_value("alerts.notifications.on_failure_only", True)
+        notify_on_success = get_config_value("tray.notify_on_success", False)
 
         if notifications_enabled:
-            if success and not notify_failures_only:
+            if success and notify_on_success:
                 self.tray_icon.showMessage("Signalbox", "All tasks completed successfully")
             elif not success:
                 self.tray_icon.showMessage("Signalbox", "Some tasks failed - check logs")

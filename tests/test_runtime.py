@@ -600,3 +600,18 @@ class TestRuntimeIntegration:
                 data = yaml.safe_load(f)
                 assert "test_group" in data["groups"]
                 assert data["groups"]["test_group"]["success_rate"] == 80.0
+
+
+def test_filter_runtime_to_config_drops_removed_entries():
+    from signalbox.runtime import filter_runtime_to_config
+
+    runtime_state = {
+        "tasks": {"kept": {"last_status": "success"}, "deleted": {"last_status": "failed"}},
+        "groups": {"g": {"last_status": "success"}, "old_group": {"last_status": "failed"}},
+    }
+    config = {"tasks": [{"name": "kept"}], "groups": [{"name": "g"}]}
+
+    filtered = filter_runtime_to_config(runtime_state, config)
+
+    assert filtered == {"tasks": {"kept": {"last_status": "success"}}, "groups": {"g": {"last_status": "success"}}}
+    assert "deleted" in runtime_state["tasks"]  # the original is not modified

@@ -113,3 +113,18 @@ def merge_config_with_runtime_state(config, runtime_state):
             runtime_info = runtime_state["groups"][group_name]
             # Add any group-level runtime state here in the future
     return config
+
+
+def filter_runtime_to_config(runtime_state, config):
+    """Return runtime_state restricted to tasks/groups that still exist in config.
+
+    Runtime files keep entries for deleted or renamed tasks; without this a
+    task that was removed after failing would keep the tray red forever.
+    Nothing is deleted, so a temporarily broken config file loses no history.
+    """
+    task_names = {t.get("name") for t in config.get("tasks", []) if isinstance(t, dict)}
+    group_names = {g.get("name") for g in config.get("groups", []) if isinstance(g, dict)}
+    return {
+        "tasks": {k: v for k, v in runtime_state.get("tasks", {}).items() if k in task_names},
+        "groups": {k: v for k, v in runtime_state.get("groups", {}).items() if k in group_names},
+    }
