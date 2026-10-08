@@ -4,7 +4,12 @@ import os
 import re
 
 import yaml
-from .config import load_config, get_config_value, load_global_config, resolve_path
+
+from .config import load_config, get_config_value, load_global_config, resolve_path, CONFIG_FILE, CONFIG_SOURCES
+from .helpers import is_valid_name
+
+SEVERITIES = ("info", "warning", "critical")
+EXECUTION_MODES = ("serial", "parallel")
 
 
 class ValidationResult:
@@ -29,283 +34,187 @@ class ValidationResult:
         return len(self.errors) > 0 or len(self.warnings) > 0
 
 
-def validate_configuration(include_catalog=True):
-    """Validate all configuration files, including catalog configs if enabled.
+def _name_error(kind, name):
+    return (
+        f"{kind} name {name!r} is invalid: use only letters, digits, '_', '-' and '.', "
+        "and do not start with '.' or '-'"
+    )
 
-    Args:
-        include_catalog (bool): Whether to validate catalog configs as well.
+
+def validate_task(task):
+    """Check a single task definition.
+
+    Used both by `config validate` and before a task is run.
+
+    Returns:
+        list: Error messages (empty if the task is valid)
+    """
+    if not isinstance(task, dict):
+        return [f"Task entry must be a mapping, got {type(task).__name__}"]
+
+    errors = []
+    label = f"Task '{task.get('name', 'unknown')}'"
+    if "name" not in task:
+        errors.append("Task missing 'name' field")
+    elif not is_valid_name(task["name"]):
+        errors.append(_name_error("Task", task["name"]))
+    for field in ("command", "description"):
+        if field not in task:
+            errors.append(f"{label} missing '{field}' field")
+    if "command" in task and not isinstance(task["command"], str):
+        errors.append(f"{label} 'command' must be a string")
+
+    if "timeout" in task:
+        timeout = task["timeout"]
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout < 0:
+            errors.append(f"{label} has invalid timeout (must be a number >= 0, got {timeout!r})")
+
+    if "alerts" in task:
+        alerts_list = task["alerts"]
+        if not isinstance(alerts_list, list):
+            errors.append(f"{label} alerts field must be a list")
+            alerts_list = []
+        for idx, alert in enumerate(alerts_list, start=1):
+            if not isinstance(alert, dict):
+                errors.append(f"{label} alert #{idx} must be a dict")
+                continue
+            for field in ("pattern", "message"):
+                if field not in alert:
+                    errors.append(f"{label} alert #{idx} missing '{field}' field")
+            if "pattern" in alert:
+                try:
+                    re.compile(alert["pattern"])
+                except (re.error, TypeError) as e:
+                    errors.append(f"{label} alert #{idx} has invalid regex pattern: {e}")
+            if "severity" in alert and alert["severity"] not in SEVERITIES:
+                errors.append(f"{label} alert #{idx} has invalid severity (must be info, warning, or critical)")
+
+    return errors
+
+
+def validate_group(group):
+    """Check a single group definition (references to tasks are checked separately).
+
+    Returns:
+        list: Error messages (empty if the group is valid)
+    """
+    if not isinstance(group, dict):
+        return [f"Group entry must be a mapping, got {type(group).__name__}"]
+
+    errors = []
+    label = f"Group '{group.get('name', 'unknown')}'"
+    if "name" not in group:
+        errors.append("Group missing 'name' field")
+    elif not is_valid_name(group["name"]):
+        errors.append(_name_error("Group", group["name"]))
+    for field in ("description", "tasks"):
+        if field not in group:
+            errors.append(f"{label} missing '{field}' field")
+
+    if "tasks" in group:
+        if not isinstance(group["tasks"], list):
+            errors.append(f"{label} 'tasks' must be a list of task names")
+        else:
+            for entry in group["tasks"]:
+                if not isinstance(entry, str):
+                    errors.append(f"{label} has invalid task entry: expected string, got {type(entry).__name__}")
+
+    if "execution" in group and group["execution"] not in EXECUTION_MODES:
+        errors.append(f"{label} has invalid execution mode {group['execution']!r} (must be serial or parallel)")
+
+    if "schedule" in group:
+        schedule = group["schedule"]
+        if isinstance(schedule, dict):
+            if "cron" not in schedule:
+                errors.append(f"{label} has schedule dict without 'cron' key")
+        elif not isinstance(schedule, str):
+            errors.append(f"{label} has invalid schedule type: expected string or dict, got {type(schedule).__name__}")
+
+    return errors
+
+
+def _yaml_files(directory):
+    """List YAML files in a directory the same way the config loader does (dotfiles skipped)."""
+    return [f for f in sorted(os.listdir(directory)) if not f.startswith(".") and f.endswith((".yaml", ".yml"))]
+
+
+def _validate_file(fpath, kind):
+    """Parse one task or group file and validate every entry in it."""
+    try:
+        with open(fpath, "r") as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        return [f"YAML syntax error: {e}"]
+    except Exception as e:
+        return [f"Error loading: {e}"]
+
+    if not isinstance(data, dict) or kind not in data:
+        return [f"No '{kind}' key found"]
+    entries = data[kind]
+    if isinstance(entries, dict):
+        entries = [entries]
+    if not isinstance(entries, list):
+        return [f"'{kind}' must be a list"]
+
+    check = validate_task if kind == "tasks" else validate_group
+    return [error for entry in entries for error in check(entry)]
+
+
+def validate_configuration():
+    """Validate all configuration files (catalog files only when include_catalog is enabled).
+
     Returns:
         ValidationResult: Object containing validation results
     """
     result = ValidationResult()
 
     try:
-        # Check if files exist - need to resolve paths relative to config home
-        tasks_file = get_config_value("paths.tasks_file", "config/tasks")
-        groups_file = get_config_value("paths.groups_file", "config/groups")
-        catalog_tasks_file = get_config_value("paths.catalog_tasks_file", "config/catalog/tasks")
-        catalog_groups_file = get_config_value("paths.catalog_groups_file", "config/catalog/groups")
+        include_catalog = get_config_value("include_catalog", False)
+        task_files_found = False
+        tasks_dir = None
 
-        # Resolve all paths to absolute paths
-        tasks_file = resolve_path(tasks_file)
-        groups_file = resolve_path(groups_file)
-        catalog_tasks_file = resolve_path(catalog_tasks_file)
-        catalog_groups_file = resolve_path(catalog_groups_file)
+        # Per-file checks, so errors are grouped under the file they come from
+        for key, kind, fallback, is_catalog in CONFIG_SOURCES:
+            if is_catalog and not include_catalog:
+                continue
+            directory = resolve_path(get_config_value(key, fallback))
+            if kind == "tasks" and not is_catalog:
+                tasks_dir = directory
+            if not os.path.isdir(directory):
+                continue
+            for fname in _yaml_files(directory):
+                fpath = os.path.join(directory, fname)
+                task_files_found = task_files_found or kind == "tasks"
+                result.files_used.append(fpath)
+                file_errors = _validate_file(fpath, kind)
+                if file_errors:
+                    prefix = "[Catalog] " if is_catalog else ""
+                    heading = "Task Config File" if kind == "tasks" else "Group Config File"
+                    result.errors.append(f"\n{prefix}{heading}:  {fname}")
+                    result.errors.extend(f"{prefix} - {error}" for error in file_errors)
 
-        # Strictly validate all user task YAML files for syntax and required fields (user and catalog)
-        for task_dir in [tasks_file, catalog_tasks_file]:
-            is_catalog = task_dir == catalog_tasks_file
-            if os.path.isdir(task_dir):
-                for fname in os.listdir(task_dir):
-                    if fname.endswith(".yaml") or fname.endswith(".yml"):
-                        fpath = os.path.join(task_dir, fname)
-                        file_errors = []
-                        try:
-                            with open(fpath, "r") as f:
-                                data = yaml.safe_load(f)
-                            if not data or "tasks" not in data:
-                                file_errors.append("No 'tasks' key found")
-                            else:
-                                for task in data["tasks"]:
-                                    if "name" not in task:
-                                        file_errors.append("Task missing 'name' field")
-                                    if "command" not in task:
-                                        file_errors.append(
-                                            f"Task '{task.get('name', 'unknown')}' missing 'command' field"
-                                        )
-                                    if "description" not in task:
-                                        file_errors.append(
-                                            f"Task '{task.get('name', 'unknown')}' missing 'description' field"
-                                        )
-                                    # Validate per-task timeout override if present
-                                    if "timeout" in task:
-                                        timeout = task["timeout"]
-                                        if (
-                                            isinstance(timeout, bool)
-                                            or not isinstance(timeout, (int, float))
-                                            or timeout < 0
-                                        ):
-                                            file_errors.append(
-                                                f"Task '{task.get('name', 'unknown')}' has invalid timeout "
-                                                f"(must be a number >= 0, got {timeout!r})"
-                                            )
-                                    # Validate alerts field if present
-                                    if "alerts" in task:
-                                        alerts_list = task["alerts"]
-                                        if not isinstance(alerts_list, list):
-                                            file_errors.append(
-                                                f"Task '{task.get('name', 'unknown')}' alerts field must be a list"
-                                            )
-                                        else:
-                                            for idx, alert in enumerate(alerts_list):
-                                                if not isinstance(alert, dict):
-                                                    file_errors.append(
-                                                        f"Task '{task.get('name', 'unknown')}' alert #{idx+1} must be a dict"
-                                                    )
-                                                    continue
-                                                if "pattern" not in alert:
-                                                    file_errors.append(
-                                                        f"Task '{task.get('name', 'unknown')}' alert #{idx+1} missing 'pattern' field"
-                                                    )
-                                                else:
-                                                    try:
-                                                        re.compile(alert["pattern"])
-                                                    except (re.error, TypeError) as e:
-                                                        file_errors.append(
-                                                            f"Task '{task.get('name', 'unknown')}' alert #{idx+1} "
-                                                            f"has invalid regex pattern: {e}"
-                                                        )
-                                                if "message" not in alert:
-                                                    file_errors.append(
-                                                        f"Task '{task.get('name', 'unknown')}' alert #{idx+1} missing 'message' field"
-                                                    )
-                                                # Validate severity if present
-                                                if "severity" in alert and alert["severity"] not in [
-                                                    "info",
-                                                    "warning",
-                                                    "critical",
-                                                ]:
-                                                    file_errors.append(
-                                                        f"Task '{task.get('name', 'unknown')}' alert #{idx+1} has invalid severity (must be info, warning, or critical)"
-                                                    )
-
-                        except yaml.YAMLError as e:
-                            file_errors.append(f"YAML syntax error: {e}")
-                        except Exception as e:
-                            file_errors.append(f"Error loading: {e}")
-                        if file_errors:
-                            prefix = "[Catalog] " if is_catalog else ""
-                            result.errors.append(f"\n{prefix}Task Config File:  {fname}")
-                            for err in file_errors:
-                                result.errors.append(f"{prefix} - {err}")
-
-        # Strictly validate all user group YAML files for syntax and required fields (user and catalog)
-        for group_dir in [groups_file, catalog_groups_file]:
-            is_catalog = group_dir == catalog_groups_file
-            if os.path.isdir(group_dir):
-                for fname in os.listdir(group_dir):
-                    if fname.endswith(".yaml") or fname.endswith(".yml"):
-                        fpath = os.path.join(group_dir, fname)
-                        file_errors = []
-                        try:
-                            with open(fpath, "r") as f:
-                                data = yaml.safe_load(f)
-                            if not data or "groups" not in data:
-                                file_errors.append("No 'groups' key found")
-                            else:
-                                for group in data["groups"]:
-                                    if "name" not in group:
-                                        file_errors.append("Group missing 'name' field")
-                                    if "description" not in group:
-                                        file_errors.append(
-                                            f"Group '{group.get('name', 'unknown')}' missing 'description' field"
-                                        )
-                                    if "tasks" not in group:
-                                        file_errors.append(
-                                            f"Group '{group.get('name', 'unknown')}' missing 'tasks' field"
-                                        )
-                        except yaml.YAMLError as e:
-                            file_errors.append(f"YAML syntax error: {e}")
-                        except Exception as e:
-                            file_errors.append(f"Error loading: {e}")
-                        if file_errors:
-                            prefix = "[Catalog] " if is_catalog else ""
-                            result.errors.append(f"\n{prefix}Group Config File:  {fname}")
-                            for err in file_errors:
-                                result.errors.append(f"{prefix} - {err}")
-        # Validate user tasks/groups, fallback to catalog if enabled
-        user_tasks_exists = (
-            os.path.isdir(tasks_file) and any(f.endswith((".yaml", ".yml")) for f in os.listdir(tasks_file))
-            if os.path.exists(tasks_file)
-            else False
-        )
-        catalog_tasks_exists = (
-            os.path.isdir(catalog_tasks_file)
-            and any(f.endswith((".yaml", ".yml")) for f in os.listdir(catalog_tasks_file))
-            if os.path.exists(catalog_tasks_file)
-            else False
-        )
-        catalog_groups_exists = (
-            os.path.isdir(catalog_groups_file)
-            and any(f.endswith((".yaml", ".yml")) for f in os.listdir(catalog_groups_file))
-            if os.path.exists(catalog_groups_file)
-            else False
-        )
-
-        if not user_tasks_exists and include_catalog and catalog_tasks_exists:
-            # Use catalog tasks as config source
-            result.config = {"tasks": [], "groups": []}
-            # Load all catalog tasks
-            for fname in os.listdir(catalog_tasks_file):
-                if fname.endswith(".yaml") or fname.endswith(".yml"):
-                    fpath = os.path.join(catalog_tasks_file, fname)
-                    try:
-                        with open(fpath, "r") as f:
-                            catalog_data = yaml.safe_load(f) or {}
-                        if "tasks" in catalog_data:
-                            result.config["tasks"].extend(catalog_data["tasks"])
-                        result.files_used.append(fpath)
-                    except Exception as e:
-                        result.errors.append(f"[Catalog] Error loading {fpath}: {e}")
-            # Load all catalog groups
-            if catalog_groups_exists:
-                for fname in os.listdir(catalog_groups_file):
-                    if fname.endswith(".yaml") or fname.endswith(".yml"):
-                        fpath = os.path.join(catalog_groups_file, fname)
-                        try:
-                            with open(fpath, "r") as f:
-                                catalog_data = yaml.safe_load(f) or {}
-                            if "groups" in catalog_data:
-                                if "groups" not in result.config:
-                                    result.config["groups"] = []
-                                result.config["groups"].extend(catalog_data["groups"])
-                            result.files_used.append(fpath)
-                        except Exception as e:
-                            result.errors.append(f"[Catalog] Error loading {fpath}: {e}")
-            # Validate as normal
-            _validate_tasks(result)
-            _validate_groups(result)
-            _validate_global_config(result)
-        elif not user_tasks_exists:
-            result.errors.append(f"No tasks file found ({tasks_file})")
+        if not task_files_found:
+            result.errors.append(f"No task files found ({tasks_dir})")
             return result
-        else:
-            try:
-                result.config = load_config()
-            except Exception as e:
-                result.errors.append(f"Error loading config: {e}")
-                import traceback
 
-                result.errors.append(f"Traceback: {traceback.format_exc()}")
-                return result
-            # Track which files are being used
-            config_file = resolve_path("config/signalbox.yaml")
-            if os.path.exists(config_file):
-                result.files_used.append(f"{config_file} (global config)")
-            if os.path.exists(tasks_file):
-                result.files_used.append(tasks_file)
-            if os.path.exists(groups_file):
-                result.files_used.append(groups_file)
-            # Validate tasks
-            _validate_tasks(result)
-            # Validate groups
-            _validate_groups(result)
-            # Validate global config
-            _validate_global_config(result)
+        config_file = resolve_path(CONFIG_FILE)
+        if os.path.exists(config_file):
+            result.files_used.insert(0, f"{config_file} (global config)")
 
-        # Optionally validate catalog tasks/groups (for extra checking, not as primary source)
-        if include_catalog and user_tasks_exists:
-            # Validate catalog tasks
-            if catalog_tasks_exists:
-                for fname in os.listdir(catalog_tasks_file):
-                    if fname.endswith(".yaml") or fname.endswith(".yml"):
-                        fpath = os.path.join(catalog_tasks_file, fname)
-                        try:
-                            with open(fpath, "r") as f:
-                                catalog_data = yaml.safe_load(f) or {}
-                            if "tasks" in catalog_data:
-                                for task in catalog_data["tasks"]:
-                                    if "name" not in task:
-                                        result.errors.append(f"[Catalog] Task in {fname} missing 'name' field")
-                                    if "command" not in task:
-                                        result.errors.append(
-                                            f"[Catalog] Task '{task.get('name', 'unknown')}' in {fname} missing 'command' field"
-                                        )
-                                    if "description" not in task:
-                                        result.errors.append(
-                                            f"[Catalog] Task '{task.get('name', 'unknown')}' in {fname} missing 'description' field"
-                                        )
-                            if fpath not in result.files_used:
-                                result.files_used.append(fpath)
-                        except Exception as e:
-                            result.errors.append(f"[Catalog] Error loading {fpath}: {e}")
-            # Validate catalog groups
-            if catalog_groups_exists:
-                for fname in os.listdir(catalog_groups_file):
-                    if fname.endswith(".yaml") or fname.endswith(".yml"):
-                        fpath = os.path.join(catalog_groups_file, fname)
-                        try:
-                            with open(fpath, "r") as f:
-                                catalog_data = yaml.safe_load(f) or {}
-                            if "groups" in catalog_data:
-                                for group in catalog_data["groups"]:
-                                    if "name" not in group:
-                                        result.errors.append(f"[Catalog] Group in {fname} missing 'name' field")
-                                    if "tasks" not in group:
-                                        result.errors.append(
-                                            f"[Catalog] Group '{group.get('name', 'unknown')}' in {fname} missing 'tasks' field"
-                                        )
-                                    if "description" not in group:
-                                        result.errors.append(
-                                            f"[Catalog] Group '{group.get('name', 'unknown')}' in {fname} missing 'description' field"
-                                        )
-                            if fpath not in result.files_used:
-                                result.files_used.append(fpath)
-                        except Exception as e:
-                            result.errors.append(f"[Catalog] Error loading {fpath}: {e}")
+        # Cross-file checks on the merged configuration
+        try:
+            result.config = load_config(suppress_warnings=True)
+        except Exception as e:
+            result.errors.append(f"Error loading config: {e}")
+            return result
+        if not isinstance(result.config, dict):
+            result.errors.append("Error loading config: no configuration returned")
+            return result
 
-    except yaml.YAMLError as e:
-        result.errors.append(f"YAML syntax error: {e}")
+        _validate_tasks(result)
+        _validate_groups(result)
+        _validate_global_config(result)
+
     except Exception as e:
         result.errors.append(f"Error loading config: {e}")
 
@@ -313,111 +222,60 @@ def validate_configuration(include_catalog=True):
 
 
 def _validate_tasks(result):
-    """Validate task definitions."""
+    """Cross-file task checks: duplicates and tasks not used by any group."""
     config = result.config
+    tasks = config.get("tasks")
 
-    if "tasks" not in config or not config["tasks"]:
+    if not tasks or not isinstance(tasks, list):
         result.errors.append("No tasks defined in config")
         return
 
-    task_names = [s.get("name", "<unnamed_{}>".format(i)) for i, s in enumerate(config["tasks"])]
+    task_names = [t.get("name", f"<unnamed_{i}>") for i, t in enumerate(tasks) if isinstance(t, dict)]
 
-    # Check for duplicate task names
-    if len(task_names) != len(set(task_names)):
-        duplicates = [n for n in task_names if task_names.count(n) > 1]
-        result.errors.append("Duplicate task names: {}".format(", ".join(set(duplicates))))
+    duplicates = sorted({n for n in task_names if task_names.count(n) > 1})
+    if duplicates:
+        result.errors.append("Duplicate task names: {}".format(", ".join(duplicates)))
 
-    # Note: Required field validation is now done per-file during initial validation
-    # to properly group errors by source file
-
-    # Check for unused tasks (if enabled in global config)
-    if get_config_value("validation.warn_unused_tasks", True):
-        if "groups" in config and config["groups"]:
-            used_tasks = set()
-            for group in config["groups"]:
-                used_tasks.update(group.get("tasks", []))
-            unused = set(task_names) - used_tasks
-            if unused:
-                result.warnings.append("Unused tasks (not in any group): {}".format(", ".join(unused)))
+    if get_config_value("validation.warn_unused_tasks", True) and config.get("groups"):
+        used_tasks = set()
+        for group in config["groups"]:
+            if isinstance(group, dict) and isinstance(group.get("tasks"), list):
+                used_tasks.update(t for t in group["tasks"] if isinstance(t, str))
+        unused = sorted(set(task_names) - used_tasks)
+        if unused:
+            result.warnings.append("Unused tasks (not in any group): {}".format(", ".join(unused)))
 
 
 def _validate_groups(result):
-    """Validate group definitions."""
+    """Cross-file group checks: duplicates, references to missing tasks, cron field count."""
     config = result.config
-
-    if "groups" not in config:
-        return
-
-    groups = config["groups"]
-    group_names = [g.get("name", "<unnamed_{}>".format(i)) for i, g in enumerate(groups)]
-    task_names = [s.get("name") for s in config.get("tasks", []) if "name" in s]
-
-    # Check for duplicate group names
-    if len(group_names) != len(set(group_names)):
-        duplicates = [n for n in group_names if group_names.count(n) > 1]
-        result.errors.append("Duplicate group names: {}".format(", ".join(set(duplicates))))
-
-    # Note: Required field validation is now done per-file during initial validation
-    # to properly group errors by source file
-
-    # Get group sources for better error messages
+    groups = [g for g in config.get("groups", []) if isinstance(g, dict)]
+    group_names = [g.get("name", f"<unnamed_{i}>") for i, g in enumerate(groups)]
+    task_names = {t.get("name") for t in config.get("tasks", []) if isinstance(t, dict)}
     group_sources = config.get("_group_sources", {})
+
+    duplicates = sorted({n for n in group_names if group_names.count(n) > 1})
+    if duplicates:
+        result.errors.append("Duplicate group names: {}".format(", ".join(duplicates)))
 
     for group in groups:
         if "name" not in group:
             continue
-
         group_name = group["name"]
-        source_file = group_sources.get(group_name, "unknown file")
-        if source_file != "unknown file":
-            source_file = os.path.basename(source_file)
+        source_file = os.path.basename(group_sources.get(group_name, "unknown file"))
 
-        # Check if tasks exist
-        if "tasks" in group and group["tasks"]:
+        if isinstance(group.get("tasks"), list):
             for task_name in group["tasks"]:
-                # Check if task_name is a string (common error: using dict instead of string)
-                if not isinstance(task_name, str):
-                    result.errors.append(
-                        "Group '{}' in {} has invalid task entry: expected string, got {}".format(
-                            group_name, source_file, type(task_name).__name__
-                        )
-                    )
-                    continue
-                if task_name not in task_names:
-                    result.errors.append("Group '{}' references non-existent task '{}'".format(group_name, task_name))
+                if isinstance(task_name, str) and task_name not in task_names:
+                    result.errors.append(f"Group '{group_name}' references non-existent task '{task_name}'")
 
-        # Validate schedule if present
-        if "schedule" in group:
-            try:
-                schedule = group["schedule"]
-                # Support both string format and dict format with 'cron' key
-                if isinstance(schedule, dict):
-                    if "cron" in schedule:
-                        schedule_str = schedule["cron"]
-                    else:
-                        result.errors.append(
-                            "Group '{}' in {} has schedule dict without 'cron' key".format(group_name, source_file)
-                        )
-                        continue
-                elif isinstance(schedule, str):
-                    schedule_str = schedule
-                else:
-                    result.errors.append(
-                        "Group '{}' in {} has invalid schedule type: expected string or dict, got {}".format(
-                            group_name, source_file, type(schedule).__name__
-                        )
-                    )
-                    continue
-
-                parts = schedule_str.split()
-                if len(parts) != 5:
-                    result.warnings.append(
-                        "Group '{}' in {} schedule may be invalid: '{}' (expected 5 cron fields)".format(
-                            group_name, source_file, schedule_str
-                        )
-                    )
-            except Exception as e:
-                result.errors.append("Group '{}' in {} has invalid schedule: {}".format(group_name, source_file, e))
+        schedule = group.get("schedule")
+        if isinstance(schedule, dict):
+            schedule = schedule.get("cron")
+        if isinstance(schedule, str) and not schedule.startswith("@") and len(schedule.split()) != 5:
+            result.warnings.append(
+                f"Group '{group_name}' in {source_file} schedule may be invalid: '{schedule}' (expected 5 cron fields)"
+            )
 
 
 def _validate_global_config(result):

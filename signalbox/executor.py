@@ -14,10 +14,11 @@ import click
 from .config import get_config_value
 from .runtime import save_task_runtime_state
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
-from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError
+from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError, ValidationError
 from . import notifications
 from . import alerts
 from .helpers import format_timestamp
+from .validator import validate_task
 
 
 def _find_task(name, config):
@@ -26,7 +27,7 @@ def _find_task(name, config):
     Raises:
         TaskNotFoundError: If no task with the given name exists in config.
     """
-    task = next((s for s in config["tasks"] if s["name"] == name), None)
+    task = next((t for t in config["tasks"] if isinstance(t, dict) and t.get("name") == name), None)
     if not task:
         raise TaskNotFoundError(name)
     return task
@@ -158,10 +159,14 @@ def run_task(name, config):
 
     Raises:
         TaskNotFoundError: If task not found in configuration
+        ValidationError: If the task definition is invalid (e.g. missing 'command')
         ExecutionTimeoutError: If task execution times out
         ExecutionError: If task execution fails for any other reason
     """
     task = _find_task(name, config)
+    errors = validate_task(task)
+    if errors:
+        raise ValidationError("; ".join(errors))
     try:
         result, log_file, timestamp = _execute(task, name, config)
         _post_execution(name, task, result, log_file, timestamp, config)
