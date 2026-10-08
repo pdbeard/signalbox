@@ -38,6 +38,15 @@ def get_log_path(task_name, timestamp=None):
     return os.path.join(log_dir, task_name, f"{timestamp}.log")
 
 
+def _list_log_files(task_log_dir):
+    """Return the names of execution log files in a task's log directory.
+
+    The directory also holds the alerts/ subdirectory and a rotation lock file,
+    so only regular files ending in .log count as logs.
+    """
+    return [f for f in os.listdir(task_log_dir) if f.endswith(".log") and os.path.isfile(os.path.join(task_log_dir, f))]
+
+
 def write_execution_log(log_file, command, return_code, stdout, stderr):
     """Write execution results to a log file.
 
@@ -89,7 +98,6 @@ def rotate_logs(task):
             task: Task configuration dict with optional 'log_limit' setting
     """
     import fcntl
-    import tempfile
 
     name = task["name"]
     task_log_dir = get_task_log_dir(name)
@@ -97,9 +105,10 @@ def rotate_logs(task):
     if not os.path.exists(task_log_dir):
         return
 
-    # Security: Use file locking to prevent race conditions
-    # Multiple concurrent executions could corrupt log rotation
-    lock_file = os.path.join(tempfile.gettempdir(), f"signalbox_rotate_{name}.lock")
+    # Use file locking to prevent race conditions between concurrent executions.
+    # The lock lives in the task's own log directory rather than the shared /tmp,
+    # where a predictable name could be pre-created as a symlink by another user.
+    lock_file = os.path.join(task_log_dir, ".rotate.lock")
 
     try:
         with open(lock_file, "w") as lock:
@@ -114,7 +123,7 @@ def rotate_logs(task):
             default_limit = get_config_value("default_log_limit", {"type": "count", "value": 10})
             log_limit = task.get("log_limit", default_limit)
 
-            log_files = [f for f in os.listdir(task_log_dir) if os.path.isfile(os.path.join(task_log_dir, f))]
+            log_files = _list_log_files(task_log_dir)
 
             if log_limit["type"] == "count":
                 _rotate_by_count(task_log_dir, log_files, log_limit["value"])
@@ -179,7 +188,7 @@ def get_latest_log(task_name):
     if not os.path.exists(task_log_dir):
         return None, False
 
-    log_files = os.listdir(task_log_dir)
+    log_files = _list_log_files(task_log_dir)
     if not log_files:
         return None, False
 
@@ -228,7 +237,7 @@ def get_log_history(task_name):
     if not os.path.exists(task_log_dir):
         return [], False
 
-    log_files = os.listdir(task_log_dir)
+    log_files = _list_log_files(task_log_dir)
     if not log_files:
         return [], False
 
@@ -313,9 +322,10 @@ def get_all_log_files():
             log_path = os.path.join(task_log_dir, log_file)
             timestamp_str = log_file.replace(".log", "")
 
-            try:
-                timestamp = parse_timestamp(timestamp_str)
-            except Exception:
+            # parse_timestamp returns None for names that don't match the configured
+            # format (e.g. after logging.timestamp_format changes); fall back to mtime.
+            timestamp = parse_timestamp(timestamp_str)
+            if timestamp is None:
                 timestamp = datetime.fromtimestamp(os.path.getmtime(log_path))
 
             logs.append(

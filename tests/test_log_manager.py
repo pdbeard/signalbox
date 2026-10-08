@@ -52,6 +52,20 @@ def test_get_log_history(tmp_path, monkeypatch):
     assert exists and info[0][0] == "b.log"
 
 
+def test_log_listing_ignores_alerts_dir_and_lock(tmp_path, monkeypatch):
+    """The alerts/ subdirectory and rotation lock share the log dir but are not logs."""
+    monkeypatch.setattr(log_manager, "get_task_log_dir", lambda name: str(tmp_path))
+    log = tmp_path / "a.log"
+    log.write_text("x")
+    os.utime(log, (1000, 1000))
+    (tmp_path / "alerts").mkdir()
+    (tmp_path / ".rotate.lock").write_text("")
+    path, exists = log_manager.get_latest_log("foo")
+    assert exists and path.endswith("a.log")
+    info, exists = log_manager.get_log_history("foo")
+    assert [name for name, _ in info] == ["a.log"]
+
+
 def test_clear_script_logs(tmp_path, monkeypatch):
     monkeypatch.setattr(log_manager, "get_task_log_dir", lambda name: str(tmp_path))
     f1 = tmp_path / "a.log"
