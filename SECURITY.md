@@ -1,5 +1,3 @@
-Possible blacklist for inline commands? (rm,chmod, etc. instead of pure trust)
-
 # Security Policy
 
 ## Supported Versions
@@ -72,11 +70,10 @@ tasks:
 # Set restrictive permissions on config directory
 chmod 700 ~/.config/signalbox/
 chmod 600 ~/.config/signalbox/config/*.yaml
+chmod 600 ~/.config/signalbox/config/tasks/*.yaml ~/.config/signalbox/config/groups/*.yaml
 
-# Or for system-wide installations
-sudo chown root:root /etc/signalbox/
-sudo chmod 755 /etc/signalbox/
-sudo chmod 644 /etc/signalbox/config/*.yaml
+# Check every file and directory that decides which commands run
+signalbox config check-permissions
 ```
 
 #### 2. **Use Version Control**
@@ -195,8 +192,9 @@ We do **not** accept reports about:
 ### How to Report
 
 **For security issues in Signalbox's code:**
-- Email: [your-security-email@example.com]
-- Or use GitHub Security Advisories (private reports)
+- Use GitHub private vulnerability reporting. Go to the **Security** tab of
+  [pdbeard/signalbox](https://github.com/pdbeard/signalbox/security), then click **Report a vulnerability**.
+- Do not open a public issue for a security problem.
 
 **Response time:** 48 hours
 
@@ -291,5 +289,5 @@ If we add these features, they will be optional. Thus, current configurations wi
 
 ---
 
-**Last Updated:** December 29, 2025  
+**Last Updated:** October 29, 2026  
 **Version:** 0.1.0

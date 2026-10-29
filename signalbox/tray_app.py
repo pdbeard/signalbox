@@ -6,7 +6,6 @@ Provides a system tray icon with status indication and menu for controlling Sign
 
 import sys
 import os
-import re
 import argparse
 import tempfile
 from datetime import datetime
@@ -53,14 +52,6 @@ def _parse_last_run_to_ts(last_run):
     dt = parse_timestamp(str(last_run))
     if dt is not None:
         return int(dt.timestamp())
-    m = re.match(r"(\d{8})_(\d{6})_\d+", str(last_run))
-    if m:
-        date_str, time_str = m.group(1), m.group(2)
-        try:
-            dt = datetime.strptime(date_str + time_str, "%Y%m%d%H%M%S")
-            return int(dt.timestamp())
-        except Exception:
-            return 0
     try:
         dt = datetime.fromisoformat(str(last_run))
         return int(dt.timestamp())

@@ -133,6 +133,10 @@ def validate_task(task):
                     errors.append(f"{label} alert #{idx} has invalid regex pattern: {e}")
             if "severity" in alert and alert["severity"] not in SEVERITIES:
                 errors.append(f"{label} alert #{idx} has invalid severity (must be info, warning, or critical)")
+            # A quoted "false" is a non-empty string, which Python treats as true
+            for field in ("notify", "on_failure_only"):
+                if alert.get(field) is not None and not isinstance(alert[field], bool):
+                    errors.append(f"{label} alert #{idx} '{field}' must be true or false, got {alert[field]!r}")
 
     return errors
 
@@ -163,6 +167,10 @@ def validate_group(group):
             for entry in group["tasks"]:
                 if not isinstance(entry, str):
                     errors.append(f"{label} has invalid task entry: expected string, got {type(entry).__name__}")
+
+    if "stop_on_error" in group and not isinstance(group["stop_on_error"], bool):
+        # A quoted "false" is a non-empty string, which Python treats as true
+        errors.append(f"{label} 'stop_on_error' must be true or false, got {group['stop_on_error']!r}")
 
     if "execution" in group and group["execution"] not in EXECUTION_MODES:
         errors.append(f"{label} has invalid execution mode {group['execution']!r} (must be serial or parallel)")
@@ -338,6 +346,12 @@ def _validate_global_config(result):
     default_limit = get_config_value("default_log_limit", None)
     if default_limit is not None:
         result.errors.extend(validate_log_limit(default_limit, "Global default"))
+
+    # 0 crashes every parallel group; a tray poll interval of 0 never pauses
+    for key in ("execution.max_parallel_workers", "tray.poll_interval"):
+        value = get_config_value(key, 1)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            result.errors.append(f"{key} must be a whole number >= 1, got {value!r}")
 
 
 def get_validation_summary(result):

@@ -76,6 +76,9 @@ The validate command does these checks:
 | `include_catalog` | boolean | false | Also load the example tasks and groups in `config/catalog/` |
 | `paths.systemd_export_dir` | string | systemd | The directory for exported systemd files (relative to the signalbox home) |
 | `paths.cron_export_dir` | string | cron | The directory for exported cron files (relative to the signalbox home) |
+| `alerts.retention.max_days` | number | 30 | Delete alerts that are older than this number of days |
+| `alerts.retention.max_entries` | number | 1000 | The maximum number of alerts that each task keeps |
+| `alerts.retention.per_severity` | mapping | critical 90, warning 30, info 7 | The number of days to keep alerts of each severity. It replaces `max_days` for these severities. |
 | `alerts.notifications.cooldown_minutes` | number | 60 | Do not send the same notification again (same task and alert pattern) in this number of minutes. 0 sends it on each run. |
 | `tray.notify_on_success` | boolean | false | Show a tray message when a run that you started from the tray is successful |
 | `execution.default_timeout` | number | 300 | The time limit of a task, in seconds. 0 removes the time limit. |
@@ -83,7 +86,6 @@ The validate command does these checks:
 | `execution.capture_stdout` | boolean | true | Write stdout to the logs |
 | `execution.capture_stderr` | boolean | true | Write stderr to the logs |
 | `execution.max_parallel_workers` | number | 5 | The maximum number of tasks that run at the same time in a parallel group |
-| `logging.timestamp_format` | string | %Y%m%d_%H%M%S_%f | The timestamp in log filenames |
 | `logging.max_file_size_mb` | number | 5 | The maximum size of one log file, in MB |
 | `logging.include_command` | boolean | true | Write the command in the log |
 | `logging.include_return_code` | boolean | true | Write the exit code in the log |

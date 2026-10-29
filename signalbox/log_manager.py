@@ -440,8 +440,8 @@ def get_all_log_files():
             log_path = os.path.join(task_log_dir, log_file)
             timestamp_str = log_file.replace(".log", "")
 
-            # parse_timestamp returns None for names that don't match the configured
-            # format (e.g. after logging.timestamp_format changes); fall back to mtime.
+            # parse_timestamp returns None for names in another format (logs written
+            # by versions that let logging.timestamp_format change it); fall back to mtime.
             timestamp = parse_timestamp(timestamp_str)
             if timestamp is None:
                 timestamp = datetime.fromtimestamp(os.path.getmtime(log_path))
@@ -463,19 +463,22 @@ def get_all_log_files():
 def parse_stdout_from_log(content):
     """Extract the STDOUT section from log file content."""
     marker = "STDOUT:\n"
-    end_marker = "\nSTDERR:"
+    # rfind: signalbox writes its own STDERR section last, so a "STDERR:" line in
+    # the task's output must not end the stdout section early.
+    end_marker = "\nSTDERR:\n"
     start = content.find(marker)
     if start == -1:
         return ""
     start += len(marker)
-    end = content.find(end_marker, start)
+    end = content.rfind(end_marker, start)
     return content[start:end].strip() if end != -1 else content[start:].strip()
 
 
 def parse_stderr_from_log(content):
     """Extract the STDERR section from log file content."""
-    marker = "STDERR:\n"
-    start = content.find(marker)
+    marker = "\nSTDERR:\n"
+    content = "\n" + content  # the section can be the first line when the header lines are off
+    start = content.rfind(marker)
     if start == -1:
         return ""
     return content[start + len(marker) :].strip()

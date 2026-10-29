@@ -39,7 +39,6 @@ execution:
   max_parallel_workers: 5        # Maximum parallel workers for group execution
 
 logging:
-  timestamp_format: '%Y%m%d_%H%M%S_%f'  # Format for log filenames
   max_file_size_mb: 5                   # Maximum size of one log file
 
 display:
@@ -128,9 +127,7 @@ This command examines all YAML files and shows a summary of the configuration.
 
 ## Date/Time Formats
 
-For `timestamp_format` (log filenames):
-- `%Y%m%d_%H%M%S_%f` - 20231231_143059_123456
-- `%Y-%m-%d_%H-%M-%S` - 2023-12-31_14-30-59
+Log filenames always use the format `%Y%m%d_%H%M%S_%f`, for example `20231231_143059_123456.log`. You cannot change this format. The microseconds make sure that two runs that start in the same second write different files.
 
 For `date_format` (display):
 - `%Y-%m-%d %H:%M:%S` - 2023-12-31 14:30:59

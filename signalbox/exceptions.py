@@ -59,18 +59,4 @@ class ValidationError(SignalboxError):
     """Raised when configuration validation fails."""
 
     def __init__(self, message):
-        super().__init__(message, exit_code=5)
-
-
-class ExportError(SignalboxError):
-    """Raised when export operation fails."""
-
-    def __init__(self, message):
-        super().__init__(message, exit_code=6)
-
-
-class LogError(SignalboxError):
-    """Raised when log operations fail."""
-
-    def __init__(self, message):
-        super().__init__(message, exit_code=7)
+        super().__init__(message, exit_code=2)

@@ -38,9 +38,6 @@ execution:
 
 # Logging settings
 logging:
-  # Timestamp format for log files
-  timestamp_format: "%Y%m%d_%H%M%S_%f"
-  
   # Security: Maximum log file size in MB to prevent disk filling
   # If script output exceeds this, it will be truncated with a warning
   max_file_size_mb: 5

@@ -5,7 +5,7 @@ from functools import wraps
 
 import click
 
-from ..exceptions import SignalboxError, ValidationError, ConfigurationError
+from ..exceptions import SignalboxError
 
 
 def handle_exceptions(func):
@@ -18,7 +18,7 @@ def handle_exceptions(func):
         except KeyboardInterrupt:
             click.echo("\nInterrupted by user", err=True)
             sys.exit(130)
-        except (ValidationError, ConfigurationError, FileNotFoundError) as e:
+        except FileNotFoundError as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(2)
         except PermissionError as e:

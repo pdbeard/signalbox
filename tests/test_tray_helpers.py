@@ -13,12 +13,6 @@ from signalbox import tray_app  # noqa: E402
 from signalbox.config import reset_config  # noqa: E402
 
 
-def test_parse_last_run_uses_configured_timestamp_format(sb_home):
-    sb_home.write_settings({"logging": {"timestamp_format": "%Y-%m-%dT%H.%M.%S"}})
-    expected = int(datetime(2026, 1, 2, 3, 4, 5).timestamp())
-    assert tray_app._parse_last_run_to_ts("2026-01-02T03.04.05") == expected
-
-
 def test_parse_last_run_handles_default_and_missing():
     expected = int(datetime(2026, 1, 2, 3, 4, 5).timestamp())
     assert tray_app._parse_last_run_to_ts("20260102_030405_123456") == expected

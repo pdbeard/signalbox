@@ -118,23 +118,16 @@ def get_resolved_log_dir() -> str:
     return log_dir
 
 
-def get_timestamp_format() -> str:
-    """
-    Get the configured timestamp format.
-
-    Centralized function to avoid hardcoding '%Y%m%d_%H%M%S_%f' everywhere.
-
-    Returns:
-        Timestamp format string from config, or default
-    """
-    from .config import get_config_value
-
-    return get_config_value("logging.timestamp_format", "%Y%m%d_%H%M%S_%f")
+# Log file names, runtime last_run values and alert timestamps all use this
+# format. It is fixed rather than configurable: microseconds keep runs that
+# start in the same second (two cron jobs at :00) from sharing a log file, and
+# a '/' would turn the name into directories that do not exist.
+TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S_%f"
 
 
 def format_timestamp(dt) -> str:
     """
-    Format a datetime object using the configured timestamp format.
+    Format a datetime object as a signalbox timestamp.
 
     Args:
         dt: datetime object to format
@@ -142,12 +135,12 @@ def format_timestamp(dt) -> str:
     Returns:
         Formatted timestamp string
     """
-    return dt.strftime(get_timestamp_format())
+    return dt.strftime(TIMESTAMP_FORMAT)
 
 
 def parse_timestamp(timestamp_str: str):
     """
-    Parse a timestamp string using the configured format.
+    Parse a signalbox timestamp string.
 
     Args:
         timestamp_str: Timestamp string to parse
@@ -160,7 +153,7 @@ def parse_timestamp(timestamp_str: str):
     try:
         # Remove .log extension if present
         timestamp_str = timestamp_str.replace(".log", "")
-        return datetime.strptime(timestamp_str, get_timestamp_format())
+        return datetime.strptime(timestamp_str, TIMESTAMP_FORMAT)
     except ValueError:
         return None
 

@@ -126,7 +126,7 @@ def sample_signalbox_yaml(temp_config_dir):
             "capture_stderr": True,
             "max_parallel_workers": 5,
         },
-        "logging": {"timestamp_format": "%Y%m%d_%H%M%S_%f"},
+        "logging": {"max_file_size_mb": 5},
         "display": {"date_format": "%Y-%m-%d %H:%M:%S"},
     }
 

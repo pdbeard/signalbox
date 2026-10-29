@@ -93,6 +93,26 @@ class TestTaskRun:
         assert result.exit_code == 1
         assert runtime(sb_home, "tasks")["after"]["last_status"] == "success"
 
+    def test_run_all_reports_non_mapping_entry(self, sb_home, run):
+        sb_home.write_tasks(["just a string", task("after")])
+
+        result = run("task", "run", "--all")
+
+        assert result.exit_code == 1
+        # The table wraps the error column, so check both halves of the message
+        assert "Task entry must be" in result.output and "mapping, got str" in result.output
+        assert runtime(sb_home, "tasks")["after"]["last_status"] == "success"
+
+    def test_each_run_gets_its_own_log_whatever_the_old_format_setting(self, sb_home, run):
+        """logging.timestamp_format is gone: a coarse value used to make runs share one log file."""
+        sb_home.write_settings({"logging": {"timestamp_format": "%Y"}})
+        sb_home.write_tasks([task("a")])
+
+        run("task", "run", "a", "-q")
+        run("task", "run", "a", "-q")
+
+        assert len(sb_home.logs("a")) == 2
+
     def test_invalid_task_is_rejected_before_running(self, sb_home, run):
         sb_home.write_tasks([{"name": "nocmd", "description": "missing command"}])
 
@@ -179,6 +199,27 @@ class TestCatalog:
 
 
 class TestValidate:
+    def test_quoted_false_stop_on_error_is_refused(self, sb_home, run):
+        """'false' in quotes is a string, which Python treats as true, so it used to stop the group."""
+        sb_home.write_tasks([task("bad", "exit 1"), task("good")])
+        sb_home.write_groups([{"name": "g", "description": "d", "stop_on_error": "false", "tasks": ["bad", "good"]}])
+
+        result = run("group", "run", "g")
+
+        assert result.exit_code == 2
+        assert "'stop_on_error' must be true or false" in result.output
+        assert sb_home.logs("good") == []
+
+    def test_untyped_settings_are_reported(self, sb_home, run):
+        sb_home.write_settings({"execution": {"max_parallel_workers": 0}, "tray": {"poll_interval": 0}})
+        sb_home.write_tasks([task("a", alerts=[{"pattern": "x", "message": "m", "notify": "false"}])])
+
+        result = run("validate")
+
+        assert result.exit_code == 2
+        for message in ("max_parallel_workers must be", "poll_interval must be", "'notify' must be true or false"):
+            assert message in " ".join(result.output.split()), message
+
     def test_valid_config(self, sb_home, run):
         sb_home.write_tasks([task("a")])
         sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["a"], "schedule": "0 * * * *"}])

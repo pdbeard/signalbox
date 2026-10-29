@@ -8,8 +8,9 @@ from ..config import load_config, get_config_value
 from ..executor import run_task
 from ..runtime import load_runtime_state, merge_config_with_runtime_state
 from .. import log_manager
-from ..exceptions import SignalboxError
+from ..exceptions import SignalboxError, ValidationError
 from ..helpers import parse_timestamp
+from ..validator import validate_task_for_run
 from .utils import handle_exceptions, print_run_output_preview
 
 
@@ -107,6 +108,9 @@ def task_run(name, run_all_tasks, quiet):
             error = ""
             try:
                 click.echo(f"Running {name or '<unnamed>'}...")
+                if not isinstance(task_item, dict):
+                    # run_task looks tasks up by name, which a non-mapping entry has not got
+                    raise ValidationError("; ".join(validate_task_for_run(task_item)))
                 success = run_task(name, config)
                 status = "success" if success else "failed"
             except SignalboxError as e:

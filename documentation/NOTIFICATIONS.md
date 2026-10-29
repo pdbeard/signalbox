@@ -40,6 +40,25 @@ group_notifications:
 
 On Linux, scheduled runs (cron and systemd) usually do not have `DBUS_SESSION_BUS_ADDRESS`. In this condition, signalbox uses `/run/user/<uid>/bus`. Thus, notifications get to your desktop while you are logged in.
 
+### Alert Retention
+
+Signalbox deletes old alerts from the alert history after each run of a task. These settings control which alerts it keeps:
+
+```yaml
+alerts:
+  retention:
+    max_days: 30        # Keep alerts for 30 days
+    max_entries: 1000   # Keep at most 1000 alerts per task
+    per_severity:       # Replaces max_days for these severities
+      critical: 90
+      warning: 30
+      info: 7
+```
+
+- **`alerts.retention.max_days`** (default: `30`): signalbox deletes alerts that are older than this number of days.
+- **`alerts.retention.max_entries`** (default: `1000`): each task keeps this number of alerts or fewer. Signalbox deletes the oldest alerts first.
+- **`alerts.retention.per_severity`** (default: critical `90`, warning `30`, info `7`): the number of days to keep alerts of each severity. For a severity in this list, this value replaces `max_days`.
+
 ### Group Notification Options
 
 - **`group_notifications.enabled`** (default: `true`): turns the group summary notifications on or off.

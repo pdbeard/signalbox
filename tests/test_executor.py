@@ -38,7 +38,6 @@ class TestRunTask:
         """Test successful script execution."""
         # Setup mocks
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test_20240101_120000_000000.log"
@@ -91,7 +90,6 @@ class TestRunTask:
     ):
         """Test script execution that fails (non-zero exit code)."""
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test_fail.log"
@@ -149,7 +147,6 @@ class TestRunTask:
     ):
         """Test script execution that times out is logged and recorded as failed."""
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 5,
         }.get(key, default)
         mock_log_path.return_value = "/logs/timeout.log"
@@ -195,7 +192,6 @@ class TestRunTask:
     ):
         """Test script execution with timeout disabled (0 = None)."""
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 0,
         }.get(key, default)
         mock_log_path.return_value = "/logs/no_timeout.log"
@@ -236,7 +232,6 @@ class TestRunTask:
     ):
         """Test script execution when source file is not tracked."""
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/test.log"
@@ -269,7 +264,6 @@ class TestRunTask:
     ):
         """Test script execution when subprocess raises an unexpected exception."""
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/error.log"
@@ -306,7 +300,6 @@ class TestRunTask:
     ):
         """A task-level 'timeout' field overrides execution.default_timeout."""
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/override.log"
@@ -344,7 +337,6 @@ class TestRunTask:
     ):
         """A task-level timeout of 0 disables the timeout entirely."""
         mock_get_config.side_effect = lambda key, default: {
-            "logging.timestamp_format": "%Y%m%d_%H%M%S_%f",
             "execution.default_timeout": 300,
         }.get(key, default)
         mock_log_path.return_value = "/logs/override.log"
@@ -632,8 +624,6 @@ class TestExecutorIntegration:
         def get_config_side_effect(key, default=None):
             if key == "execution.max_parallel_workers":
                 return 5
-            if key == "logging.timestamp_format":
-                return "%Y%m%d_%H%M%S_%f"
             if key == "execution.default_timeout":
                 return 300
             return default
@@ -694,8 +684,6 @@ class TestExecutorIntegration:
         """Test complete serial execution workflow."""
 
         def get_config_side_effect(key, default=None):
-            if key == "logging.timestamp_format":
-                return "%Y%m%d_%H%M%S_%f"
             if key == "execution.default_timeout":
                 return 300
             return default

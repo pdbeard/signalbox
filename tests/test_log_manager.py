@@ -247,3 +247,10 @@ class TestLogSizeBudget:
         log_file = self._write(tmp_path, "cmd", "before \udcff after", "", mb=1)
         content = log_file.read_bytes().decode("utf-8")
         assert "before" in content and "after" in content
+
+
+def test_stdout_preview_ignores_stderr_label_in_task_output():
+    content = "Command: x\nReturn code: 0\nSTDOUT:\nheader\nSTDERR:\nnot really stderr\n\nSTDERR:\nreal error\n"
+    assert log_manager.parse_stdout_from_log(content) == "header\nSTDERR:\nnot really stderr"
+    assert log_manager.parse_stderr_from_log(content) == "real error"
+    assert log_manager.parse_stderr_from_log("STDERR:\nonly stderr\n") == "only stderr"

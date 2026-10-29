@@ -138,7 +138,7 @@ def handle_exceptions(func):
             return func(*args, **kwargs)
         except KeyboardInterrupt:
             sys.exit(130)
-        except (ValidationError, ConfigurationError, FileNotFoundError) as e:
+        except FileNotFoundError as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(2)
         except PermissionError as e:

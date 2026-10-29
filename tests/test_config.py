@@ -227,8 +227,8 @@ class TestGetConfigValue:
         """Test getting a simple top-level value."""
         manager = ConfigManager(config_home=full_config)
 
-        value = manager.get_config_value("logging.timestamp_format")
-        assert value == "%Y%m%d_%H%M%S_%f"
+        value = manager.get_config_value("logging.max_file_size_mb")
+        assert value == 5
 
     def test_get_nested_value(self, full_config):
         """Test getting a nested value."""
