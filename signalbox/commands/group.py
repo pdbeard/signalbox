@@ -119,10 +119,6 @@ def group_list():
                     "tasks": group_item.get("tasks", []),
                 }
             )
-        except KeyError as e:
-            click.echo(
-                f"[CONFIG ERROR] Group entry missing required field: {e}. Offending group: {group_item}", err=True
-            )
         except Exception as e:
             click.echo(f"[CONFIG ERROR] Unexpected error in group config: {e}. Offending group: {group_item}", err=True)
     print_group_list_table(group_rows)

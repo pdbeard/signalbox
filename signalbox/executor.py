@@ -213,7 +213,8 @@ def _post_execution(name, task, result, log_file, timestamp, config):
         name,
         max_days=retention.get("max_days", 30),
         max_entries=retention.get("max_entries", 1000),
-        per_severity=retention.get("per_severity"),
+        # Fallback matches the value in the shipped signalbox.yaml.
+        per_severity=retention.get("per_severity", {"critical": 90, "warning": 30, "info": 7}),
     )
 
     status = "success" if result.returncode == 0 else "failed"

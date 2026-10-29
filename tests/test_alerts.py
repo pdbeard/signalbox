@@ -77,24 +77,6 @@ def test_save_alert_missing_dir(tmp_path, monkeypatch):
     assert alert_log.exists()
 
 
-def test_alert_summary_only_warnings(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        alerts, "load_alerts", lambda **kwargs: [{"severity": "warning", "task_name": "s1"} for _ in range(3)]
-    )
-    summary = alerts.get_alert_summary()
-    assert summary["by_severity"]["warning"] == 3
-    assert summary["total"] == 3
-
-
-def test_alert_summary_only_infos(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        alerts, "load_alerts", lambda **kwargs: [{"severity": "info", "task_name": "s1"} for _ in range(2)]
-    )
-    summary = alerts.get_alert_summary()
-    assert summary["by_severity"]["info"] == 2
-    assert summary["total"] == 2
-
-
 def test_check_alert_patterns_invalid_regex(capsys):
     """An invalid pattern is skipped with a warning; valid patterns still match."""
     script_name = "s"
@@ -208,27 +190,6 @@ def test_multiple_alerts_from_single_script(tmp_path, monkeypatch):
     assert len(loaded) >= 2
     assert any(a["message"] == "Alert 1" for a in loaded)
     assert any(a["message"] == "Alert 2" for a in loaded)
-
-
-def test_alert_summary_edge_cases(tmp_path, monkeypatch):
-    """Test alert summary with no alerts and all severities."""
-    # No alerts
-    monkeypatch.setattr(alerts, "load_alerts", lambda **kwargs: [])
-    summary = alerts.get_alert_summary()
-    assert summary["total"] == 0
-    # All severities
-    all_alerts = [
-        {"severity": "critical", "task_name": "s1"},
-        {"severity": "info", "task_name": "s1"},
-        {"severity": "warning", "task_name": "s2"},
-    ]
-    monkeypatch.setattr(alerts, "load_alerts", lambda **kwargs: all_alerts)
-    summary = alerts.get_alert_summary()
-    assert summary["by_severity"]["critical"] == 1
-    assert summary["by_severity"]["info"] == 1
-    assert summary["by_severity"]["warning"] == 1
-    assert summary["by_task"]["s1"] == 2
-    assert summary["by_task"]["s2"] == 1
 
 
 def test_time_based_filtering_edge_cases(tmp_path, monkeypatch):
@@ -352,8 +313,8 @@ def test_save_and_load_alert(tmp_path, monkeypatch):
     assert loaded and loaded[0]["message"] == "m"
 
 
-def test_alert_retention_and_summary(tmp_path, monkeypatch):
-    """Test pruning old alerts and verifying summary."""
+def test_alert_retention(tmp_path, monkeypatch):
+    """Pruning drops alerts older than max_days."""
     script_name = "test_script"
     log_dir = tmp_path / "logs"
     monkeypatch.setattr(alerts, "get_resolved_log_dir", lambda: str(log_dir))
@@ -375,9 +336,27 @@ def test_alert_retention_and_summary(tmp_path, monkeypatch):
     with open(alert_log) as f:
         lines = f.readlines()
     assert len(lines) == 1
-    # Test summary
-    monkeypatch.setattr(alerts, "load_alerts", lambda **kwargs: [new_alert])
-    summary = alerts.get_alert_summary()
-    assert summary["total"] == 1
-    assert summary["by_severity"]["critical"] == 1
-    assert summary["by_task"][script_name] == 1
+
+
+def test_prune_waits_for_a_concurrent_writer(tmp_path, monkeypatch):
+    """Pruning must not rewrite the log while another run holds the lock, or that run's alert is lost."""
+    import fcntl
+    import threading
+
+    monkeypatch.setattr(alerts, "get_resolved_log_dir", lambda: str(tmp_path))
+    now = alerts.format_timestamp(datetime.now())
+    alerts.save_alert("t", {"pattern": "a", "severity": "info", "timestamp": now})
+
+    lock_path = tmp_path / "t" / "alerts" / ".alerts.lock"
+    with open(lock_path, "w") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        pruner = threading.Thread(target=alerts.prune_alerts, args=("t",), kwargs={"max_days": 30})
+        pruner.start()
+        pruner.join(timeout=0.3)
+        assert pruner.is_alive()  # blocked on the lock
+        # The "other run" appends while holding the lock
+        with open(tmp_path / "t" / "alerts" / "alerts.jsonl", "a") as f:
+            f.write(json.dumps({"pattern": "b", "severity": "info", "timestamp": now}) + "\n")
+    pruner.join(timeout=5)
+
+    assert sorted(a["pattern"] for a in alerts.load_alerts("t")) == ["a", "b"]

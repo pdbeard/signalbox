@@ -575,7 +575,7 @@ class SignalboxTray:
                 for task_name, task_data in runtime_state["tasks"].items():
                     task_count += 1
                     last_status = task_data.get("last_status", "")
-                    last_run = task_data.get("last_run_time", None) or task_data.get("last_run", None)
+                    last_run = task_data.get("last_run")
                     last_run_ts = _parse_last_run_to_ts(last_run)
                     if last_status == "failed" and last_run_ts > ignore_before:
                         failed_count += 1

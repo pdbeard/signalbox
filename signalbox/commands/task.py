@@ -72,10 +72,6 @@ def task_list():
                         "source": file_name,
                     }
                 )
-            except KeyError as e:
-                click.echo(
-                    f"[CONFIG ERROR] Task entry missing required field: {e}. Offending task: {task_item}", err=True
-                )
             except Exception as e:
                 click.echo(
                     f"[CONFIG ERROR] Unexpected error in task config: {e}. Offending task: {task_item}", err=True
@@ -106,10 +102,11 @@ def task_run(name, run_all_tasks, quiet):
 
         results = []
         for task_item in config["tasks"]:
-            name = task_item["name"]
+            # run_task reports a nameless or malformed entry as a validation error
+            name = task_item.get("name") if isinstance(task_item, dict) else None
             error = ""
             try:
-                click.echo(f"Running {name}...")
+                click.echo(f"Running {name or '<unnamed>'}...")
                 success = run_task(name, config)
                 status = "success" if success else "failed"
             except SignalboxError as e:
@@ -120,7 +117,7 @@ def task_run(name, run_all_tasks, quiet):
                 error = str(e)
             results.append(
                 {
-                    "name": name,
+                    "name": name or "<unnamed>",
                     "status": status,
                     "log_file": _latest_log_name(name),
                     "error": error,

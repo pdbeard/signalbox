@@ -31,18 +31,27 @@ QUICK COMMANDS (shortcuts):
 \b
 Run 'signalbox COMMAND --help' for more information on a command.
 """)
-@click.option("--config", "-c", "config_path", default=None, help="Path to custom signalbox.yaml config file")
+@click.option(
+    "--config",
+    "-c",
+    "config_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to a signalbox.yaml inside a config/ directory (<home>/config/signalbox.yaml)",
+)
 @click.version_option(importlib.metadata.version("signalbox"), "--version", "-V", message="%(version)s")
 def cli(config_path):
     """Signalbox - Task execution control and monitoring."""
     if config_path:
-        # Config home is the directory that contains config/signalbox.yaml.
-        # If the given file lives in a directory named "config", use its
-        # parent so resolve_path("config/signalbox.yaml") finds the file.
-        config_dir = os.path.dirname(os.path.abspath(config_path))
-        if os.path.basename(config_dir) == "config":
-            config_dir = os.path.dirname(config_dir)
-        set_config_home(config_dir)
+        # The home is the directory containing config/signalbox.yaml; any other
+        # location would silently load a different file.
+        config_path = os.path.abspath(config_path)
+        config_dir = os.path.dirname(config_path)
+        if os.path.basename(config_dir) != "config" or os.path.basename(config_path) != "signalbox.yaml":
+            raise click.BadParameter(
+                f"expected <home>/config/signalbox.yaml, got {config_path}", param_hint="'--config'"
+            )
+        set_config_home(os.path.dirname(config_dir))
 
 
 # Command groups

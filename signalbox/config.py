@@ -42,6 +42,7 @@ class ConfigManager:
         self._config_home = config_home
         self._explicit_home = config_home is not None
         self._global_config = None
+        self._global_config_mtime = None
 
     def find_init_home(self):
         """Find the directory that `signalbox init` should create or reinitialize.
@@ -84,12 +85,8 @@ class ConfigManager:
         # 2. XDG_CONFIG_HOME
         xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
         if xdg_config_home:
-            xdg_path = os.path.expanduser(os.path.join(xdg_config_home, "signalbox"))
-            if os.path.isdir(xdg_path) and os.path.exists(os.path.join(xdg_path, "config/signalbox.yaml")):
-                self._config_home = xdg_path
-                return self._config_home
-            # If directory doesn't exist, still use as preferred location for init
-            self._config_home = xdg_path
+            # Used even if it doesn't exist yet: it is the preferred location for init
+            self._config_home = os.path.expanduser(os.path.join(xdg_config_home, "signalbox"))
             return self._config_home
 
         # 3. ~/.config/signalbox (if it exists with config)
@@ -116,14 +113,23 @@ class ConfigManager:
         return os.path.join(config_home, path)
 
     def load_global_config(self):
-        """Load global configuration settings from config/signalbox.yaml."""
-        if self._global_config is None:
-            config_file = self.resolve_path(CONFIG_FILE)
-            if os.path.exists(config_file):
+        """Load global configuration settings from config/signalbox.yaml.
+
+        Cached, but re-read when the file's mtime changes, so a long-running
+        process (the tray app) picks up edits made outside it.
+        """
+        config_file = self.resolve_path(CONFIG_FILE)
+        try:
+            mtime = os.path.getmtime(config_file)
+        except OSError:
+            mtime = None
+        if self._global_config is None or mtime != self._global_config_mtime:
+            if mtime is not None:
                 with open(config_file, "r") as f:
                     self._global_config = yaml.safe_load(f) or {}
             else:
                 self._global_config = {}
+            self._global_config_mtime = mtime
         return self._global_config
 
     def get_config_value(self, path, default=None):
@@ -159,9 +165,7 @@ class ConfigManager:
         for directory, kind, _ in self.config_sources():
             if not os.path.isdir(directory):
                 continue
-            items = load_yaml_files_from_dir(
-                directory, key=kind, track_sources=True, suppress_warnings=suppress_warnings
-            )
+            items = load_yaml_files_from_dir(directory, key=kind, suppress_warnings=suppress_warnings)
             for item in items:
                 name = item["data"].get("name") if isinstance(item["data"], dict) else None
                 if name:
@@ -170,27 +174,6 @@ class ConfigManager:
 
         # Note: runtime state merging should be handled in runtime.py
         return config
-
-    def _save_items(self, config, kind, directory_key, fallback):
-        """Write config[kind] back to the files they were loaded from (new items go to _new.yaml)."""
-        directory = self.resolve_path(self.get_config_value(directory_key, fallback))
-        if kind not in config or not os.path.isdir(directory):
-            return
-        sources = config.get("_task_sources" if kind == "tasks" else "_group_sources", {})
-        files_to_save = {}
-        for item in config[kind]:
-            source_file = sources.get(item.get("name"))
-            if not (source_file and os.path.exists(source_file)):
-                source_file = os.path.join(directory, "_new.yaml")
-            files_to_save.setdefault(source_file, []).append(item)
-        for filepath, items in files_to_save.items():
-            with open(filepath, "w") as f:
-                yaml.dump({kind: items}, f, default_flow_style=False, sort_keys=False)
-
-    def save_config(self, config):
-        """Save configuration back to original source files."""
-        self._save_items(config, "tasks", "paths.tasks_file", TASKS_FILE)
-        self._save_items(config, "groups", "paths.groups_file", GROUPS_FILE)
 
     def save_global_config_value(self, path, value):
         """Write a single value into signalbox.yaml using dot notation.
@@ -294,11 +277,6 @@ def load_config(suppress_warnings=False):
 def config_sources():
     """Return (directory, kind, is_catalog) for each enabled task/group directory."""
     return _default_config_manager.config_sources()
-
-
-def save_config(config):
-    """Save configuration back to original source files."""
-    return _default_config_manager.save_config(config)
 
 
 def set_config_home(config_home):

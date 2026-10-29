@@ -1,7 +1,10 @@
 # Alert management for signalbox
+import fcntl
 import os
 import re
 import json
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 import click
@@ -65,6 +68,21 @@ def check_alert_patterns(task_name, task_config, output):
     return triggered
 
 
+@contextmanager
+def _locked_alert_log(task_name):
+    """Yield the task's alerts.jsonl path while holding its exclusive lock.
+
+    The same task can run in two processes at once (e.g. two groups scheduled
+    for the same minute). Without the lock, prune_alerts' read-then-rewrite
+    could drop an alert another run appended in between.
+    """
+    alerts_dir = ensure_alerts_dir(task_name)
+    # Dotfile, so it never looks like alert data
+    with open(os.path.join(alerts_dir, ".alerts.lock"), "w") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        yield os.path.join(alerts_dir, "alerts.jsonl")
+
+
 def save_alert(task_name, alert_data):
     """Save an alert record to the alerts log.
 
@@ -72,12 +90,9 @@ def save_alert(task_name, alert_data):
         task_name: Name of the task that triggered the alert
         alert_data: Dict with alert information (message, severity, timestamp, etc.)
     """
-    alerts_dir = ensure_alerts_dir(task_name)
-    alert_log = os.path.join(alerts_dir, "alerts.jsonl")
-
-    # Append alert as JSON line
-    with open(alert_log, "a") as f:
-        f.write(json.dumps(alert_data) + "\n")
+    with _locked_alert_log(task_name) as alert_log:
+        with open(alert_log, "a") as f:
+            f.write(json.dumps(alert_data) + "\n")
 
 
 def notified_within(task_name, pattern, minutes):
@@ -159,12 +174,15 @@ def prune_alerts(task_name, max_days=None, max_entries=None, per_severity=None):
         max_entries: Keep at most N alerts
         per_severity: Dict of severity -> max_days overrides
     """
-    alerts_dir = get_alerts_dir(task_name)
-    alert_log = os.path.join(alerts_dir, "alerts.jsonl")
-
-    if not os.path.exists(alert_log):
+    if not os.path.exists(os.path.join(get_alerts_dir(task_name), "alerts.jsonl")):
         return
 
+    with _locked_alert_log(task_name) as alert_log:
+        _prune_alert_log(alert_log, max_days, max_entries, per_severity)
+
+
+def _prune_alert_log(alert_log, max_days, max_entries, per_severity):
+    """Rewrite alert_log keeping only alerts within the retention policy (caller holds the lock)."""
     # Load all alerts
     alerts = []
     with open(alert_log, "r") as f:
@@ -207,27 +225,16 @@ def prune_alerts(task_name, max_days=None, max_entries=None, per_severity=None):
         kept_alerts.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         kept_alerts = kept_alerts[:max_entries]
 
-    # Rewrite alert log with kept alerts
-    with open(alert_log, "w") as f:
-        for alert in kept_alerts:
-            f.write(json.dumps(alert) + "\n")
-
-
-def get_alert_summary():
-    """Get a summary of all alerts across all tasks.
-
-    Returns:
-        dict: Summary with total count, counts by severity, etc.
-    """
-    alerts = load_alerts()
-
-    summary = {"total": len(alerts), "by_severity": {}, "by_task": {}}
-
-    for alert in alerts:
-        severity = alert.get("severity", "info")
-        task = alert.get("task_name", "unknown")
-
-        summary["by_severity"][severity] = summary["by_severity"].get(severity, 0) + 1
-        summary["by_task"][task] = summary["by_task"].get(task, 0) + 1
-
-    return summary
+    # Write to a temp file and rename, so readers never see a half-written log
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(alert_log), prefix=".alerts_", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            for alert in kept_alerts:
+                f.write(json.dumps(alert) + "\n")
+        os.replace(tmp_path, alert_log)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise

@@ -4,7 +4,7 @@ Helper utilities for signalbox to reduce code duplication.
 
 import os
 import re
-from typing import Dict, Optional, Callable
+from typing import Dict
 
 import click
 import yaml
@@ -16,49 +16,15 @@ from .exceptions import ConfigurationError
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
 
-def load_yaml_files_from_dir(
-    directory: str,
-    key: str,
-    filter_func: Optional[Callable[[str], bool]] = None,
-    filename_prefix: str = "",
-    filename_suffix: tuple = (".yaml", ".yml"),
-    track_sources: bool = False,
-    suppress_warnings: bool = False,
-) -> list:
+def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool = False) -> list:
     """
-    Load and merge YAML files from a directory.
+    Load the `key` entries from every YAML file in a directory, in filename order.
 
-    This is a generic helper to reduce duplication across config loading
-    patterns in config.py and runtime.py.
-
-    Args:
-        directory: Path to directory containing YAML files
-        key: Key to extract from each YAML file (e.g., 'tasks', 'groups')
-        filter_func: Optional function to filter filenames (returns True to include)
-        filename_prefix: Only process files starting with this prefix
-        filename_suffix: Tuple of file extensions to process (default: .yaml, .yml)
-        track_sources: If True, return dicts with 'data' and 'source' keys
+    Hidden files (editor swap files, .DS_Store, etc.) are skipped. A file that
+    fails to load is reported as a warning and skipped.
 
     Returns:
-        List of items extracted from all matching YAML files.
-        If track_sources=True, returns list of dicts: [{"data": item, "source": filepath}, ...]
-        If track_sources=False, returns flat list of items: [item1, item2, ...]
-
-    Example:
-        # Load all tasks from config/tasks directory (flat list)
-        tasks = load_yaml_files_from_dir(
-            "config/tasks",
-            "tasks",
-            filter_func=lambda f: not f.startswith(".")
-        )
-
-        # Load tasks with source tracking
-        tasks = load_yaml_files_from_dir(
-            "config/tasks",
-            "tasks",
-            track_sources=True
-        )
-        # Returns: [{"data": {...}, "source": "path/to/file.yaml"}, ...]
+        List of dicts: [{"data": item, "source": filepath}, ...]
     """
     # Allow global suppression via env var
     if os.environ.get("SIGNALBOX_SUPPRESS_CONFIG_WARNINGS", "0") == "1":
@@ -70,35 +36,16 @@ def load_yaml_files_from_dir(
         return items
 
     for filename in sorted(os.listdir(directory)):
+        if filename.startswith(".") or not filename.endswith((".yaml", ".yml")):
+            continue
         filepath = os.path.join(directory, filename)
-        # Skip hidden files (editor swap files, .DS_Store, etc.)
-        if filename.startswith("."):
-            continue
-
-        # Skip files in build/ directory
-        if "build" in filepath.split(os.sep):
-            continue
-
-        # Apply filters
-        if filename_prefix and not filename.startswith(filename_prefix):
-            continue
-
-        if not filename.endswith(filename_suffix):
-            continue
-
-        if filter_func and not filter_func(filename):
-            continue
 
         try:
             with open(filepath, "r") as f:
                 data = yaml.safe_load(f)
                 if data and key in data:
                     items_from_file = data[key] if isinstance(data[key], list) else [data[key]]
-                    if track_sources:
-                        for item in items_from_file:
-                            items.append({"data": item, "source": filepath})
-                    else:
-                        items.extend(items_from_file)
+                    items.extend({"data": item, "source": filepath} for item in items_from_file)
         except Exception as e:
             if not suppress_warnings:
                 click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
@@ -106,36 +53,20 @@ def load_yaml_files_from_dir(
     return items
 
 
-def load_yaml_dict_from_dir(
-    directory: str,
-    key: str,
-    filter_func: Optional[Callable[[str], bool]] = None,
-    filename_prefix: str = "",
-    filename_suffix: str = (".yaml", ".yml"),
-) -> Dict:
+def load_yaml_dict_from_dir(directory: str, key: str, filename_prefix: str = "") -> Dict:
     """
-    Load and merge YAML files from a directory into a dictionary.
+    Load and merge the `key` mappings from YAML files in a directory.
 
     Similar to load_yaml_files_from_dir but merges dictionaries instead
-    of extending lists. Useful for runtime state loading.
+    of extending lists. Used for runtime state loading.
 
     Args:
         directory: Path to directory containing YAML files
         key: Key to extract from each YAML file (e.g., 'tasks', 'groups')
-        filter_func: Optional function to filter filenames
         filename_prefix: Only process files starting with this prefix
-        filename_suffix: Tuple of file extensions to process
 
     Returns:
         Merged dictionary from all matching YAML files
-
-    Example:
-        # Load runtime state
-        runtime_tasks = load_yaml_dict_from_dir(
-            "runtime/tasks",
-            "tasks",
-            filename_prefix="runtime_"
-        )
     """
     merged_dict = {}
 
@@ -147,14 +78,10 @@ def load_yaml_dict_from_dir(
         if filename.startswith("."):
             continue
 
-        # Apply filters
         if filename_prefix and not filename.startswith(filename_prefix):
             continue
 
-        if not filename.endswith(filename_suffix):
-            continue
-
-        if filter_func and not filter_func(filename):
+        if not filename.endswith((".yaml", ".yml")):
             continue
 
         filepath = os.path.join(directory, filename)

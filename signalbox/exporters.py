@@ -69,15 +69,6 @@ def get_schedule_string(group):
     return schedule or ""
 
 
-def get_python_executable():
-    """Determine the Python executable to use for exported tasks.
-
-    Returns:
-            str: Path to Python executable
-    """
-    return sys.executable
-
-
 def get_signalbox_command():
     """Determine the absolute command used to invoke signalbox from cron/systemd.
 
@@ -93,7 +84,7 @@ def get_signalbox_command():
         return shlex.quote(os.path.abspath(signalbox_cmd))
 
     # Not on PATH (e.g. running from a source checkout): run the package module
-    return f"{shlex.quote(get_python_executable())} -m signalbox"
+    return f"{shlex.quote(sys.executable)} -m signalbox"
 
 
 def get_task_dir():
@@ -214,7 +205,7 @@ def cron_to_oncalendar(cron_schedule):
 
 
 def _unit_description(group, group_name):
-    """Single-line description for a unit file (a newline would start a new directive)."""
+    """Single-line description for a unit or cron file (a newline would start a new directive or cron line)."""
     return " ".join(str(group.get("description", group_name)).split())
 
 
@@ -405,7 +396,7 @@ def export_cron(group, group_name):
 
     # Write to file
     with open(cron_file, "w") as f:
-        f.write(f"# {group.get('description', group_name)}\n")
+        f.write(f"# {_unit_description(group, group_name)}\n")
         f.write(f"{cron_entry}\n")
 
     result = ExportResult(success=True, files=[cron_file])
@@ -422,7 +413,7 @@ def get_cron_install_instructions(cron_file, cron_entry, group):
     """
     return [
         "Crontab entry:",
-        f"# {group.get('description', '')}",
+        f"# {_unit_description(group, '')}",
         cron_entry,
         "",
         "To install:",

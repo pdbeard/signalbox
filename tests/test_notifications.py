@@ -73,6 +73,8 @@ def test_send_macos_notification_failure(monkeypatch):
 
 
 def test_send_linux_notification_success(monkeypatch):
+    monkeypatch.setattr(notifications.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+
     def fake_run(cmd, **kwargs):
         class Result:
             returncode = 0
@@ -86,23 +88,18 @@ def test_send_linux_notification_success(monkeypatch):
 
 def test_send_linux_notification_no_notify_send(monkeypatch):
     calls = []
-
-    def fake_run(cmd, **kwargs):
-        class Result:
-            returncode = 1 if "which" in cmd else 0
-            stderr = "fail"
-
-        calls.append(cmd)
-        return Result()
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(notifications.shutil, "which", lambda cmd: None)
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kwargs: calls.append(cmd))
     assert notifications._send_linux_notification("t", "m") is False
+    assert calls == []
 
 
 def test_send_linux_notification_fail_notify_send(monkeypatch):
+    monkeypatch.setattr(notifications.shutil, "which", lambda cmd: "/usr/bin/" + cmd)
+
     def fake_run(cmd, **kwargs):
         class Result:
-            returncode = 0 if "which" in cmd else 1
+            returncode = 1
             stderr = "fail"
 
         return Result()

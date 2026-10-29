@@ -222,7 +222,7 @@ def log_tail_cmd(name, follow, lines):
         click.echo(f"Following log: {log_path}")
         click.echo("─" * 50)
 
-        f = open(log_path, "r")
+        f = open(log_path, "r", encoding="utf-8", errors="replace")
         try:
             for line in deque(f, maxlen=lines):
                 click.echo(line, nl=False)
@@ -236,7 +236,7 @@ def log_tail_cmd(name, follow, lines):
                 if newest and newest != log_path:
                     f.close()
                     log_path = newest
-                    f = open(log_path, "r")
+                    f = open(log_path, "r", encoding="utf-8", errors="replace")
                     click.echo(f"\n── New run: {os.path.basename(log_path)} ──")
                     continue
                 time.sleep(0.5)

@@ -13,27 +13,15 @@ def test_load_yaml_files_from_dir(tmp_path):
     f1.write_text("tasks:\n- name: t1")
     f2.write_text("tasks:\n- name: t2")
     items = helpers.load_yaml_files_from_dir(str(d), "tasks")
-    assert any(i["name"] == "t1" for i in items)
-    assert any(i["name"] == "t2" for i in items)
+    assert [(i["data"]["name"], os.path.basename(i["source"])) for i in items] == [("t1", "a.yaml"), ("t2", "b.yaml")]
 
 
-def test_load_yaml_files_from_dir_track_sources(tmp_path):
-    d = tmp_path / "yamls"
-    d.mkdir()
-    f1 = d / "a.yaml"
-    f1.write_text("tasks:\n- name: t1")
-    items = helpers.load_yaml_files_from_dir(str(d), "tasks", track_sources=True)
-    assert isinstance(items[0], dict) and "data" in items[0] and "source" in items[0]
-
-
-def test_load_yaml_files_from_dir_filter(tmp_path):
-    d = tmp_path / "yamls"
-    d.mkdir()
+def test_load_yaml_files_from_dir_under_build_directory(tmp_path):
+    """A config home inside a directory named 'build' must still load."""
+    d = tmp_path / "build" / "config" / "tasks"
+    d.mkdir(parents=True)
     (d / "a.yaml").write_text("tasks:\n- name: t1")
-    (d / "b.yaml").write_text("tasks:\n- name: t2")
-    items = helpers.load_yaml_files_from_dir(str(d), "tasks", filter_func=lambda f: f == "a.yaml")
-    assert any(i["name"] == "t1" for i in items)
-    assert not any(i["name"] == "t2" for i in items)
+    assert [i["data"]["name"] for i in helpers.load_yaml_files_from_dir(str(d), "tasks")] == ["t1"]
 
 
 def test_format_timestamp():

@@ -8,6 +8,7 @@ Falls back gracefully if notification systems are unavailable.
 import logging
 import os
 import platform
+import shutil
 import subprocess
 
 logger = logging.getLogger(__name__)
@@ -74,10 +75,7 @@ def _notification_env():
 
 def _send_linux_notification(title, message, urgency="normal"):
     """Send notification on Linux using notify-send."""
-    # Check if notify-send is available
-    result = subprocess.run(["which", "notify-send"], capture_output=True, text=True)
-
-    if result.returncode != 0:
+    if not shutil.which("notify-send"):
         logger.warning("notify-send not found. Install libnotify-bin or notification-daemon.")
         return False
 

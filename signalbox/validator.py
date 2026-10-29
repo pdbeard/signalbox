@@ -74,6 +74,16 @@ def validate_task_for_run(task):
     if "cwd" in task and not isinstance(task["cwd"], str):
         errors.append(f"{label} 'cwd' must be a path string")
 
+    # Alerts are checked after the command has run, so a malformed list would
+    # fail every run after its side effects, without saving state or rotating logs.
+    if "alerts" in task:
+        if not isinstance(task["alerts"], list):
+            errors.append(f"{label} alerts field must be a list")
+        else:
+            for idx, alert in enumerate(task["alerts"], start=1):
+                if not isinstance(alert, dict):
+                    errors.append(f"{label} alert #{idx} must be a dict")
+
     return errors
 
 
@@ -108,14 +118,10 @@ def validate_task(task):
     if "log_limit" in task:
         errors.extend(validate_log_limit(task["log_limit"], label))
 
-    if "alerts" in task:
-        alerts_list = task["alerts"]
-        if not isinstance(alerts_list, list):
-            errors.append(f"{label} alerts field must be a list")
-            alerts_list = []
+    alerts_list = task.get("alerts")
+    if isinstance(alerts_list, list):
         for idx, alert in enumerate(alerts_list, start=1):
             if not isinstance(alert, dict):
-                errors.append(f"{label} alert #{idx} must be a dict")
                 continue
             for field in ("pattern", "message"):
                 if field not in alert:

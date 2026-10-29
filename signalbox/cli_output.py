@@ -1,6 +1,7 @@
 # Rich-based terminal output for signalbox CLI commands
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 STATUS_COLOURS = {
@@ -20,7 +21,7 @@ def status_colour(status):
 def status_markup(status):
     """Return a status string wrapped in its rich colour markup."""
     colour = status_colour(status)
-    return f"[{colour}]{status}[/{colour}]"
+    return f"[{colour}]{escape(str(status))}[/{colour}]"
 
 
 def get_schedule_display(schedule):
@@ -33,6 +34,15 @@ def get_schedule_display(schedule):
     if isinstance(schedule, dict):
         return schedule.get("cron", "")
     return schedule or ""
+
+
+def _text(value):
+    """Escape config or task-output text so Rich shows it as-is.
+
+    Rich reads '[word]' as a style tag: output like '[/mnt/backup]' would raise
+    MarkupError, and '[red]x[/red]' would be silently restyled.
+    """
+    return escape(str(value))
 
 
 def _table(*columns, **kwargs):
@@ -56,7 +66,13 @@ def print_task_list_table(task_rows):
         ("SOURCE", {"style": "dim", "overflow": "fold"}),
     )
     for row in task_rows:
-        table.add_row(row["name"], status_markup(row["status"]), row["last_run"], row["description"], row["source"])
+        table.add_row(
+            _text(row["name"]),
+            status_markup(row["status"]),
+            _text(row["last_run"]),
+            _text(row["description"]),
+            _text(row["source"]),
+        )
     Console().print(table)
 
 
@@ -72,7 +88,9 @@ def print_run_table(results):
         ("ERROR", {"style": "red", "overflow": "fold"}),
     )
     for row in results:
-        table.add_row(row["name"], status_markup(row["status"]), row["log_file"], row["error"] or "")
+        table.add_row(
+            _text(row["name"]), status_markup(row["status"]), _text(row["log_file"]), _text(row["error"] or "")
+        )
     Console().print(table)
 
 
@@ -97,7 +115,13 @@ def print_group_list_table(group_rows):
             tasks = ", ".join(str(t) for t in tasks_list if isinstance(t, (str, int, float)))
         else:
             tasks = str(tasks_list) if tasks_list else ""
-        table.add_row(row["name"], row["description"], get_schedule_display(row["schedule"]), execution, tasks)
+        table.add_row(
+            _text(row["name"]),
+            _text(row["description"]),
+            _text(get_schedule_display(row["schedule"])),
+            _text(execution),
+            _text(tasks),
+        )
     Console().print(table)
 
 
@@ -114,7 +138,13 @@ def print_schedule_list_table(schedule_rows):
         ("TASK NAMES", {"overflow": "fold"}),
     )
     for row in schedule_rows:
-        table.add_row(row["group"], row["schedule"], row["description"], str(row["task_count"]), row["tasks"])
+        table.add_row(
+            _text(row["group"]),
+            _text(row["schedule"]),
+            _text(row["description"]),
+            str(row["task_count"]),
+            _text(row["tasks"]),
+        )
     Console().print(table)
 
 
@@ -131,7 +161,9 @@ def print_log_list_table(log_rows):
         box=box.SIMPLE_HEAD,
     )
     for row in log_rows:
-        table.add_row(row["task"], status_markup(row["status"]), row["timestamp"], row.get("preview", ""))
+        table.add_row(
+            _text(row["task"]), status_markup(row["status"]), _text(row["timestamp"]), _text(row.get("preview", ""))
+        )
     Console().print(table)
 
 
@@ -147,19 +179,21 @@ def print_log_list_verbose(log_rows, max_lines=20):
         icon = "✓" if colour == "green" else "✗"
 
         console.print(
-            f"[bold]{icon} {row['task']}[/bold]  " f"[{colour}]{status}[/{colour}]  " f"[dim]{row['timestamp']}[/dim]"
+            f"[bold]{icon} {_text(row['task'])}[/bold]  "
+            f"[{colour}]{_text(status)}[/{colour}]  "
+            f"[dim]{_text(row['timestamp'])}[/dim]"
         )
 
         output = row.get("stdout", "").strip() or row.get("stderr", "").strip()
         if output:
             lines = output.splitlines()
             for line in lines[:max_lines]:
-                console.print(f"  [dim]{line}[/dim]")
+                console.print(f"  [dim]{_text(line)}[/dim]")
             remaining = len(lines) - max_lines
             if remaining > 0:
                 console.print(
                     f"  [dim italic]… {remaining} more line(s) — "
-                    f"run 'signalbox log show {row['task']}' to see all[/dim italic]"
+                    f"run 'signalbox log show {_text(row['task'])}' to see all[/dim italic]"
                 )
         else:
             console.print("  [dim italic](no output)[/dim italic]")

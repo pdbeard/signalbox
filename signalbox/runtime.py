@@ -107,11 +107,6 @@ def merge_config_with_runtime_state(config, runtime_state):
         else:
             task["last_run"] = ""
             task["last_status"] = "no logs"
-    for group in config["groups"]:
-        group_name = group["name"]
-        if group_name in runtime_state["groups"]:
-            runtime_info = runtime_state["groups"][group_name]
-            # Add any group-level runtime state here in the future
     return config
 
 

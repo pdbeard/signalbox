@@ -311,7 +311,7 @@ def get_latest_log(task_name):
 
 def read_log_content(log_path):
     """Read the content of a log file."""
-    with open(log_path, "r") as f:
+    with open(log_path, "r", encoding=_LOG_ENCODING, errors=_LOG_ERRORS) as f:
         return f.read()
 
 
@@ -518,7 +518,7 @@ def parse_log_metadata(log_path):
         return metadata
 
     try:
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding=_LOG_ENCODING, errors=_LOG_ERRORS) as f:
             content = f.read()
 
         for line in content.split("\n"):

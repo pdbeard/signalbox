@@ -29,11 +29,6 @@ def test_validate_group_for_export_no_schedule():
     assert "no schedule" in error
 
 
-def test_get_python_executable():
-    exe = exporters.get_python_executable()
-    assert exe.endswith("python") or "python" in exe
-
-
 def test_get_signalbox_command_dev(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: None)
     cmd = exporters.get_signalbox_command()

@@ -182,6 +182,18 @@ class TestLoadGlobalConfig:
         # Should be the exact same object (cached)
         assert config1 is config2
 
+    def test_edited_file_is_reloaded(self, full_config):
+        """A long-running process (the tray) sees edits made outside it."""
+        manager = ConfigManager(config_home=full_config)
+        config_file = Path(full_config) / "config" / "signalbox.yaml"
+        assert manager.get_config_value("tray.poll_interval") != 5
+
+        config_file.write_text("tray:\n  poll_interval: 5\n")
+        later = os.path.getmtime(config_file) + 10
+        os.utime(config_file, (later, later))
+
+        assert manager.get_config_value("tray.poll_interval") == 5
+
     def test_reset_clears_cache(self, full_config):
         """Test that reset clears the cached config."""
         manager = ConfigManager(config_home=full_config)
@@ -403,44 +415,6 @@ class TestLoadConfig:
         assert script_names == ["a_first", "m_middle", "z_last"]
 
 
-class TestSaveConfig:
-    """Test saving configuration back to files."""
-
-    def test_save_preserves_source_files(self, full_config):
-        """Test that scripts can be saved (implementation may vary)."""
-        manager = ConfigManager(config_home=full_config)
-
-        config = manager.load_config()
-
-        # Modify a script
-        for script in config["tasks"]:
-            if script["name"] == "hello":
-                script["description"] = "Modified description"
-                break
-
-        # Note: save_config implementation may vary
-        # This test just verifies it doesn't crash
-        try:
-            manager.save_config(config)
-        except Exception as e:
-            pytest.skip(f"Save functionality not fully implemented: {e}")
-
-    def test_save_creates_new_file_for_new_scripts(self, full_config):
-        """Test that new scripts are saved to _new.yaml."""
-        manager = ConfigManager(config_home=full_config)
-
-        config = manager.load_config()
-
-        # Add a new script without source
-        config["tasks"].append({"name": "brand_new", "command": "echo new", "description": "New script"})
-
-        manager.save_config(config)
-
-        # Check that _new.yaml was created
-        new_file = Path(full_config) / "config" / "tasks" / "_new.yaml"
-        assert new_file.exists()
-
-
 class TestModuleFunctions:
     """Test module-level convenience functions."""
 
@@ -490,31 +464,6 @@ class TestConfigIntegration:
         # Verify content
         assert len(full_config_data["tasks"]) > 0
         assert len(full_config_data["groups"]) > 0
-
-    def test_modify_and_save_cycle(self, full_config):
-        """Test modifying and saving configuration."""
-        manager = ConfigManager(config_home=full_config)
-
-        # Load
-        config = manager.load_config()
-        original_count = len(config["tasks"])
-
-        # Modify
-        if original_count > 0:
-            config["tasks"][0]["description"] = "Test modification"
-
-        # Save (may or may not be fully implemented)
-        try:
-            manager.save_config(config)
-
-            # Reload
-            manager.reset()
-            new_config = manager.load_config()
-
-            # Just verify it loads without error
-            assert isinstance(new_config["tasks"], list)
-        except Exception:
-            pytest.skip("Save/reload cycle not fully implemented")
 
     def test_multiple_managers_independent(self, temp_dir):
         """Test that multiple ConfigManager instances are independent."""

@@ -78,6 +78,14 @@ class TestTaskRun:
         log = sb_home.logs("binout")[0].read_bytes().decode("utf-8")
         assert "ok � done" in log
 
+    def test_run_all_continues_past_a_nameless_task(self, sb_home, run):
+        sb_home.write_tasks([{"description": "no name", "command": "echo x"}, task("after")])
+
+        result = run("task", "run", "--all")
+
+        assert result.exit_code == 1
+        assert runtime(sb_home, "tasks")["after"]["last_status"] == "success"
+
     def test_invalid_task_is_rejected_before_running(self, sb_home, run):
         sb_home.write_tasks([{"name": "nocmd", "description": "missing command"}])
 
@@ -206,6 +214,15 @@ class TestExport:
         assert f"SIGNALBOX_HOME={sb_home.path}" in service
         assert "OnCalendar=Mon..Fri *-*-* *:0/10:00" in (unit_dir / "signalbox-g.timer").read_text()
 
+    def test_cron_export_keeps_multiline_description_commented(self, sb_home, run):
+        sb_home.write_tasks([task("a")])
+        sb_home.write_groups([{"name": "g", "description": "line one\nline two", "tasks": ["a"], "schedule": "@daily"}])
+
+        assert run("export-cron", "g").exit_code == 0
+        lines = (sb_home.path / "cron" / "g" / "g.cron").read_text().splitlines()
+        assert lines[0] == "# line one line two"
+        assert len(lines) == 2
+
     def test_export_failure_exits_1(self, sb_home, run):
         sb_home.write_tasks([task("a")])
         sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["a"]}])
@@ -215,6 +232,17 @@ class TestExport:
 
 
 class TestLogs:
+    def test_bracketed_output_is_shown_literally(self, sb_home, run):
+        """Rich must not read task output or descriptions as markup ('[/x]' used to crash log list)."""
+        sb_home.write_tasks([task("cp", "echo synced to [/mnt/backup]", description="copy [red]files[/red]")])
+        run("task", "run", "cp", "-q")
+
+        for args in (("log", "list"), ("log", "list", "-v")):
+            result = run(*args)
+            assert result.exit_code == 0, result.output
+            assert "[/mnt/backup]" in result.output
+        assert "copy [red]files[/red]" in run("list").output
+
     def test_clear_all_asks_first(self, sb_home, run):
         sb_home.write_tasks([task("a")])
         run("task", "run", "a", "-q")
@@ -316,6 +344,16 @@ class TestRunTimeValidation:
         assert "ran" in result.output
         assert run("validate").exit_code == 2  # still reported by validate
 
+    def test_alerts_mapping_is_rejected_before_running(self, sb_home, run):
+        # 'alerts:' written as a mapping instead of a list (missing '-')
+        sb_home.write_tasks([task("a", "touch ran", alerts={"pattern": "x", "message": "m"})])
+
+        result = run("task", "run", "a")
+
+        assert result.exit_code == 2
+        assert "alerts field must be a list" in result.output
+        assert not (sb_home.path / "ran").exists()
+
     def test_bad_alert_pattern_does_not_block_run(self, sb_home, run):
         sb_home.write_tasks([task("a", "echo ok", alerts=[{"pattern": "[bad", "message": "m"}])])
 
@@ -344,6 +382,45 @@ class TestLogRotation:
 
         assert result.exit_code == 2
         assert "log_limit type must be one of count, age, size" in result.output
+
+
+class TestConfigOption:
+    def test_config_file_selects_its_home(self, sb_home, run, tmp_path, monkeypatch):
+        monkeypatch.setenv("SIGNALBOX_HOME", str(tmp_path / "elsewhere"))
+        sb_home.write_tasks([task("a")])
+
+        result = run("--config", str(sb_home.config_dir / "signalbox.yaml"), "run", "a")
+
+        assert result.exit_code == 0, result.output
+
+    def test_config_file_outside_config_dir_is_rejected(self, sb_home, run, tmp_path):
+        custom = tmp_path / "custom.yaml"
+        custom.write_text("execution:\n  default_timeout: 77\n")
+
+        result = run("--config", str(custom), "config", "show")
+
+        assert result.exit_code == 2
+        assert "expected <home>/config/signalbox.yaml" in result.output
+
+
+class TestAlertRetention:
+    def test_default_keeps_critical_alerts_for_90_days(self, sb_home, run):
+        """Without an alerts.retention section the shipped per-severity defaults apply."""
+        from datetime import datetime, timedelta
+        import json
+
+        from signalbox.helpers import format_timestamp
+
+        sb_home.write_tasks([task("a")])
+        alerts_dir = sb_home.path / "logs" / "a" / "alerts"
+        alerts_dir.mkdir(parents=True)
+        old = format_timestamp(datetime.now() - timedelta(days=60))
+        (alerts_dir / "alerts.jsonl").write_text(
+            json.dumps({"pattern": "p", "severity": "critical", "timestamp": old}) + "\n"
+        )
+
+        assert run("task", "run", "a").exit_code == 0
+        assert old in (alerts_dir / "alerts.jsonl").read_text()
 
 
 class TestAlertCooldown:
