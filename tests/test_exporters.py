@@ -64,6 +64,11 @@ def test_get_task_dir_uses_config_home(monkeypatch, tmp_path):
         ("0 0 1 */3 *", "*-1/3-1 0:0:00"),
         ("15,45 * * * 0,6", "Sun,Sat *-*-* *:15,45:00"),
         ("0 8 * * mon", "Mon *-*-* 8:0:00"),
+        # systemd's week starts on Monday and rejects ranges like Sun..Tue.
+        ("0 0 * * 0-2", "Mon..Tue,Sun *-*-* 0:0:00"),
+        ("0 0 * * sun-tue", "Mon..Tue,Sun *-*-* 0:0:00"),
+        ("0 0 * * 5-7", "Fri..Sun *-*-* 0:0:00"),
+        ("0 0 * * 0-7", "Mon..Sun *-*-* 0:0:00"),
         ("@daily", "daily"),
         ("@hourly", "hourly"),
     ],
@@ -72,7 +77,7 @@ def test_cron_to_oncalendar(cron, expected):
     assert exporters.cron_to_oncalendar(cron) == expected
 
 
-@pytest.mark.parametrize("cron", ["* * *", "0 0 1 * 1", "0 0 * jan *", "0 1-5/2 * * *", "0 0 * * */2"])
+@pytest.mark.parametrize("cron", ["* * *", "0 0 1 * 1", "0 0 * jan *", "0 1-5/2 * * *", "0 0 * * */2", "0 0 * * 6-0"])
 def test_cron_to_oncalendar_unsupported(cron):
     with pytest.raises(ValueError):
         exporters.cron_to_oncalendar(cron)

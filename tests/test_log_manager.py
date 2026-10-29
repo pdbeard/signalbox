@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 
 
 def test_rotate_by_count(tmp_path):
@@ -164,9 +165,61 @@ def test_write_execution_log(tmp_path, monkeypatch):
     assert "echo 1" in content and "output" in content
 
 
-import pytest
+class TestLogSizeBudget:
+    """The size cap must bound the whole file, not each stream separately."""
 
+    @staticmethod
+    def _write(tmp_path, command, stdout, stderr, mb):
+        settings = {
+            "logging.max_file_size_mb": mb,
+            "logging.include_command": True,
+            "logging.include_return_code": True,
+            "execution.capture_stdout": True,
+            "execution.capture_stderr": True,
+        }
+        log_file = tmp_path / "out.log"
+        with patch.object(log_manager, "get_config_value", lambda p, d=None: settings.get(p, d)):
+            log_manager.write_execution_log(str(log_file), command, 0, stdout, stderr)
+        return log_file
 
-@pytest.mark.skip(reason="Cannot reliably trigger truncation logic without changing implementation.")
-def test_write_execution_log_truncate(tmp_path, monkeypatch):
-    pass
+    @pytest.mark.parametrize(
+        "command,stdout,stderr",
+        [
+            ("cmd", "x" * 5_000_000, "y" * 5_000_000),  # both streams oversized
+            ("c" * 2_000_000, "out", "err"),  # command alone exceeds the cap
+            ("cmd", "x" * 3_000_000, ""),  # stdout only
+            ("cmd", "", "e" * 3_000_000),  # stderr only
+        ],
+    )
+    def test_file_never_exceeds_configured_cap(self, tmp_path, command, stdout, stderr):
+        log_file = self._write(tmp_path, command, stdout, stderr, mb=1)
+        assert log_file.stat().st_size <= 1 * 1024 * 1024
+
+    def test_oversized_command_still_keeps_output(self, tmp_path):
+        """A huge command must not silently discard the task's actual output."""
+        log_file = self._write(tmp_path, "c" * 2_000_000, "IMPORTANT-OUTPUT", "", mb=1)
+        assert "IMPORTANT-OUTPUT" in log_file.read_text()
+
+    def test_truncation_is_marked(self, tmp_path):
+        """Truncated output says so, so a partial log is never mistaken for a full one."""
+        log_file = self._write(tmp_path, "cmd", "x" * 5_000_000, "y" * 5_000_000, mb=1)
+        content = log_file.read_text()
+        assert "STDOUT TRUNCATED" in content
+        assert "STDERR TRUNCATED" in content
+
+    def test_small_output_is_untouched(self, tmp_path):
+        """Output well within the cap is written verbatim."""
+        log_file = self._write(tmp_path, "echo hi", "hello\n", "", mb=5)
+        content = log_file.read_text()
+        assert "hello" in content
+        assert "TRUNCATED" not in content
+
+    @pytest.mark.parametrize("cap_bytes", [300, 400, 600, 1000])
+    def test_tiny_cap_is_bounded_and_marked(self, tmp_path, cap_bytes):
+        """Even when there is no room for head and tail, truncation is flagged."""
+        log_file = self._write(tmp_path, "c" * 500, "x" * 5000, "y" * 5000, mb=cap_bytes / (1024 * 1024))
+        content = log_file.read_text()
+        assert log_file.stat().st_size <= cap_bytes
+        for label, original in (("STDOUT", "x" * 5000), ("STDERR", "y" * 5000)):
+            if original not in content:
+                assert f"{label} TRUNCATED" in content or f"{label} OMITTED" in content

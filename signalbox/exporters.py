@@ -19,6 +19,8 @@ CRON_MACROS = {
     "@annually": "yearly",
 }
 WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+# systemd orders the week Monday first.
+SYSTEMD_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 class ExportResult:
@@ -146,13 +148,33 @@ def _convert_cron_weekday(value):
             return day[:3].capitalize()
         raise ValueError(f"unsupported day-of-week field '{value}'")
 
+    def cron_number(day):
+        # Validate via name(); digits keep their value so 7 sorts after Saturday.
+        return int(day) if day.isdigit() else WEEKDAYS.index(name(day))
+
     parts = []
     for item in value.split(","):
         if "/" in item:
             raise ValueError(f"unsupported day-of-week field '{value}'")
         if "-" in item:
-            low, high = item.split("-", 1)
-            parts.append(f"{name(low)}..{name(high)}")
+            low, high = (cron_number(day) for day in item.split("-", 1))
+            if low > high:
+                raise ValueError(f"unsupported day-of-week field '{value}'")
+            # cron's week starts on Sunday but systemd's starts on Monday, and
+            # systemd rejects a range like Sun..Tue. Expand the range in
+            # systemd's order and re-join consecutive days ('0-7' is every day).
+            days = sorted({SYSTEMD_WEEK.index(WEEKDAYS[day]) for day in range(low, high + 1)})
+            runs = []
+            for day in days:
+                if runs and day == runs[-1][1] + 1:
+                    runs[-1][1] = day
+                else:
+                    runs.append([day, day])
+            for first, last in runs:
+                if first == last:
+                    parts.append(SYSTEMD_WEEK[first])
+                else:
+                    parts.append(f"{SYSTEMD_WEEK[first]}..{SYSTEMD_WEEK[last]}")
         else:
             parts.append(name(item))
     return ",".join(parts)

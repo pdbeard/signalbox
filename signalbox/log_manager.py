@@ -36,6 +36,84 @@ def _list_log_files(task_log_dir):
     return [f for f in os.listdir(task_log_dir) if f.endswith(".log") and os.path.isfile(os.path.join(task_log_dir, f))]
 
 
+# Room set aside so an "OMITTED" marker cannot push the file over the limit.
+_OMISSION_ALLOWANCE = 128
+
+
+def _truncate_middle(text, budget, label):
+    """Trim `text` to `budget` characters, keeping the head and tail.
+
+    The dropped middle is replaced by a marker saying how much was removed, so
+    a truncated log never looks like complete output.
+    """
+    if not text:
+        # Nothing to say: an empty stream needs no marker (and no budget).
+        return ""
+    if budget <= 0:
+        return f"[{label} OMITTED - no room within log size limit]\n"
+    if len(text) <= budget:
+        return text
+
+    marker = f"\n\n[{label} TRUNCATED - {len(text) - budget} characters removed]\n\n"
+    if budget <= len(marker):
+        # Not enough room for head/tail plus the full marker: keep a plain head,
+        # but still flag it. The short marker comes out of _OMISSION_ALLOWANCE.
+        return text[:budget] + f"\n[{label} TRUNCATED]\n"
+
+    remaining = budget - len(marker)
+    head = remaining // 2
+    tail = remaining - head
+    return text[:head] + marker + (text[-tail:] if tail else "")
+
+
+def _truncate_to_budget(command, return_code, stdout, stderr, max_log_size):
+    """Fit the whole log entry inside max_log_size characters.
+
+    The budget covers the entire file, not each stream separately, and the
+    command is trimmed too: an oversized command must not push the file past
+    the limit that exists to stop runaway logs filling the disk.
+
+    Returns:
+        tuple: (command, stdout, stderr) trimmed to fit.
+    """
+    if max_log_size <= 0:
+        return command, stdout, stderr
+
+    # Reserve room for the omission markers themselves, so emitting one can
+    # never push the file back over the limit.
+    overhead = len(str(return_code)) + len("Command: \nReturn code: \nSTDOUT:\n\nSTDERR:\n\n") + _OMISSION_ALLOWANCE
+    budget = max_log_size - overhead
+    if budget <= 0:
+        return "", "", ""
+
+    # The command is metadata, so cap it at a modest share of the budget and
+    # leave the rest for output.
+    command = _truncate_middle(command, min(len(command), max(0, budget // 4)), "COMMAND")
+
+    output_budget = budget - len(command)
+    if output_budget <= 0:
+        return command, "", ""
+
+    # Split what is left between the two streams, giving each stream only what
+    # it needs and letting the other use the slack.
+    half = output_budget // 2
+    if len(stdout) <= half:
+        stdout_budget = len(stdout)
+        stderr_budget = output_budget - stdout_budget
+    elif len(stderr) <= output_budget - half:
+        stderr_budget = len(stderr)
+        stdout_budget = output_budget - stderr_budget
+    else:
+        stdout_budget = half
+        stderr_budget = output_budget - half
+
+    return (
+        command,
+        _truncate_middle(stdout, stdout_budget, "STDOUT"),
+        _truncate_middle(stderr, stderr_budget, "STDERR"),
+    )
+
+
 def write_execution_log(log_file, command, return_code, stdout, stderr):
     """Write execution results to a log file.
 
@@ -48,16 +126,10 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
     """
     # Check max log file size to prevent disk filling attacks.
     # Fallback matches the value in the shipped signalbox.yaml.
-    max_log_size = get_config_value("logging.max_file_size_mb", 5) * 1024 * 1024
-    content_size = len(command) + len(str(return_code)) + len(stdout) + len(stderr)
-
-    if content_size > max_log_size:
-        # Truncate output if too large
-        truncation_msg = f"\n\n[OUTPUT TRUNCATED - exceeded {max_log_size / (1024*1024):.1f}MB limit]\n"
-        remaining_size = max_log_size - len(command) - len(str(return_code)) - len(truncation_msg)
-        half_size = remaining_size // 2
-        stdout = stdout[:half_size] + truncation_msg + stdout[-half_size:] if len(stdout) > half_size else stdout
-        stderr = stderr[:half_size] + truncation_msg + stderr[-half_size:] if len(stderr) > half_size else stderr
+    # int(): a fractional setting such as 0.5 is valid but would otherwise make
+    # every slice index below a float.
+    max_log_size = int(get_config_value("logging.max_file_size_mb", 5) * 1024 * 1024)
+    command, stdout, stderr = _truncate_to_budget(command, return_code, stdout, stderr, max_log_size)
 
     # Security: create file with 0o600 from the start so there is no window
     # between creation and chmod where the file could be world-readable.
