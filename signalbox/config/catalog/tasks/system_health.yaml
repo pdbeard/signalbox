@@ -2,15 +2,21 @@
 #
 # Checks for disk space, memory pressure, and system load.
 # Suitable for scheduling every 5-15 minutes via a group.
-#
-# NOTE: check_memory_pressure uses the macOS `memory_pressure` command.
-# Linux users: replace it with `free -m` and adjust alert patterns accordingly.
+# All tasks are portable across macOS and Linux.
 #
 tasks:
 - name: check_disk_space
-  description: Report disk usage across all filesystems. Alerts if any volume is critically full.
+  description: Report disk usage across real filesystems. Alerts if any volume is critically full. Excludes pseudo-filesystems (squashfs, tmpfs) on Linux to avoid false positives from snap mounts.
   command: |
-    df -h
+    echo "Disk usage report:"
+    # Exclude pseudo-filesystems on Linux (snap/squashfs mounts always show 100%).
+    # On macOS, use -l (local only) which excludes synthetic/network volumes.
+    OS=$(uname -s)
+    if [ "$OS" = "Linux" ]; then
+      df -h --exclude-type=squashfs --exclude-type=tmpfs --exclude-type=devtmpfs
+    else
+      df -lh
+    fi
   log_limit:
     type: count
     value: 50
@@ -23,27 +29,59 @@ tasks:
       severity: warning
 
 - name: check_memory_pressure
-  description: "Check system memory pressure (macOS). High pressure means the OS is actively compressing or swapping. Linux: replace command with 'free -m'."
+  description: "Check system memory pressure. Uses macOS memory_pressure if available; falls back to free -m on Linux. Emits MEMORY_CRITICAL or MEMORY_WARNING markers for reliable alerting."
   command: |
-    memory_pressure
+    if MEM=$(memory_pressure 2>/dev/null); then
+      echo "$MEM"
+      # macOS reports free memory ("System-wide memory free percentage: 76%"),
+      # so pressure is the remainder.
+      FREE=$(echo "$MEM" | grep -oE 'free percentage: [0-9]+' | grep -oE '[0-9]+$')
+      [ -n "$FREE" ] && PCT=$((100 - FREE))
+    else
+      MEM=$(free -m)
+      echo "$MEM"
+      # Use (total - available) / total for accurate Linux memory pressure
+      PCT=$(echo "$MEM" | awk '/^Mem:/ { printf "%.0f", (($2 - $NF) / $2) * 100 }')
+    fi
+    echo "Memory pressure: ${PCT:-?}%"
+    if [ "${PCT:-0}" -ge 90 ]; then
+      echo "MEMORY_CRITICAL: ${PCT}% memory pressure"
+    elif [ "${PCT:-0}" -ge 75 ]; then
+      echo "MEMORY_WARNING: ${PCT}% memory pressure"
+    else
+      echo "RESULT: OK (${PCT:-?}%)"
+    fi
   log_limit:
     type: count
     value: 50
   alerts:
-    - pattern: "pressure: 9[0-9]%|pressure: 100%"
+    - pattern: "MEMORY_CRITICAL"
       message: "Memory pressure is critical — applications may be severely impacted"
       severity: critical
-    - pattern: "pressure: [7-8][0-9]%"
+    - pattern: "MEMORY_WARNING"
       message: "Memory pressure is elevated — system may be slow"
       severity: warning
 
 - name: check_system_load
-  description: Show system load averages (1, 5, 15 minutes) and CPU count for context. High load relative to CPU count may indicate a runaway process.
+  description: Show system load averages (1, 5, 15 minutes) and CPU count for context. Emits LOAD_HIGH when the 5-minute load exceeds the number of CPU cores — a practical signal of a runaway process.
   command: |
     echo "Load averages:"
     uptime
     echo ""
-    echo "CPU cores: $(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 'unknown')"
+    CORES=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 1)
+    echo "CPU cores: $CORES"
+    # Extract the 5-minute load average (second decimal number in uptime output)
+    LOAD5=$(uptime | grep -oE '[0-9]+\.[0-9]+' | sed -n '2p')
+    HIGH=$(awk -v load="${LOAD5:-0}" -v cores="$CORES" 'BEGIN { print (load+0 > cores+0) ? "yes" : "no" }')
+    if [ "$HIGH" = "yes" ]; then
+      echo "LOAD_HIGH: 5-min load (${LOAD5}) exceeds CPU count ($CORES) — possible runaway process"
+    else
+      echo "RESULT: OK (5-min load ${LOAD5:-?}, $CORES cores)"
+    fi
   log_limit:
     type: count
     value: 50
+  alerts:
+    - pattern: "LOAD_HIGH"
+      message: "System load is high relative to CPU count — investigate running processes"
+      severity: warning

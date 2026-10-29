@@ -1,0 +1,159 @@
+# Developer Workstation Tasks
+#
+# Useful checks for personal machines and development workstations.
+# Edit the marked variables (DEV_DIR, PROCESS_NAME, PORT, LOG_FILE)
+# before enabling scheduling.
+#
+tasks:
+- name: dirty_repos
+  description: "Scan ~/development for Git repositories with uncommitted or unpushed changes. Alerts with the count of affected repos. Edit DEV_DIR to match your development root."
+  command: |
+    DEV_DIR="${HOME}/development"
+    echo "Scanning for dirty repos in: $DEV_DIR"
+    if [ ! -d "$DEV_DIR" ]; then
+      echo "RESULT: Directory not found: $DEV_DIR — edit DEV_DIR to match your setup"
+      exit 0
+    fi
+    DIRTY_COUNT=0
+    for repo in "$DEV_DIR"/*/; do
+      [ -d "$repo/.git" ] || continue
+      UNCOMMITTED=$(git -C "$repo" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+      UNPUSHED=$(git -C "$repo" log --oneline @{u}.. 2>/dev/null | wc -l | tr -d ' ')
+      if [ "${UNCOMMITTED:-0}" -gt 0 ] || [ "${UNPUSHED:-0}" -gt 0 ]; then
+        DIRTY_COUNT=$((DIRTY_COUNT + 1))
+        MSG="  $(basename "$repo"):"
+        [ "${UNCOMMITTED:-0}" -gt 0 ] && MSG="$MSG ${UNCOMMITTED} uncommitted"
+        [ "${UNPUSHED:-0}" -gt 0 ] && MSG="$MSG ${UNPUSHED} unpushed"
+        echo "$MSG"
+      fi
+    done
+    if [ "$DIRTY_COUNT" -gt 0 ]; then
+      echo "DIRTY_REPOS: $DIRTY_COUNT repo(s) need attention"
+    else
+      echo "RESULT: OK — all repos are clean"
+    fi
+  log_limit:
+    type: count
+    value: 30
+  alerts:
+    - pattern: "DIRTY_REPOS"
+      message: "One or more repos have uncommitted or unpushed changes"
+      severity: warning
+
+- name: process_watchdog
+  description: "Check that a critical process is running. Edit PROCESS_NAME to the process you want to monitor (exact binary name, matched by pgrep -x). Alerts immediately if it is not found."
+  command: |
+    PROCESS_NAME="your_process_name"
+    echo "Checking for process: $PROCESS_NAME"
+    if pgrep -x "$PROCESS_NAME" > /dev/null 2>&1; then
+      PID=$(pgrep -x "$PROCESS_NAME" | head -1)
+      echo "RESULT: OK — $PROCESS_NAME is running (PID $PID)"
+    else
+      echo "PROCESS_DOWN: $PROCESS_NAME is NOT running"
+      exit 1
+    fi
+  log_limit:
+    type: count
+    value: 20
+  alerts:
+    - pattern: "PROCESS_DOWN"
+      message: "Monitored process is not running — may need to be restarted"
+      severity: critical
+
+- name: port_check
+  description: "Verify a local service is listening on a port. Useful for confirming your database, dev server, or API is up. Edit HOST, PORT, and SERVICE to match your target."
+  command: |
+    HOST="localhost"
+    PORT=5432
+    SERVICE="PostgreSQL"
+    echo "Checking ${SERVICE} on ${HOST}:${PORT}..."
+    if nc -z "$HOST" "$PORT" 2>/dev/null; then
+      echo "RESULT: OK — $SERVICE is accepting connections on port $PORT"
+    else
+      echo "PORT_DOWN: $SERVICE is NOT listening on ${HOST}:${PORT}"
+      exit 1
+    fi
+  log_limit:
+    type: count
+    value: 20
+  alerts:
+    - pattern: "PORT_DOWN"
+      message: "Service is not listening on the expected port — may be down or misconfigured"
+      severity: critical
+
+- name: check_updates
+  description: "Check for available system package updates. Reports the count and emits an info alert when updates are pending. Supports Homebrew (macOS) and apt (Linux)."
+  command: |
+    echo "Checking for available updates..."
+    COUNT=0
+    if command -v brew > /dev/null 2>&1; then
+      UPDATES=$(brew outdated 2>/dev/null)
+      COUNT=$(echo "$UPDATES" | grep -c . 2>/dev/null || true)
+      echo "Package manager: Homebrew"
+      echo "Outdated packages: $COUNT"
+      [ "$COUNT" -gt 0 ] && echo "$UPDATES"
+    elif command -v apt > /dev/null 2>&1; then
+      UPDATES=$(apt list --upgradable 2>/dev/null | grep -v "Listing")
+      COUNT=$(echo "$UPDATES" | grep -c . 2>/dev/null || true)
+      echo "Package manager: apt"
+      echo "Upgradable packages: $COUNT"
+      [ "$COUNT" -gt 0 ] && echo "$UPDATES"
+    else
+      echo "RESULT: No supported package manager found (brew/apt)"
+      exit 0
+    fi
+    if [ "${COUNT:-0}" -gt 0 ]; then
+      echo "UPDATES_AVAILABLE: $COUNT package(s) can be updated"
+    else
+      echo "RESULT: OK — system is up to date"
+    fi
+  log_limit:
+    type: count
+    value: 10
+  alerts:
+    - pattern: "UPDATES_AVAILABLE"
+      message: "System package updates are available — consider running an update"
+      severity: info
+
+- name: scan_log_errors
+  description: "Scan the tail of a log file for ERROR or CRITICAL entries. Edit LOG_FILE to point to the log you want to monitor. Demonstrates alerting on another application's output."
+  command: |
+    LOG_FILE="/var/log/syslog"
+    LINES=1000
+    echo "Scanning last $LINES lines of $LOG_FILE for errors..."
+    if [ ! -f "$LOG_FILE" ]; then
+      echo "LOG_MISSING: Log file not found: $LOG_FILE — edit LOG_FILE to match your setup"
+      exit 1
+    fi
+    COUNT=$(tail -"$LINES" "$LOG_FILE" 2>/dev/null | grep -cE "ERROR|CRITICAL" || true)
+    if [ "${COUNT:-0}" -gt 0 ]; then
+      echo "LOG_ERRORS_FOUND: $COUNT error line(s) in last $LINES lines of $LOG_FILE"
+      tail -"$LINES" "$LOG_FILE" | grep -E "ERROR|CRITICAL" | tail -20
+    else
+      echo "RESULT: OK — no errors found in last $LINES lines"
+    fi
+  log_limit:
+    type: count
+    value: 30
+  alerts:
+    - pattern: "LOG_ERRORS_FOUND"
+      message: "Errors or CRITICAL entries found in log file — investigate"
+      severity: warning
+    - pattern: "LOG_MISSING"
+      message: "Log file not found — path may need updating"
+      severity: info
+
+- name: signalbox_selfcheck
+  description: "Validate the current signalbox configuration. Acts as a dead-man's switch — if the config breaks, this task fails and the tray icon turns red. Run periodically to catch accidental config errors early."
+  command: |
+    echo "Running signalbox validate..."
+    # Fail the task (not just alert) so the tray turns red on a broken config.
+    signalbox validate || exit 1
+    echo "RESULT: OK — configuration is valid"
+  log_limit:
+    type: count
+    value: 10
+  alerts:
+    - pattern: "Error|error|invalid|Invalid"
+      message: "signalbox configuration has errors — run 'signalbox validate' to see details"
+      severity: critical

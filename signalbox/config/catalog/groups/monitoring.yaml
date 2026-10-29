@@ -1,45 +1,22 @@
-# Monitoring Groups Examples
+# All-in-one Monitoring Reference Group
 #
-# ⚠️  IMPORTANT: These are EXAMPLE groups for learning and getting started.
-# These scripts are NOT meant for production use - they are educational tools!
+# A "kitchen sink" group listing all monitoring tasks in one place.
+# No schedule is set — this intentionally avoids double-firing alongside
+# the focused, scheduled groups in system_health.yaml and web_monitoring.yaml.
 #
-# This file demonstrates different monitoring strategies using parallel execution.
-
+# To use: copy the tasks you need into your own group file and add a schedule.
+# Exporting schedules with this file as-is produces no cron/systemd entries.
+#
 groups:
-- name: health_check_fast
-  description: Quick parallel health checks for web services
+- name: comprehensive_monitoring
+  description: All system and network checks in one parallel pass. No schedule set — copy tasks into your own group to avoid double-firing alongside system_health_check and web_health_check.
   execution: parallel
-  schedule: '*/2 * * * *'
   tasks:
-  - check_website_health
-  - ping_connectivity
-  - check_dns_resolution
-- name: comprehensive_web_monitoring
-  description: Detailed web service monitoring with all checks
-  execution: parallel
-  schedule: '*/10 * * * *'
-  tasks:
-  - check_website_health
-  - ping_connectivity
-  - check_ssl_expiry
-  - check_dns_resolution
-- name: system_health_parallel
-  description: Fast parallel system monitoring
-  execution: parallel
-  schedule: '*/5 * * * *'
-  tasks:
-  - check_disk_space
-  - check_memory_pressure
-  - check_system_load
-- name: infrastructure_monitoring
-  description: Complete infrastructure health check
-  execution: parallel
-  schedule: '*/15 * * * *'
-  tasks:
-  - check_website_health
-  - check_dns_resolution
-  - check_disk_space
-  - check_system_load
-
-
+    - check_disk_space
+    - check_memory_pressure
+    - check_system_load
+    - check_website_health
+    - check_ssl_expiry
+    - check_dns_resolution
+    - ping_connectivity
 

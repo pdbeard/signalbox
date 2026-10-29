@@ -1,0 +1,19 @@
+# Weekly Report Group
+#
+# A slower-cadence serial group combining housekeeping, update checks,
+# and repo hygiene into a Sunday morning digest.
+#
+# Demonstrates weekly scheduling alongside the faster per-domain groups.
+# Requires tasks from: maintenance.yaml (check_large_files)
+#                      dev_tools.yaml  (check_updates, dirty_repos)
+#
+groups:
+- name: weekly_report
+  description: Weekly workstation health report — large files, available updates, and dirty repos. Runs serially so each section appears in sequence in the log.
+  execution: serial
+  stop_on_error: false
+  schedule: "0 9 * * 0"
+  tasks:
+    - check_large_files
+    - check_updates
+    - dirty_repos

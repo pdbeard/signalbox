@@ -8,11 +8,13 @@
 #
 tasks:
 - name: check_website_health
-  description: "Check if a website responds with HTTP 2xx. Edit the URL to your target. Alerts on 4xx/5xx errors and connection failures."
+  description: "Check if a website responds with HTTP 2xx. Edit the URL to your target. Alerts on 4xx/5xx errors and connection failures. Uses a single curl request for both status and timing."
   command: |
     URL="https://example.com"
-    STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$URL")
-    TIME=$(curl -s -o /dev/null -w "%{time_total}" --max-time 15 "$URL" 2>/dev/null || echo "N/A")
+    # Single request captures both status code and response time
+    RESULT=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" --max-time 15 "$URL" 2>/dev/null)
+    STATUS=$(echo "$RESULT" | awk '{print $1}')
+    TIME=$(echo "$RESULT" | awk '{print $2}')
     echo "URL: $URL"
     echo "HTTP_STATUS: $STATUS"
     echo "Response time: ${TIME}s"
@@ -24,6 +26,7 @@ tasks:
       000) echo "RESULT: CONNECTION_FAILED" ;;
       *) echo "RESULT: UNKNOWN" ;;
     esac
+  timeout: 60
   log_limit:
     type: count
     value: 50
@@ -39,39 +42,47 @@ tasks:
       severity: warning
 
 - name: check_ssl_expiry
-  description: "Check if an SSL certificate expires within 30 days. Edit HOST to match your domain. Runs a non-intrusive TLS handshake to read the certificate."
+  description: "Check SSL certificate expiry with two severity tiers: warning at 30 days, critical at 7. Edit HOST to match your domain. Uses a single TLS handshake for efficiency."
   command: |
     HOST="example.com"
     PORT=443
     echo "Checking SSL certificate for ${HOST}:${PORT}"
-    CERT_INFO=$(echo | openssl s_client -connect "${HOST}:${PORT}" -servername "$HOST" 2>/dev/null | openssl x509 -noout -enddate -subject 2>/dev/null)
-    if [ -z "$CERT_INFO" ]; then
+    CERT=$(echo | openssl s_client -connect "${HOST}:${PORT}" -servername "$HOST" 2>/dev/null)
+    if [ -z "$CERT" ]; then
       echo "SSL_ERROR: Could not retrieve certificate for $HOST"
       exit 1
     fi
-    echo "$CERT_INFO"
-    # Check if cert expires within 30 days (2592000 seconds)
-    echo | openssl s_client -connect "${HOST}:${PORT}" -servername "$HOST" 2>/dev/null \
-      | openssl x509 -noout -checkend 2592000 2>/dev/null \
-      && echo "SSL_OK: Certificate valid for 30+ days" \
-      || echo "SSL_WARNING: Certificate expires within 30 days"
+    echo "$CERT" | openssl x509 -noout -enddate -subject 2>/dev/null
+    # Check expiry tiers against the already-fetched certificate (no extra TLS handshake)
+    # checkend argument is in seconds: 604800 = 7 days, 2592000 = 30 days
+    if ! echo "$CERT" | openssl x509 -noout -checkend 604800 2>/dev/null; then
+      echo "SSL_CRITICAL: Certificate expires within 7 days — renew immediately"
+    elif ! echo "$CERT" | openssl x509 -noout -checkend 2592000 2>/dev/null; then
+      echo "SSL_WARNING: Certificate expires within 30 days — schedule renewal soon"
+    else
+      echo "SSL_OK: Certificate valid for 30+ days"
+    fi
+  timeout: 60
   log_limit:
     type: count
     value: 10
   alerts:
-    - pattern: "SSL_WARNING"
-      message: "SSL certificate expires within 30 days — renew immediately"
+    - pattern: "SSL_CRITICAL"
+      message: "SSL certificate expires within 7 days — renew immediately"
       severity: critical
+    - pattern: "SSL_WARNING"
+      message: "SSL certificate expires within 30 days — schedule renewal soon"
+      severity: warning
     - pattern: "SSL_ERROR"
       message: "Could not retrieve SSL certificate — host may be unreachable"
       severity: warning
 
 - name: check_dns_resolution
-  description: "Verify DNS resolution is working for a domain. Edit DOMAIN to your target. Alerts if the domain fails to resolve."
+  description: "Verify DNS resolution is working for a domain. Edit DOMAIN to your target. Falls back to host if dig is not installed (common on minimal Debian/Ubuntu images). Alerts if the domain fails to resolve."
   command: |
     DOMAIN="example.com"
     echo "Resolving: $DOMAIN"
-    RESULT=$(dig +short +time=5 +tries=2 "$DOMAIN" 2>&1)
+    RESULT=$(dig +short +time=5 +tries=2 "$DOMAIN" 2>/dev/null || host "$DOMAIN" 2>/dev/null)
     if [ -z "$RESULT" ]; then
       echo "DNS_FAILURE: No result for $DOMAIN"
       exit 1
@@ -79,6 +90,7 @@ tasks:
       echo "DNS_OK: $DOMAIN resolves to:"
       echo "$RESULT"
     fi
+  timeout: 30
   log_limit:
     type: count
     value: 20
