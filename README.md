@@ -342,6 +342,8 @@ Signalbox uses the POSIX rules for exit codes:
 | 0 | Success | All tasks ran correctly |
 | 1 | A task failed | A task failed (`task run`), or one or more tasks failed (`task run --all`, `group run`) |
 | 2 | Usage or configuration error | Incorrect configuration, incorrect arguments, or errors from `validate` |
+| 3 | Not found | The task or the group does not exist |
+| 4 | Execution failure | Signalbox could not run the task, or the task did not stop before its time limit |
 | 126 | Permission denied | The user does not have permission to run the command |
 | 130 | Interrupted | The user pushed Ctrl+C |
 

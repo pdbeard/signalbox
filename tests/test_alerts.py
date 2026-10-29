@@ -360,3 +360,22 @@ def test_prune_waits_for_a_concurrent_writer(tmp_path, monkeypatch):
     pruner.join(timeout=5)
 
     assert sorted(a["pattern"] for a in alerts.load_alerts("t")) == ["a", "b"]
+
+
+def test_clear_waits_for_a_concurrent_prune(tmp_path, monkeypatch):
+    """Clearing must wait for the lock, or a prune in progress writes the old alerts back."""
+    import fcntl
+    import threading
+
+    monkeypatch.setattr(alerts, "get_resolved_log_dir", lambda: str(tmp_path))
+    alerts.save_alert("t", {"pattern": "a", "severity": "info", "timestamp": alerts.format_timestamp(datetime.now())})
+
+    with open(tmp_path / "t" / "alerts" / ".alerts.lock", "w") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        clearer = threading.Thread(target=alerts.clear_alerts, args=("t",))
+        clearer.start()
+        clearer.join(timeout=0.3)
+        assert clearer.is_alive()  # blocked on the lock
+    clearer.join(timeout=5)
+
+    assert alerts.load_alerts("t") == []

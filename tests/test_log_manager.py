@@ -80,6 +80,8 @@ def test_clear_script_logs(tmp_path, monkeypatch):
 
 def test_clear_all_logs(tmp_path, monkeypatch):
     monkeypatch.setattr(log_manager, "get_resolved_log_dir", lambda: str(tmp_path))
+    # Alert history is cleared through alerts.clear_alerts, which resolves the log dir itself
+    monkeypatch.setattr(log_manager.alerts, "get_resolved_log_dir", lambda: str(tmp_path))
     d = tmp_path / "foo"
     (d / "alerts").mkdir(parents=True)
     (d / "a.log").write_text("x")
@@ -254,3 +256,10 @@ def test_stdout_preview_ignores_stderr_label_in_task_output():
     assert log_manager.parse_stdout_from_log(content) == "header\nSTDERR:\nnot really stderr"
     assert log_manager.parse_stderr_from_log(content) == "real error"
     assert log_manager.parse_stderr_from_log("STDERR:\nonly stderr\n") == "only stderr"
+
+
+def test_tiny_cap_still_marks_dropped_output():
+    """A cap too small for the headers used to drop stdout and stderr with no trace."""
+    command, stdout, stderr = log_manager._truncate_to_budget("echo hi", 0, "x" * 5000, "y" * 5000, 100)
+    assert (stdout, stderr) == ("[STDOUT OMITTED]\n", "[STDERR OMITTED]\n")
+    assert log_manager._truncate_to_budget("c", 0, "", "", 100)[1:] == ("", "")

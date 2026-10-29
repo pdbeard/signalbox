@@ -348,8 +348,9 @@ def _validate_global_config(result):
         result.errors.extend(validate_log_limit(default_limit, "Global default"))
 
     # 0 crashes every parallel group; a tray poll interval of 0 never pauses
-    for key in ("execution.max_parallel_workers", "tray.poll_interval"):
-        value = get_config_value(key, 1)
+    # Fallbacks match the values in the shipped signalbox.yaml
+    for key, default in (("execution.max_parallel_workers", 5), ("tray.poll_interval", 30)):
+        value = get_config_value(key, default)
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             result.errors.append(f"{key} must be a whole number >= 1, got {value!r}")
 

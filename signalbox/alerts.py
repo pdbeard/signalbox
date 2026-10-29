@@ -83,6 +83,19 @@ def _locked_alert_log(task_name):
         yield os.path.join(alerts_dir, "alerts.jsonl")
 
 
+def clear_alerts(task_name):
+    """Delete a task's alert history, under the same lock as save_alert and prune_alerts.
+
+    Without the lock, a prune running at the same time could write the old
+    alerts back after they were deleted.
+    """
+    if not os.path.exists(os.path.join(get_alerts_dir(task_name), "alerts.jsonl")):
+        return
+    with _locked_alert_log(task_name) as alert_log:
+        if os.path.isfile(alert_log):
+            os.remove(alert_log)
+
+
 def save_alert(task_name, alert_data):
     """Save an alert record to the alerts log.
 

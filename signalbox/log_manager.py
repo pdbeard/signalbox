@@ -3,6 +3,7 @@
 import os
 import re
 from datetime import datetime, timedelta
+from . import alerts
 from .config import get_config_value
 from .helpers import format_timestamp, get_resolved_log_dir, check_name, is_valid_name, parse_timestamp
 
@@ -112,7 +113,9 @@ def _truncate_to_budget(command, return_code, stdout, stderr, max_log_size):
     overhead = len(str(return_code)) + len("Command: \nReturn code: \nSTDOUT:\n\nSTDERR:\n\n") + _OMISSION_ALLOWANCE
     budget = max_log_size - overhead
     if budget <= 0:
-        return "", "", ""
+        # Too small even for the headers. Keep short markers so the log still
+        # says output was dropped (a cap this small cannot be met anyway).
+        return "", "[STDOUT OMITTED]\n" if stdout else "", "[STDERR OMITTED]\n" if stderr else ""
 
     # The command is metadata, so cap it at a modest share of the budget and
     # leave the rest for output.
@@ -383,9 +386,7 @@ def clear_task_logs(task_name):
         filepath = os.path.join(task_log_dir, filename)
         if os.path.isfile(filepath):
             os.remove(filepath)
-    alert_log = os.path.join(task_log_dir, "alerts", "alerts.jsonl")
-    if os.path.isfile(alert_log):
-        os.remove(alert_log)
+    alerts.clear_alerts(task_name)
 
     return True
 
@@ -409,9 +410,7 @@ def clear_all_logs():
             continue
         for filename in _list_log_files(task_log_dir):
             os.remove(os.path.join(task_log_dir, filename))
-        alert_log = os.path.join(task_log_dir, "alerts", "alerts.jsonl")
-        if os.path.isfile(alert_log):
-            os.remove(alert_log)
+        alerts.clear_alerts(task_name)
 
     return True
 
