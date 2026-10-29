@@ -110,13 +110,17 @@ Message: Ran 3 tasks: 0 passed, 3 failed
 
 When running Signalbox via cron or systemd timer, notifications will appear even when the scripts run in the background:
 
-```cron
-# Run every hour and notify on failures
-0 * * * * /path/to/signalbox run-group scheduled
+Generate the schedule entry with `signalbox export-cron GROUP` (or
+`signalbox export-systemd GROUP`) rather than writing it by hand: the export
+uses the group's `schedule`, the absolute path to signalbox and the right
+`SIGNALBOX_HOME`, which cron's minimal environment otherwise lacks.
+
+```bash
+signalbox export-cron scheduled
 ```
 
 If notifications aren't appearing, check:
-1. The `notifications.enabled` setting in your config
+1. The `alerts.notifications.enabled` and `group_notifications.enabled` settings in your config
 2. That `notify-send` is installed (Linux)
 3. That your desktop environment supports notifications
 4. Log files for any error messages

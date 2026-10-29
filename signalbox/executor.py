@@ -131,7 +131,12 @@ def _execute(task, name, config):
     try:
         result = run_command(task["command"], timeout=timeout, cwd=resolve_task_cwd(task))
     except subprocess.TimeoutExpired as e:
-        _record_timeout(name, task, e, log_file, timestamp, config)
+        # Log, check alerts on the partial output and record the failure like
+        # any other run. run_command kills the process group with SIGKILL, so
+        # -9 is the honest return code.
+        stderr = _as_text(e.stderr) + f"\n[TIMED OUT after {e.timeout}s]"
+        timed_out = subprocess.CompletedProcess(task["command"], -9, _as_text(e.stdout), stderr)
+        _post_execution(name, task, timed_out, log_file, timestamp, config)
         raise ExecutionTimeoutError(name, timeout)
 
     return result, log_file, timestamp
@@ -144,21 +149,6 @@ def _as_text(output):
     if isinstance(output, bytes):
         return output.decode(errors="replace")
     return output
-
-
-def _record_timeout(name, task, error, log_file, timestamp, config):
-    """Write a log and mark the task failed so a timeout is visible in logs and the tray."""
-    stdout = _as_text(error.stdout)
-    stderr = _as_text(error.stderr) + f"\n[TIMED OUT after {error.timeout}s]"
-    # run_command kills the process group with SIGKILL on timeout, so -9 is the honest return code
-    write_execution_log(log_file, task["command"], -9, stdout, stderr)
-    rotate_logs(task)
-
-    task_source_file = config["_task_sources"].get(name)
-    if task_source_file:
-        save_task_runtime_state(name, task_source_file, timestamp, "failed")
-    task["last_status"] = "failed"
-    task["last_run"] = timestamp
 
 
 def _should_notify(name, alert):

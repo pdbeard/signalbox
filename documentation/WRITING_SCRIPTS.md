@@ -252,9 +252,9 @@ Use the CLI to view recent alerts:
 ```bash
 signalbox alerts
 ```
-You can filter by script name or severity:
+You can filter by task name, severity or age:
 ```bash
-signalbox alerts --script check_website_health --severity critical
+signalbox alerts check_website_health --severity critical --days 7
 ```
 
 ---

@@ -210,7 +210,7 @@ signalbox run nonexistent_script
 echo $?  # Should print 3
 
 # Should exit with code 3
-signalbox run-group nonexistent_group
+signalbox group run nonexistent_group
 echo $?  # Should print 3
 
 # Should exit with code 0

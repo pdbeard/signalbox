@@ -69,6 +69,13 @@ class TestTaskRun:
         assert "Return code: -9" in log and "[TIMED OUT" in log
         assert runtime(sb_home, "tasks")["slow"]["last_status"] == "failed"
 
+    def test_timeout_still_checks_alerts_on_partial_output(self, sb_home, run):
+        alert = {"pattern": "disk full", "message": "Disk full", "severity": "critical"}
+        sb_home.write_tasks([task("hang", "echo CRITICAL: disk full; sleep 5", timeout=1, alerts=[alert])])
+
+        assert run("task", "run", "hang").exit_code == 4
+        assert "Disk full" in (sb_home.path / "logs" / "hang" / "alerts" / "alerts.jsonl").read_text()
+
     def test_undecodable_output_is_logged_not_fatal(self, sb_home, run):
         sb_home.write_tasks([task("binout", r"printf 'ok \377 done\n'")])
 
@@ -252,6 +259,15 @@ class TestLogs:
 
         assert run("log", "clear", "--all", input="y\n").exit_code == 0
         assert sb_home.logs("a") == []
+
+    def test_clear_task_also_clears_its_alerts(self, sb_home, run):
+        sb_home.write_tasks([task("a", "echo FAIL", alerts=[{"pattern": "FAIL", "message": "failed"}])])
+        run("task", "run", "a", "-q")
+        assert "failed" in run("alerts", "a").output
+
+        assert run("log", "clear", "--task", "a").exit_code == 0
+        assert sb_home.logs("a") == []
+        assert "No alerts found" in run("alerts", "a").output
 
     def test_list_filters_by_status_with_limit(self, sb_home, run):
         sb_home.write_tasks([task("good"), task("bad", "false")])

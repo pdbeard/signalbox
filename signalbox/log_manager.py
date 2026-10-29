@@ -368,7 +368,7 @@ def get_log_history(task_name):
 
 
 def clear_task_logs(task_name):
-    """Clear all log files for a specific task.
+    """Clear all log files and the alert history for a specific task.
 
     Returns:
             bool: True if logs were found and cleared, False otherwise
@@ -383,6 +383,9 @@ def clear_task_logs(task_name):
         filepath = os.path.join(task_log_dir, filename)
         if os.path.isfile(filepath):
             os.remove(filepath)
+    alert_log = os.path.join(task_log_dir, "alerts", "alerts.jsonl")
+    if os.path.isfile(alert_log):
+        os.remove(alert_log)
 
     return True
 

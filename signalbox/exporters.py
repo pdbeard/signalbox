@@ -329,7 +329,7 @@ def get_systemd_install_instructions(service_file, timer_file, group_name, user=
                 "To install (user mode):",
                 f"  mkdir -p {install_path}",
                 f"  cp {service_file} {timer_file} {install_path}",
-                f"  systemctl --user daemon-reload",
+                "  systemctl --user daemon-reload",
                 f"  systemctl --user enable {service_name}.timer",
                 f"  systemctl --user start {service_name}.timer",
                 "",
@@ -342,7 +342,7 @@ def get_systemd_install_instructions(service_file, timer_file, group_name, user=
             [
                 "To install (requires root):",
                 f"  sudo cp {service_file} {timer_file} /etc/systemd/system/",
-                f"  sudo systemctl daemon-reload",
+                "  sudo systemctl daemon-reload",
                 f"  sudo systemctl enable {service_name}.timer",
                 f"  sudo systemctl start {service_name}.timer",
                 "",

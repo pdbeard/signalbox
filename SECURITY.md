@@ -50,7 +50,7 @@ Signalbox executes shell commands defined in YAML configuration files using Pyth
 
 **Examples of potentially dangerous commands:**
 ```yaml
-scripts:
+tasks:
   - name: dangerous_deletion
     command: rm -rf /important/directory
     description: This WILL delete the directory
@@ -103,10 +103,10 @@ git diff HEAD config/
 ```bash
 # Create a dedicated user for signalbox
 sudo useradd -m -s /bin/bash signalbox-runner
-sudo -u signalbox-runner signalbox run-group monitoring
+sudo -u signalbox-runner signalbox group run monitoring
 
 # Use sudo only for specific commands
-scripts:
+tasks:
   - name: update_packages
     command: sudo /usr/local/bin/safe-update.sh
     description: Run pre-approved update script
@@ -118,22 +118,24 @@ scripts:
 # Always validate before running
 signalbox validate
 
-# Test with dry-run first (if available)
-signalbox run-group production --dry-run
+# Review what will execute: every task and group with its source file
+signalbox task list
+signalbox group list
 
-# Review what will execute
-signalbox show-config
+# Review global settings
+signalbox config show
 ```
 
 #### 6. **Monitor Execution**
 
 ```bash
 # Check logs regularly for unexpected behavior
-signalbox logs script-name
-signalbox history script-name
+signalbox log show task-name
+signalbox log history task-name
+signalbox log list --failed
 
-# Set up log monitoring
-tail -f ~/.config/signalbox/logs/*/latest.log
+# Follow new runs of a task as they happen
+signalbox log tail task-name
 ```
 
 #### 7. **Limit Script Complexity**
@@ -142,13 +144,13 @@ When possible, wrap complex logic in separate script files:
 
 ```yaml
 # BETTER: Call a controlled script
-scripts:
+tasks:
   - name: backup_database
     command: /usr/local/bin/backup-db.sh
     description: Runs vetted backup script
 
 # AVOID: Complex inline commands
-scripts:
+tasks:
   - name: backup_database
     command: |
       for db in $(mysql -e 'show databases' | tail -n+2); do

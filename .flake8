@@ -1,9 +1,6 @@
 [flake8]
 max-line-length = 120
 extend-ignore = E203, W503, E501
-per-file-ignores =
-    signalbox/executor.py:F541
-    signalbox/exporters.py:F541
 
 exclude =
     build,
