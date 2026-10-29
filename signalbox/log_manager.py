@@ -1,6 +1,7 @@
 # Log management functionality for signalbox
 
 import os
+import re
 from datetime import datetime, timedelta
 from .config import get_config_value
 from .helpers import format_timestamp, get_resolved_log_dir, check_name, is_valid_name, parse_timestamp
@@ -39,9 +40,35 @@ def _list_log_files(task_log_dir):
 # Room set aside so an "OMITTED" marker cannot push the file over the limit.
 _OMISSION_ALLOWANCE = 128
 
+# Logs are always written as UTF-8, and the size cap is measured in the same
+# encoding, so the budget counts bytes on disk rather than characters (a
+# character can take up to 4 bytes). "replace" means output that cannot be
+# encoded never stops the log from being written.
+_LOG_ENCODING = "utf-8"
+_LOG_ERRORS = "replace"
+
+# Matches the markers _truncate_middle writes, plus the "[OUTPUT TRUNCATED"
+# marker found in logs written by older versions.
+_TRUNCATION_MARKER = re.compile(r"\[(OUTPUT|COMMAND|STDOUT|STDERR) (TRUNCATED|OMITTED)")
+
+
+def _byte_len(text):
+    """Size of `text` once written to a log file."""
+    return len(text.encode(_LOG_ENCODING, _LOG_ERRORS))
+
+
+def _head(data, size):
+    """The first `size` bytes of `data`, dropping any character split at the cut."""
+    return data[:size].decode(_LOG_ENCODING, "ignore")
+
+
+def _tail(data, size):
+    """The last `size` bytes of `data`, dropping any character split at the cut."""
+    return data[-size:].decode(_LOG_ENCODING, "ignore") if size else ""
+
 
 def _truncate_middle(text, budget, label):
-    """Trim `text` to `budget` characters, keeping the head and tail.
+    """Trim `text` to `budget` bytes, keeping the head and tail.
 
     The dropped middle is replaced by a marker saying how much was removed, so
     a truncated log never looks like complete output.
@@ -51,23 +78,24 @@ def _truncate_middle(text, budget, label):
         return ""
     if budget <= 0:
         return f"[{label} OMITTED - no room within log size limit]\n"
-    if len(text) <= budget:
+    data = text.encode(_LOG_ENCODING, _LOG_ERRORS)
+    if len(data) <= budget:
         return text
 
-    marker = f"\n\n[{label} TRUNCATED - {len(text) - budget} characters removed]\n\n"
+    marker = f"\n\n[{label} TRUNCATED - {len(data) - budget} bytes removed]\n\n"
     if budget <= len(marker):
         # Not enough room for head/tail plus the full marker: keep a plain head,
         # but still flag it. The short marker comes out of _OMISSION_ALLOWANCE.
-        return text[:budget] + f"\n[{label} TRUNCATED]\n"
+        return _head(data, budget) + f"\n[{label} TRUNCATED]\n"
 
     remaining = budget - len(marker)
     head = remaining // 2
     tail = remaining - head
-    return text[:head] + marker + (text[-tail:] if tail else "")
+    return _head(data, head) + marker + _tail(data, tail)
 
 
 def _truncate_to_budget(command, return_code, stdout, stderr, max_log_size):
-    """Fit the whole log entry inside max_log_size characters.
+    """Fit the whole log entry inside max_log_size bytes.
 
     The budget covers the entire file, not each stream separately, and the
     command is trimmed too: an oversized command must not push the file past
@@ -88,20 +116,23 @@ def _truncate_to_budget(command, return_code, stdout, stderr, max_log_size):
 
     # The command is metadata, so cap it at a modest share of the budget and
     # leave the rest for output.
-    command = _truncate_middle(command, min(len(command), max(0, budget // 4)), "COMMAND")
+    command_size = _byte_len(command)
+    command = _truncate_middle(command, min(command_size, max(0, budget // 4)), "COMMAND")
 
-    output_budget = budget - len(command)
+    output_budget = budget - _byte_len(command)
     if output_budget <= 0:
         return command, "", ""
 
     # Split what is left between the two streams, giving each stream only what
     # it needs and letting the other use the slack.
+    stdout_size = _byte_len(stdout)
+    stderr_size = _byte_len(stderr)
     half = output_budget // 2
-    if len(stdout) <= half:
-        stdout_budget = len(stdout)
+    if stdout_size <= half:
+        stdout_budget = stdout_size
         stderr_budget = output_budget - stdout_budget
-    elif len(stderr) <= output_budget - half:
-        stderr_budget = len(stderr)
+    elif stderr_size <= output_budget - half:
+        stderr_budget = stderr_size
         stdout_budget = output_budget - stderr_budget
     else:
         stdout_budget = half
@@ -134,7 +165,7 @@ def write_execution_log(log_file, command, return_code, stdout, stderr):
     # Security: create file with 0o600 from the start so there is no window
     # between creation and chmod where the file could be world-readable.
     fd = os.open(log_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
+    with os.fdopen(fd, "w", encoding=_LOG_ENCODING, errors=_LOG_ERRORS) as f:
         if get_config_value("logging.include_command", True):
             f.write(f"Command: {command}\n")
 
@@ -299,7 +330,7 @@ def format_log_with_colors(content, show_colors=True):
                 color = "green" if line == "Return code: 0" else "red"
             elif line.startswith("[TIMED OUT"):
                 color = "red"
-            elif line.startswith("[OUTPUT TRUNCATED"):
+            elif _TRUNCATION_MARKER.match(line):
                 color = "yellow"
             elif line.startswith("Command: ") or line in ("STDOUT:", "STDERR:"):
                 color = "blue"

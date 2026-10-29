@@ -114,6 +114,15 @@ def test_format_log_with_colors_failure():
     assert all(color is None for _, color in log_manager.format_log_with_colors(content, show_colors=False))
 
 
+@pytest.mark.parametrize(
+    "marker",
+    ["[STDOUT TRUNCATED - 10 bytes removed]", "[STDERR TRUNCATED]", "[COMMAND TRUNCATED]", "[STDOUT OMITTED - x]"],
+)
+def test_format_log_with_colors_truncation_markers(marker):
+    """Every truncation marker the writer emits is highlighted, not just the legacy one."""
+    assert log_manager.format_log_with_colors(marker) == [(marker, "yellow")]
+
+
 import os
 import tempfile
 import shutil
@@ -223,3 +232,18 @@ class TestLogSizeBudget:
         for label, original in (("STDOUT", "x" * 5000), ("STDERR", "y" * 5000)):
             if original not in content:
                 assert f"{label} TRUNCATED" in content or f"{label} OMITTED" in content
+
+    @pytest.mark.parametrize("char", ["é", "€", "😀"])
+    def test_cap_counts_bytes_not_characters(self, tmp_path, char):
+        """Multi-byte output must not overshoot the cap, which is a size on disk."""
+        log_file = self._write(tmp_path, f"echo {char}", char * 2_000_000, char * 2_000_000, mb=1)
+        assert log_file.stat().st_size <= 1 * 1024 * 1024
+        # Cuts never split a character, so the file is still valid UTF-8.
+        content = log_file.read_bytes().decode("utf-8")
+        assert "STDOUT TRUNCATED" in content and "STDERR TRUNCATED" in content
+
+    def test_unencodable_output_is_still_logged(self, tmp_path):
+        """A lone surrogate (from undecodable task output) must not stop the log being written."""
+        log_file = self._write(tmp_path, "cmd", "before \udcff after", "", mb=1)
+        content = log_file.read_bytes().decode("utf-8")
+        assert "before" in content and "after" in content

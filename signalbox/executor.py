@@ -57,6 +57,9 @@ def run_command(command, timeout=None, cwd=None):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        # Output that is not valid in the locale's encoding (binary data, a
+        # latin-1 file) is replaced with U+FFFD instead of failing the run.
+        errors="replace",
         start_new_session=True,
     )
     try:

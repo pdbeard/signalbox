@@ -69,6 +69,15 @@ class TestTaskRun:
         assert "Return code: -9" in log and "[TIMED OUT" in log
         assert runtime(sb_home, "tasks")["slow"]["last_status"] == "failed"
 
+    def test_undecodable_output_is_logged_not_fatal(self, sb_home, run):
+        sb_home.write_tasks([task("binout", r"printf 'ok \377 done\n'")])
+
+        result = run("task", "run", "binout")
+
+        assert result.exit_code == 0, result.output
+        log = sb_home.logs("binout")[0].read_bytes().decode("utf-8")
+        assert "ok � done" in log
+
     def test_invalid_task_is_rejected_before_running(self, sb_home, run):
         sb_home.write_tasks([{"name": "nocmd", "description": "missing command"}])
 
