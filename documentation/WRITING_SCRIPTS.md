@@ -2,25 +2,25 @@
 
 ## ⚠️ Security First
 
-**Signalbox executes commands with full shell access and your user's permissions.** Commands can:
-- Read/write any files you can access
+**Signalbox runs commands in a shell, with all the permissions of your user.** A command can do these things:
+- Read and write all files that you can access
 - Make network connections
-- Execute any programs
+- Run all programs
 - Delete data
 
-**Always review scripts before adding them to your configuration.** See [SECURITY.md](../SECURITY.md) for detailed security guidelines.
+**Read each script before you add it to your configuration.** For the security rules, refer to [SECURITY.md](../SECURITY.md).
 
 ---
 
-This guide covers best practices for writing scripts that work well with signalbox.
+This guide tells you how to write scripts that work well with signalbox. In this guide, a script is the program that the `command` of a task runs.
 
 ## Exit Code Requirements
 
-**All scripts must return proper exit codes:**
+**All scripts must return the correct exit code:**
 - **0** = Success ✅
-- **Non-zero (1-255)** = Failure ❌
+- **Not 0 (1-255)** = Failure ❌
 
-signalbox uses exit codes to determine if a script succeeded or failed. This is a universal standard across all programming languages and shells.
+Signalbox uses the exit code to find if a script was successful. All programming languages and shells use this rule.
 
 ## Language-Specific Examples
 
@@ -135,7 +135,7 @@ func main() {
 }
 ```
 
-**Note:** In Go, returning from `main()` without calling `os.Exit()` defaults to exit code 0.
+**Note:** in Go, if `main()` returns without `os.Exit()`, the exit code is 0.
 
 ### Rust Programs
 
@@ -162,7 +162,7 @@ fn main() {
 }
 ```
 
-**Note:** `panic!()` in Rust will exit with a non-zero code automatically.
+**Note:** in Rust, `panic!()` exits with an exit code that is not 0.
 
 ### Node.js Scripts
 
@@ -188,7 +188,7 @@ main();
 
 ## Adding Alerts to Tasks
 
-You can define alerts in your task YAML to monitor for specific output patterns and trigger notifications.
+You can add alerts to a task in its YAML file. An alert finds a pattern in the output and can send a notification.
 
 ### Example
 
@@ -215,20 +215,20 @@ tasks:
 ```
 
 **Alert fields:**
-- `pattern` (required): Regex or substring to match in output
-- `message` (required): Message to log/notify
-- `severity` (optional): `info`, `warning`, `critical` (default: `info`)
-- `title` (optional): Custom notification title (default: `"Alert: {task_name}"`)
-- `notify` (optional): Override global `alerts.notifications.enabled` setting
-- `on_failure_only` (optional): Override global `alerts.notifications.on_failure_only` setting
+- `pattern` (necessary): the regular expression or text to find in the output
+- `message` (necessary): the text that signalbox records and shows in the notification
+- `severity` (optional): `info`, `warning` or `critical`. The default is `info`.
+- `title` (optional): the title of the notification. The default is `"Alert: {task_name}"`.
+- `notify` (optional): replaces the global setting `alerts.notifications.enabled` for this alert
+- `on_failure_only` (optional): replaces the global setting `alerts.notifications.on_failure_only` for this alert
 
-Alerts are checked after task execution. If a pattern matches, the alert is:
-1. Always logged to console and alert storage
-2. Optionally sends a notification (based on global config and per-alert overrides)
+Signalbox examines the alerts after the task stops. This is also true when the task stops at its time limit. If a pattern matches, signalbox does these steps:
+1. It shows the alert in the console and records it in the alert history.
+2. It sends a notification if the global settings and the settings of the alert let it.
 
 ### Per-Alert Notification Control
 
-You can control notifications for individual alerts:
+Each alert can have its own notification settings:
 
 ```yaml
 alerts:
@@ -248,7 +248,7 @@ alerts:
 
 ### Viewing Alerts
 
-Use the CLI to view recent alerts:
+To see the recent alerts, use this command:
 ```bash
 signalbox alerts
 ```
@@ -262,7 +262,7 @@ signalbox alerts check_website_health --severity critical --days 7
 
 ### 1. Always Set Explicit Exit Codes
 
-Don't rely on implicit success - always explicitly exit with 0 on success.
+Do not let the script exit with the code of its last command by accident. Exit with 0 when the script is successful.
 
 **Good:**
 ```bash
@@ -281,7 +281,7 @@ exit 0
 
 ### 2. Write Errors to STDERR
 
-signalbox captures both stdout and stderr. Write errors to stderr for clarity.
+Signalbox records stdout and stderr. Write errors to stderr. Thus, the errors are easy to find.
 
 **Good:**
 ```python
@@ -295,7 +295,7 @@ print(f"Error: {error}")  # Goes to stdout
 
 ### 3. Use Meaningful Exit Codes (Optional)
 
-While signalbox only distinguishes 0 vs non-zero, you can use different codes for different errors:
+Signalbox only examines if the exit code is 0. But you can use different codes for different errors:
 
 ```python
 # Exit codes
@@ -307,7 +307,7 @@ ERR_TIMEOUT = 3
 sys.exit(ERR_CONNECTION)
 ```
 
-This helps with debugging when reviewing logs.
+Different codes help you find the cause of a failure in the logs.
 
 ### 4. Make Scripts Executable
 
@@ -315,7 +315,7 @@ This helps with debugging when reviewing logs.
 chmod +x your_script.sh
 ```
 
-Then reference them directly in config:
+Then use them directly in the configuration:
 ```yaml
 - name: my_script
   command: /path/to/script.sh
@@ -328,12 +328,12 @@ Then reference them directly in config:
 command: /usr/local/bin/backup.sh
 ```
 
-**Option 2: Ensure script is in PATH**
+**Option 2: Make sure that the script is in PATH**
 ```yaml
 command: backup.sh  # Works if in PATH
 ```
 
-**Option 3: Use interpreter explicitly**
+**Option 3: Give the interpreter in the command**
 ```yaml
 command: python3 /path/to/script.py
 command: node /path/to/script.js
@@ -341,7 +341,7 @@ command: node /path/to/script.js
 
 ### 6. Handle Signals Gracefully
 
-For long-running scripts, handle interruption:
+If a script runs for a long time, handle interrupts:
 
 ```python
 import signal
@@ -356,7 +356,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 ### 7. Validate Inputs
 
-Check for required arguments or environment variables at the start:
+At the start, make sure that the necessary arguments and environment variables are available:
 
 ```bash
 #!/bin/bash
@@ -371,7 +371,7 @@ fi
 
 ## Testing Your Scripts
 
-Before adding to signalbox, test exit codes manually:
+Before you add a script to signalbox, test its exit codes manually:
 
 ```bash
 # Run your script
@@ -384,28 +384,35 @@ echo $?
 
 ## Common Issues
 
-### Issue: Script always succeeds even when it should fail
+### Problem: the script is always successful, also when it must fail
 
-**Cause:** Last command in script succeeds, overriding earlier failures.
+**Cause:** the last command of the script is successful. Its exit code replaces the earlier failures.
 
-**Solution:** Use `set -e` in Bash or explicit error handling.
+**Solution:** use `set -e` in Bash, or handle errors in the script.
 
-### Issue: Script timeout even though it completed
+### Problem: the task stops at its time limit before the script is complete
 
-**Cause:** Script runs longer than `default_timeout` (default: 300 seconds).
+**Cause:** the script runs longer than `default_timeout` (300 seconds by default).
 
-**Solution:** Increase timeout in config or for specific script:
+**Solution:** increase the time limit in `signalbox.yaml`, or set a time limit for the task:
 ```yaml
-# In config.yaml
+# In signalbox.yaml
 execution:
   default_timeout: 600  # 10 minutes
+
+# Or in the task
+tasks:
+  - name: long_backup
+    command: ./backup.sh
+    description: Nightly backup
+    timeout: 1800  # 30 minutes
 ```
 
-### Issue: Can't see error output
+### Problem: you cannot see the error output
 
-**Cause:** Errors printed to stdout instead of stderr.
+**Cause:** the script writes errors to stdout, not to stderr.
 
-**Solution:** Always write errors to stderr:
+**Solution:** write errors to stderr:
 ```python
 print("Error", file=sys.stderr)  # Python
 ```
@@ -415,20 +422,20 @@ echo "Error" >&2  # Bash
 
 ## Exit Code Reference
 
-Common exit codes your scripts might return:
+These are the usual exit codes that a script can return:
 
 | Code | Meaning | Example |
 |------|---------|---------|
-| 0 | Success | Everything completed successfully |
-| 1 | General error | Something went wrong (most common failure) |
-| 2 | Usage error | Invalid arguments or options |
-| 126 | Cannot execute | Permission denied or not executable |
-| 127 | Not found | Command/script doesn't exist |
-| 130 | Interrupted | User pressed Ctrl+C |
-| 137 | Killed | Process killed (often by timeout) |
-| 143 | Terminated | Graceful shutdown signal received |
+| 0 | Success | The script was successful |
+| 1 | General error | Something went wrong (the most usual failure) |
+| 2 | Usage error | Incorrect arguments or options |
+| 126 | Cannot run | No permission, or the file is not executable |
+| 127 | Not found | The command or the script does not exist |
+| 130 | Interrupted | The user pushed Ctrl+C |
+| 137 | Killed | Something stopped the process with SIGKILL |
+| 143 | Terminated | The process received the signal to stop (SIGTERM) |
 
-signalbox displays simple "success" or "failed" status based on exit code 0 vs non-zero.
+Signalbox shows "success" if the exit code is 0, and "failed" for all other codes. When a task stops at its time limit, signalbox records `Return code: -9` in the log.
 
 ## Related Documentation
 

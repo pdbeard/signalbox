@@ -1,6 +1,6 @@
 # Configuration File Structure
 
-This document explains the directory-based configuration system for signalbox.
+This document gives the directories and files that signalbox uses.
 
 ## File Structure Overview
 
@@ -25,40 +25,40 @@ This document explains the directory-based configuration system for signalbox.
 
 ## Configuration System
 
-signalbox uses **directory-based configuration** for easy organization:
+Signalbox keeps its configuration in **directories**. Thus, you can put tasks and groups in different files:
 
 ### **Tasks Directory** (`config/tasks/`)
-Contains YAML files defining tasks to execute.
- - All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically); dotfiles are skipped
- - Tasks from all files are combined into a single list
+This directory has the YAML files that define the tasks.
+ - Signalbox loads all `.yaml` and `.yml` files in the directory, in alphabetical sequence. It does not load files that start with a dot.
+ - Signalbox puts the tasks from all files into one list.
 
 ### **Groups Directory** (`config/groups/`)
-Contains YAML files defining groups of tasks and scheduling.
-- All `.yaml` and `.yml` files in the directory are loaded (sorted alphabetically); dotfiles are skipped
-- Groups from all files are combined into a single list
+This directory has the YAML files that define the groups and their schedules.
+- Signalbox loads all `.yaml` and `.yml` files in the directory, in alphabetical sequence. It does not load files that start with a dot.
+- Signalbox puts the groups from all files into one list.
 
 ### **Global Config** (`config/signalbox.yaml`)
-Single file containing global settings like timeouts, log limits, and paths.
+One file that has the global settings, for example time limits, log limits and paths.
 
 ## Task Format
 
 **Fields:**
-- `name` (required) - Unique identifier; letters, digits, `_`, `-` and `.` only, not starting with `.` or `-`
-- `description` (required) - Human-readable description
-- `command` (required) - Shell command to execute
-- `timeout` (optional) - Seconds before the task and everything it started are killed (0 = no timeout)
-- `cwd` (optional) - Working directory, absolute or relative to the signalbox home (default: the signalbox home)
-- `log_limit` (optional) - Log rotation: `{type: count|age|size, value: N}`
-- `alerts` (optional) - Regex patterns to match in the output
+- `name` (necessary): a name that no other task uses. Use only letters, digits, `_`, `-` and `.`. Do not start the name with `.` or `-`.
+- `description` (necessary): a short description for people
+- `command` (necessary): the shell command to run
+- `timeout` (optional): the time limit in seconds. After this time, signalbox stops the task and all processes that it started. 0 removes the time limit.
+- `cwd` (optional): the working directory. Use an absolute path, or a path relative to the signalbox home. The default is the signalbox home.
+- `log_limit` (optional): the rule to delete old logs: `{type: count|age|size, value: N}`
+- `alerts` (optional): the regular expressions to find in the output
 
-**Note:** Field order in YAML doesn't affect functionality. Run state (`last_run`, `last_status`) is kept in `runtime/`, never in your config files.
+**Note:** the sequence of the fields in YAML is not important. Signalbox keeps the run status (`last_run`, `last_status`) in `runtime/`. It never writes it in your configuration files.
 
 ## Group Format
 
 **Fields:**
-- `name` (required) - Unique identifier (same rules as task names)
-- `description` (required) - Purpose of the group
-- `tasks` (required) - List of task names
-- `schedule` (optional) - Cron expression for automation
-- `execution` (optional) - Execution mode: `serial` (default) or `parallel`
-- `stop_on_error` (optional) - For serial execution only: stop if a task fails (default: false)
+- `name` (necessary): a name that no other group uses (the same rules as task names)
+- `description` (necessary): the purpose of the group
+- `tasks` (necessary): a list of task names
+- `schedule` (optional): a cron expression for automatic runs
+- `execution` (optional): the execution mode, `serial` (the default) or `parallel`
+- `stop_on_error` (optional): for serial groups only. If true, signalbox stops the group when a task fails. The default is false.

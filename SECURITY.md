@@ -12,43 +12,43 @@ Possible blacklist for inline commands? (rm,chmod, etc. instead of pure trust)
 
 ### Command Execution Architecture
 
-Signalbox executes shell commands defined in YAML configuration files using Python's `subprocess.run()` with `shell=True`. This design choice enables powerful shell features like:
+Signalbox runs the shell commands in the YAML configuration files. It uses the Python `subprocess` module with `shell=True`. Thus, you can use these shell features:
 
 - **Pipes and redirection**: `command1 | command2`, `output > file`
 - **Command chaining**: `cmd1 && cmd2`, `cmd1 || cmd2`
 - **Environment variable expansion**: `$HOME`, `${VAR}`
-- **Multiline bash scripts**: Complex logic with loops and conditionals
-- **Built-in shell commands**: `cd`, `export`, etc.
+- **Bash scripts with more than one line**: loops and conditions
+- **Shell built-in commands**: for example, `cd` and `export`
 
-**This flexibility comes with important security implications.**
+**These features have important security risks.**
 
 ## Threat Model
 
 ### What Signalbox Protects Against
 
-✅ **Python object deserialization attacks** - Uses `yaml.safe_load()` only  
-✅ **Directory traversal in logs** - Task and group names are restricted to letters, digits, `_`, `-` and `.` (no `/`, no leading `.`), so they can't point log, alert or export paths outside their directories  
-✅ **Runaway execution** - Every task gets a timeout (default: 300 seconds) unless it explicitly sets `timeout: 0`  
-✅ **Resource exhaustion** - Log rotation, size limits, and disk protection  
-✅ **Accidental near-zero timeouts** - Timeouts below `execution.min_timeout` (default: 1 second) are raised to it  
-✅ **Disk filling attacks** - Maximum log file size limit (default: 5MB). Output is still held in memory while the task runs  
-✅ **Unauthorized log access** - Log files created with restrictive permissions (0o600)  
-✅ **Log rotation race conditions** - File locking prevents concurrent corruption
+✅ **Python object deserialization attacks**: signalbox uses only `yaml.safe_load()`.  
+✅ **Directory traversal in logs**: task names and group names can have only letters, digits, `_`, `-` and `.`. They cannot have `/` or start with `.`. Thus, a name cannot move a log path, alert path or export path out of its directory.  
+✅ **Tasks that do not stop**: each task has a time limit (300 seconds by default). Only `timeout: 0` removes it.  
+✅ **Resource exhaustion**: signalbox deletes old logs and limits the log size.  
+✅ **Time limits near zero by accident**: signalbox increases a time limit below `execution.min_timeout` (1 second by default) to that value.  
+✅ **Disk filling attacks**: each log file has a maximum size (5 MB by default). **Caution:** this limit does not limit memory. Signalbox keeps all of the output in memory while the task runs.  
+✅ **Unauthorized log access**: signalbox makes log files with the permissions 0o600.  
+✅ **Race conditions in log rotation**: a file lock prevents damage when two runs delete old logs at the same time.
 
 ### What Signalbox Does NOT Protect Against
 
-❌ **Malicious YAML configuration files** - Assumes configuration files are trusted  
-❌ **Privilege escalation** - Runs with user's permissions  
-❌ **Network-based attacks** - No network isolation for scripts  
-❌ **Supply chain attacks** - Trusts system commands (`curl`, `jq`, etc.)
+❌ **Malicious YAML configuration files**: signalbox trusts all configuration files.  
+❌ **Privilege escalation**: signalbox runs with the permissions of the user.  
+❌ **Network attacks**: signalbox does not isolate scripts from the network.  
+❌ **Supply chain attacks**: signalbox trusts system commands, for example `curl` and `jq`.
 
 ## Critical Security Requirements
 
 ### 🔴 YAML Configuration Files Must Be Trusted
 
-**Signalbox provides NO sandboxing or command validation.** Any command in a YAML file will be executed with the full permissions of the user running Signalbox.
+**Signalbox has NO sandbox and does NOT examine commands.** It runs each command in a YAML file with all the permissions of the user who starts signalbox.
 
-**Examples of potentially dangerous commands:**
+**Examples of dangerous commands:**
 ```yaml
 tasks:
   - name: dangerous_deletion
@@ -94,9 +94,9 @@ git diff HEAD config/
 
 #### 3. **Code Review Configuration Changes**
 
-- Never blindly copy YAML files from untrusted sources
-- Review every `command:` field before adding to configuration
-- Use pull request reviews for team configurations
+- Do not copy YAML files from sources that you do not trust.
+- Read each `command:` field before you add it to your configuration.
+- For team configurations, examine each change in a pull request.
 
 #### 4. **Principle of Least Privilege**
 
@@ -140,7 +140,7 @@ signalbox log tail task-name
 
 #### 7. **Limit Script Complexity**
 
-When possible, wrap complex logic in separate script files:
+If possible, put complex logic in a separate script file:
 
 ```yaml
 # BETTER: Call a controlled script
@@ -163,77 +163,77 @@ tasks:
 
 ### Shell Injection Not Prevented
 
-Signalbox **intentionally** does not implement command sandboxing or whitelisting because:
+Signalbox does **not** have a command sandbox or an allowlist. This is intentional, for these reasons:
 
-1. **Flexibility**: Users need full shell capabilities for real-world automation
-2. **Compatibility**: Existing scripts would break with restrictions
-3. **Trust Model**: Configuration files are treated as code (like Dockerfiles, Makefiles)
-4. **False Security**: Blacklists/whitelists are easily bypassed and create false confidence
+1. **Flexibility**: automation tasks use all the features of the shell.
+2. **Compatibility**: limits on commands stop scripts that work now.
+3. **Trust model**: signalbox treats configuration files as code, as Docker and make treat Dockerfiles and Makefiles.
+4. **False security**: it is easy to go around a denylist or an allowlist. These lists can make users think that they are safe when they are not.
 
 ### Mitigation: Configuration-as-Code
 
-Treat YAML configuration files with the same security considerations as source code:
-- **Review** all changes
-- **Test** in isolated environments
-- **Audit** regularly
-- **Restrict** write access
+Apply the same security rules to YAML configuration files as to source code:
+- **Examine** all changes.
+- **Test** in an isolated environment.
+- **Audit** the configuration regularly.
+- **Limit** write access.
 
 ## Reporting Vulnerabilities
 
 ### Scope
 
-We accept security reports for:
-- Vulnerabilities in Signalbox's own code (config parsing, log handling, etc.)
-- Bugs that could lead to unintended command execution
-- Permission/isolation issues in Signalbox itself
+We accept security reports about:
+- Vulnerabilities in the signalbox code, for example in configuration parsing or in log files
+- Bugs that can cause signalbox to run a command that the user did not configure
+- Permission problems or isolation problems in signalbox
 
-We do **not** accept reports for:
-- "Signalbox executes commands from YAML" (this is by design)
-- Vulnerabilities in scripts defined by users
-- Issues with third-party commands called by scripts
+We do **not** accept reports about:
+- "Signalbox runs the commands in the YAML files". This is the design.
+- Vulnerabilities in scripts that users write
+- Problems in third-party commands that scripts use
 
 ### How to Report
 
 **For security issues in Signalbox's code:**
 - Email: [your-security-email@example.com]
-- Or use GitHub Security Advisories (private reporting)
+- Or use GitHub Security Advisories (private reports)
 
-**Expected response time:** 48 hours
+**Response time:** 48 hours
 
 ### Disclosure Policy
 
-- We will acknowledge receipt within 48 hours
-- We aim to provide an initial assessment within 7 days
-- We will coordinate disclosure timing with the reporter
-- Public disclosure after fix is available (typically 30-90 days)
+- We tell you that we received the report in 48 hours or less.
+- We try to send a first assessment in 7 days or less.
+- We agree the disclosure date with you.
+- We disclose the problem after a fix is available, usually in 30 to 90 days.
 
 ## Security Checklist for Deployment
 
-Before deploying Signalbox in production:
+Before you use signalbox in production, do these steps:
 
-- [ ] Configuration files stored in version control
-- [ ] File permissions set (700 for directory, 600 for files)
-- [ ] Code review process established for config changes
-- [ ] Running with minimal user privileges
-- [ ] Log monitoring configured
-- [ ] Regular audits scheduled
-- [ ] Incident response plan documented
-- [ ] Team trained on security implications
-- [ ] Test environment separated from production
-- [ ] Backup strategy implemented
-- [ ] Minimum timeout configured (prevent DOS)
-- [ ] Maximum log file size limit set (prevent disk exhaustion)
-- [ ] Log file permissions verified (0o600 for sensitive data)
+- [ ] Keep the configuration files in version control.
+- [ ] Set the file permissions: 700 for directories, 600 for files.
+- [ ] Examine each configuration change before you use it.
+- [ ] Run signalbox as a user with the minimum privileges.
+- [ ] Monitor the logs.
+- [ ] Schedule regular audits.
+- [ ] Write an incident response plan.
+- [ ] Train your team about the security risks.
+- [ ] Keep the test environment separate from production.
+- [ ] Make a backup plan.
+- [ ] Set a minimum time limit, to prevent denial of service.
+- [ ] Set a maximum log file size, to prevent a full disk.
+- [ ] Make sure that the log file permissions are 0o600.
 
 ## Built-in Security Mitigations
 
-Signalbox implements several protections against common attack vectors:
+Signalbox has these protections against usual attacks:
 
 ### 1. Timeouts
-**Issue:** A hung command would otherwise block its group forever  
-**Mitigation:** Every task runs with `execution.default_timeout` (300 seconds) unless it sets its own `timeout`.
-Values below `min_timeout` are raised to it. `timeout: 0` is an explicit opt-out and disables the timeout
-entirely; `min_timeout` does not prevent that, so review any task that uses it.
+**Problem:** a command that does not stop can stop its group from continuing.  
+**Mitigation:** each task has the time limit `execution.default_timeout` (300 seconds), or its own `timeout`.
+Signalbox increases a value below `min_timeout` to `min_timeout`. `timeout: 0` removes the time limit.
+`min_timeout` does not prevent this. Thus, examine each task that uses `timeout: 0`.
 ```yaml
 execution:
   default_timeout: 300  # Applied to every task without its own timeout
@@ -241,16 +241,16 @@ execution:
 ```
 
 ### 2. Disk Exhaustion Protection  
-**Issue:** Large script output could fill disk  
-**Mitigation:** Maximum log file size with automatic truncation
+**Problem:** a large script output can fill the disk.  
+**Mitigation:** each log file has a maximum size. Signalbox removes the middle of output that is too large, and adds a marker.
 ```yaml
 logging:
   max_file_size_mb: 5  # Truncates output exceeding this size
 ```
 
 ### 3. Log File Access Control
-**Issue:** Log files may contain sensitive command output  
-**Mitigation:** Created with `0o600` permissions (owner read/write only)
+**Problem:** log files can have sensitive command output.  
+**Mitigation:** signalbox makes log files with the permissions `0o600`. Only the owner can read and write them.
 ```bash
 # Log files are automatically created with restrictive permissions
 ls -l ~/.config/signalbox/logs/*/
@@ -258,11 +258,11 @@ ls -l ~/.config/signalbox/logs/*/
 ```
 
 ### 4. Concurrent Execution Safety
-**Issue:** Multiple scripts running simultaneously could corrupt log rotation  
-**Mitigation:** File locking prevents race conditions during rotation
-- Uses `fcntl.flock()` for atomic log rotation
-- Non-blocking locks prevent deadlocks
-- Failed rotations don't affect script execution
+**Problem:** if two runs delete old logs at the same time, they can damage the log directory.  
+**Mitigation:** a file lock lets only one run at a time delete old logs.
+- Signalbox uses `fcntl.flock()`.
+- If the lock is not available, signalbox does not wait. Thus, deadlocks cannot occur.
+- If signalbox cannot delete old logs, the task result does not change.
 
 ## Comparison to Similar Tools
 
@@ -275,19 +275,19 @@ ls -l ~/.config/signalbox/logs/*/
 | **Docker** | Full shell in container | Isolate via containers |
 | **systemd** | Full shell, optional sandboxing | Trust unit files |
 
-**Key insight:** Configuration-as-code tools generally trust their configuration sources. Signalbox follows this established pattern.
+**Summary:** usually, configuration-as-code tools trust their configuration. Signalbox does the same.
 
 ## Future Considerations
 
-While not currently planned, potential future security enhancements could include:
+We do not plan these security features now. We can add them in a later version:
 
-- **Optional command whitelisting mode** (with clear documentation of limitations)
-- **Signing/verification of configuration files**
-- **Audit logging of all executed commands**
-- **Integration with SELinux/AppArmor for process isolation**
-- **Pre-execution dry-run mode with diff view**
+- **An optional allowlist for commands**, with clear documentation of its limits
+- **Signatures for configuration files**, and a check of these signatures
+- **An audit log of all commands that signalbox runs**
+- **SELinux or AppArmor isolation for processes**
+- **A dry-run mode that shows what will change before signalbox runs it**
 
-These features would be opt-in to maintain backward compatibility and flexibility.
+If we add these features, they will be optional. Thus, current configurations will continue to work.
 
 ---
 

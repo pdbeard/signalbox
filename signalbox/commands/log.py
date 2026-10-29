@@ -29,10 +29,10 @@ def log():
 
     \b
     Commands:
-      list [OPTIONS]     List all task execution logs with filters
+      list [OPTIONS]     Show the logs of all tasks, with filters
       show TASK          Show the latest log for a task
-      tail TASK          Follow log output in real-time
-      history TASK       Show all historical logs for a task
+      tail TASK          Show the latest log, then the log of each new run
+      history TASK       Show all the logs of a task
       clear [OPTIONS]    Clear logs for tasks
     """
     pass
@@ -73,7 +73,7 @@ def log_show(name):
 @click.argument("name")
 @handle_exceptions
 def log_history_cmd(name):
-    """Show all historical log files for a task."""
+    """Show all the log files of a task."""
     config = load_config()
     _find_task_or_raise(config, name)
 
@@ -96,7 +96,7 @@ def log_history_cmd(name):
 
 
 @log.command(name="list")
-@click.option("--task", help="Filter to specific task")
+@click.option("--task", help="Show only this task")
 @click.option("--status", type=click.Choice(["success", "failed"]), help="Filter by status")
 @click.option("--failed", is_flag=True, help="Shortcut for --status failed")
 @click.option("--success", is_flag=True, help="Shortcut for --status success")
@@ -104,10 +104,10 @@ def log_history_cmd(name):
 @click.option("--until", help="Show logs until date (YYYY-MM-DD)")
 @click.option("--today", is_flag=True, help="Show only today's logs")
 @click.option("--last", "limit", type=int, default=50, help="Show last N runs (default: 50)")
-@click.option("--verbose", "-v", is_flag=True, help="Show truncated output for each log entry")
+@click.option("--verbose", "-v", is_flag=True, help="Show the first lines of output of each log")
 @handle_exceptions
 def log_list_cmd(task, status, failed, success, since, until, today, limit, verbose):
-    """List all task execution logs with filters."""
+    """Show the logs of all tasks. Use the options to filter them."""
     logs = log_manager.get_all_log_files()
 
     if not logs:
@@ -196,7 +196,7 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
 @log.command(name="tail")
 @click.argument("name")
 @click.option("-f/-F", "--follow/--no-follow", default=True, help="Keep following new runs (default: follow)")
-@click.option("-n", "--lines", type=int, default=10, help="Number of lines to show initially (default: 10)")
+@click.option("-n", "--lines", type=int, default=10, help="Number of lines to show first (default: 10)")
 @handle_exceptions
 def log_tail_cmd(name, follow, lines):
     """Show the latest log for a task and follow new runs (like tail -f).
@@ -249,7 +249,7 @@ def log_tail_cmd(name, follow, lines):
 @log.command(name="clear")
 @click.option("--task", "task_name", help="Clear logs for specific task")
 @click.option("--all", "clear_all", is_flag=True, help="Clear all logs for all tasks")
-@click.option("--yes", "-y", is_flag=True, help="Don't ask for confirmation")
+@click.option("--yes", "-y", is_flag=True, help="Do not ask for confirmation")
 @handle_exceptions
 def log_clear(task_name, clear_all, yes):
     """Clear logs and alert history for a specific task or all tasks."""
@@ -269,5 +269,5 @@ def log_clear(task_name, clear_all, yes):
         else:
             click.echo(f"No logs found for {task_name}")
     else:
-        click.echo("Error: Provide --task NAME or --all", err=True)
+        click.echo("Error: Give --task NAME or --all", err=True)
         sys.exit(2)

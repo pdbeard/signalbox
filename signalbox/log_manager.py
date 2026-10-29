@@ -231,7 +231,7 @@ def rotate_logs(task):
         # Don't fail the entire task execution if rotation fails
         import click
 
-        click.echo(f"Warning: Log rotation failed for {name}: {e}", err=True)
+        click.echo(f"Warning: Cannot delete old logs of {name}: {e}", err=True)
 
 
 def _rotate_by_count(task_log_dir, log_files, max_count):

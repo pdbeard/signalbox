@@ -120,5 +120,7 @@ def group_list():
                 }
             )
         except Exception as e:
-            click.echo(f"[CONFIG ERROR] Unexpected error in group config: {e}. Offending group: {group_item}", err=True)
+            click.echo(
+                f"[CONFIG ERROR] Unexpected error in the group configuration: {e}. Group: {group_item}", err=True
+            )
     print_group_list_table(group_rows)

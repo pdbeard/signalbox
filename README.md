@@ -2,44 +2,44 @@
 
 # signalbox
 
-Signalbox is a CLI tool for managing, executing, and monitoring shell tasks with detailed logging, pattern-based alerting, scheduling exports, and group execution.
+Signalbox is a command-line tool that runs and monitors shell tasks. It keeps a log of each run and records alerts that match the task output. It also runs tasks in groups and makes schedule files for systemd and cron.
 
 ## Main Features
 
-- List tasks and their last run status
-- Run individual tasks or task groups (serial or parallel)
-- Per-run logs with automatic rotation (by count or age)
-- Pattern-based alerts on task output, with optional desktop notifications
-- Generate systemd/cron configurations for scheduled groups
-- Optional system tray app showing red/green status at a glance
+- Show each task and the status of its last run
+- Run one task, or a group of tasks in series or in parallel
+- Keep one log for each run, and delete old logs by count, age or size
+- Record alerts when task output matches a pattern, and send desktop notifications
+- Make systemd and cron files for scheduled groups
+- Show a red or green status in the system tray (optional)
 
 ## Installation
 
 ### Recommended: Global Install with pipx
 
-Install pipx if you don't have it:
+If pipx is not installed, install it:
 
     python3 -m pip install --user pipx
     python3 -m pipx ensurepath
 
-Then install signalbox globally from your local source:
+Then install signalbox from your local copy of the source:
 
     pipx install .
 
     # With the system tray app:
     pipx install ".[tray]"
 
-This makes the `signalbox` command available globally, in an isolated environment.
+pipx installs signalbox in its own environment. You can then use the `signalbox` command in all directories.
 
 ### Local Development Install
 
-If you want to develop or test signalbox locally, use a virtual environment:
+To change or test signalbox, use a virtual environment:
 
     python3 -m venv venv
     source venv/bin/activate
     pip install -e ".[dev]"
 
-When developing, you can run directly from the project directory without installing globally:
+During development, you can run signalbox from the project directory. You do not have to install it:
 
 ```bash
 python -m signalbox list  # Uses ./config/ in the current directory if present
@@ -47,31 +47,31 @@ python -m signalbox list  # Uses ./config/ in the current directory if present
 
 ### Initialize Configuration
 
-After installation, set up your configuration directory:
+After you install signalbox, make the configuration directory:
 
 ```bash
 signalbox init
 ```
 
-This creates `~/.config/signalbox/` with:
+This command makes `~/.config/signalbox/` with these items:
 
-- Global configuration file (`config/signalbox.yaml`)
-- Task definitions directory (`config/tasks/`)
-- Group definitions directory (`config/groups/`)
-- Pre-built example tasks and groups (`config/catalog/`, off by default; set `include_catalog: true` to load them)
-- Log directory (`logs/`)
-- Runtime state directory (`runtime/`)
+- The global configuration file (`config/signalbox.yaml`)
+- The directory for task files (`config/tasks/`)
+- The directory for group files (`config/groups/`)
+- Example tasks and groups (`config/catalog/`). Signalbox does not load them. To load them, set `include_catalog: true`.
+- The log directory (`logs/`)
+- The directory for run status (`runtime/`)
 
-You can now run `signalbox` from any directory on your system.
+You can now use `signalbox` in all directories.
 
 ### Configuration Location
 
-Signalbox looks for configuration in the following order:
+Signalbox looks for its configuration in these locations, in this sequence:
 
-1. **`$SIGNALBOX_HOME`** — custom location via environment variable (highest priority)
-2. **`$XDG_CONFIG_HOME/signalbox`** — XDG Base Directory specification (if `XDG_CONFIG_HOME` is set)
-3. **`~/.config/signalbox/`** — user configuration directory (created by `signalbox init`)
-4. **Current directory** — for development or project-specific configurations (if `./config/signalbox.yaml` exists)
+1. **`$SIGNALBOX_HOME`**: a location that you set with this environment variable. This location has the highest priority.
+2. **`$XDG_CONFIG_HOME/signalbox`**: the XDG location. Signalbox uses it only if `XDG_CONFIG_HOME` has a value.
+3. **`~/.config/signalbox/`**: the user configuration directory. `signalbox init` makes it.
+4. **The current directory**: for development or for the configuration of one project. Signalbox uses it only if `./config/signalbox.yaml` is in the directory.
 
 ```bash
 # Explicit override
@@ -86,62 +86,62 @@ signalbox --config /path/to/config/signalbox.yaml list
 
 ### Setup
 
-- `signalbox init` — initialize configuration (run once after installation)
+- `signalbox init`: make the configuration directory. Do this one time after you install signalbox.
 
 ### Shortcuts
 
-- `signalbox list` — list all tasks with status and last run time
-- `signalbox run NAME` — run a task
-- `signalbox validate` — validate configuration files
+- `signalbox list`: show all tasks, with their status and the time of the last run
+- `signalbox run NAME`: run a task
+- `signalbox validate`: examine the configuration files for errors
 
 ### Tasks
 
-- `signalbox task list` — list all tasks, grouped by config file
-- `signalbox task run NAME` — run a single task (shows an output preview; `--quiet` to suppress)
-- `signalbox task run --all` — run every configured task
+- `signalbox task list`: show all tasks, in groups by configuration file
+- `signalbox task run NAME`: run one task. The command shows the first lines of the output. To stop this, use `--quiet`.
+- `signalbox task run --all`: run all tasks
 
 ### Groups
 
-- `signalbox group list` — list all groups and their tasks
-- `signalbox group run NAME` — run all tasks in a group (serial or parallel)
-- `signalbox list-schedules` — show scheduled groups with cron expressions
+- `signalbox group list`: show all groups and their tasks
+- `signalbox group run NAME`: run all tasks in a group, in series or in parallel
+- `signalbox list-schedules`: show the scheduled groups and their cron expressions
 
 ### Logs
 
-- `signalbox log show TASK` — view the latest log for a task
-- `signalbox log history TASK` — list all historical runs for a task
-- `signalbox log list [--task NAME] [--failed] [--today] [--since DATE] [--last N] [-v]` — browse runs across all tasks
-- `signalbox log tail TASK` — follow log output in real time
-- `signalbox log clear --task NAME` / `signalbox log clear --all` — clear logs
+- `signalbox log show TASK`: show the newest log of a task
+- `signalbox log history TASK`: show all the logs of a task
+- `signalbox log list [--task NAME] [--failed] [--today] [--since DATE] [--last N] [-v]`: show the runs of all tasks
+- `signalbox log tail TASK`: show the newest log of a task. Then show the log of each new run when that run is complete.
+- `signalbox log clear --task NAME` / `signalbox log clear --all`: delete the logs and the alert history
 
 ### Configuration
 
-- `signalbox config show [KEY]` — display all settings, or one (e.g. `config show execution.default_timeout`)
-- `signalbox config path` — print the configuration directory
-- `signalbox config check-permissions` — warn if config/log files are readable or writable by other users
-- `signalbox config validate` — validate configuration files
+- `signalbox config show [KEY]`: show all settings, or one setting (for example, `config show execution.default_timeout`)
+- `signalbox config path`: show the configuration directory
+- `signalbox config check-permissions`: show a warning if other users can read or write the configuration files or the logs
+- `signalbox config validate`: examine the configuration files for errors
 
 ### Alerts & Notifications
 
-- `signalbox alerts [TASK] [--severity LEVEL] [--days N]` — list recent alerts
-- `signalbox notify-test` — send a test desktop notification
+- `signalbox alerts [TASK] [--severity LEVEL] [--days N]`: show the recent alerts
+- `signalbox notify-test`: send a test desktop notification
 
 ### Scheduling Exports
 
-- `signalbox export-systemd GROUP [--user]` — generate systemd service/timer files
-- `signalbox export-cron GROUP` — generate a crontab entry
+- `signalbox export-systemd GROUP [--user]`: make the systemd service file and timer file
+- `signalbox export-cron GROUP`: make a crontab line
 
 ### Tray App
 
-- `signalbox-tray` — system tray icon with status polling (requires `pip install "signalbox[tray]"`)
+- `signalbox-tray`: a system tray icon that shows the task status. You must install it with `pip install "signalbox[tray]"`.
 
-See [documentation/TRAY_USAGE.md](documentation/TRAY_USAGE.md) for details.
+For more information, refer to [documentation/TRAY_USAGE.md](documentation/TRAY_USAGE.md).
 
 ## Configuration
 
 ### Tasks (`config/tasks/`)
 
-All `*.yaml`/`*.yml` files in the directory are loaded. Example `config/tasks/system.yaml`:
+Signalbox loads all `*.yaml` and `*.yml` files in this directory. This is an example of `config/tasks/system.yaml`:
 
 ```yaml
 tasks:
@@ -158,26 +158,26 @@ tasks:
       value: 7           # Keep logs for 7 days
 ```
 
-Each task requires:
+Each task must have these fields:
 
-- `name` — unique identifier
-- `command` — shell command to execute
-- `description` — human-readable description
+- `name`: a name that no other task uses
+- `command`: the shell command to run
+- `description`: a short description for people
 
-Optional fields:
+These fields are optional:
 
-- `timeout` — per-task timeout in seconds; overrides `execution.default_timeout` (0 disables the timeout). On timeout the task and every process it started are killed
-- `cwd` — working directory, absolute or relative to the signalbox home (default: the signalbox home, for manual and scheduled runs alike)
-- `log_limit` — log rotation: `type: count` keeps the N most recent logs, `type: age` keeps logs for N days, `type: size` keeps the newest logs that fit in N MB
-- `alerts` — output pattern alerts (see Alerting below)
+- `timeout`: the time limit for the task, in seconds. It replaces `execution.default_timeout` for this task. A value of 0 removes the time limit. If the task runs longer than the time limit, signalbox stops the task and all processes that it started.
+- `cwd`: the working directory. Use an absolute path, or a path relative to the signalbox home. If you do not set it, signalbox uses the signalbox home. This is the same for manual runs and scheduled runs.
+- `log_limit`: the rule to delete old logs. `type: count` keeps the N newest logs. `type: age` keeps the logs of the last N days. `type: size` keeps the newest logs that fit in N MB.
+- `alerts`: the patterns to find in the output. Refer to "Alerting" below.
 
-Commands run with no stdin (`/dev/null`), so anything that prompts for input fails immediately instead of waiting for the timeout.
+Commands get no input (stdin is `/dev/null`). Thus, a command that asks for input stops with an error immediately. It does not wait until the time limit.
 
-**Organization tips:** split files by functionality (`basic.yaml`, `backup.yaml`), by environment (`production.yaml`, `staging.yaml`), or by team.
+**How to organize the files:** you can put tasks in different files by function (`basic.yaml`, `backup.yaml`), by environment (`production.yaml`, `staging.yaml`), or by team.
 
 ### Groups (`config/groups/`)
 
-Groups organize tasks into collections that run together. Example `config/groups/daily.yaml`:
+A group is a set of tasks that run together. This is an example of `config/groups/daily.yaml`:
 
 ```yaml
 groups:
@@ -191,12 +191,12 @@ groups:
       - cleanup
 ```
 
-- `name`, `description`, `tasks` are required
-- `execution` — `serial` (default) or `parallel`
-- `stop_on_error` — serial mode only; stop the group when a task fails
-- `schedule` — optional cron expression; only scheduled groups can be exported to systemd/cron
+- `name`, `description` and `tasks` are necessary.
+- `execution`: `serial` (the default) or `parallel`.
+- `stop_on_error`: for serial groups only. If a task fails, signalbox does not run the remaining tasks.
+- `schedule`: a cron expression (optional). You can export only scheduled groups to systemd or cron.
 
-Only groups can be scheduled. A task that needs its own schedule can be the sole member of a group.
+You can schedule only groups. To schedule one task, put it in a group of its own.
 
 ### Scheduling Examples
 
@@ -223,9 +223,9 @@ groups:
 
 ## Automation Setup
 
-Signalbox does not run its own scheduler daemon — it generates systemd or cron configuration for you to review and install. Only groups with a `schedule` field can be exported.
+Signalbox does not have its own scheduler. It makes systemd or cron files. You examine and install these files. You can export only groups that have a `schedule` field.
 
-Exported files are written under the signalbox home (`~/.config/signalbox` by default); the export command prints the exact paths and install steps.
+Signalbox writes the files in the signalbox home (`~/.config/signalbox` by default). The export command shows the paths and the installation steps.
 
 ### Option 1: systemd (user units, recommended)
 
@@ -243,9 +243,9 @@ systemctl --user enable --now signalbox-daily.timer
 systemctl --user status signalbox-daily.timer
 ```
 
-User units only run while you're logged in unless lingering is enabled (`loginctl enable-linger $USER`).
+User units run only while you are logged in. To run them at other times, use `loginctl enable-linger $USER`.
 
-For a system-wide unit, run `signalbox export-systemd daily` without `--user` and copy the files to `/etc/systemd/system/` with `sudo`. The service includes `User=<you>`, so tasks still run as your user, not root.
+To make a system unit, run `signalbox export-systemd daily` without `--user`. Then copy the files to `/etc/systemd/system/` with `sudo`. The service has `User=<you>`. Thus, the tasks run as your user, not as root.
 
 ### Option 2: cron
 
@@ -260,7 +260,7 @@ crontab -e
 
 ## Alerting
 
-Signalbox matches patterns against task output and records alerts, optionally sending desktop notifications.
+Signalbox compares the task output with patterns. When a pattern matches, signalbox records an alert. It can also send a desktop notification.
 
 ### Defining Alerts in Tasks
 
@@ -285,12 +285,12 @@ tasks:
 
 **Alert fields:**
 
-- `pattern` (required) — regex or substring to match in task output (stdout or stderr)
-- `message` (required) — message to log and notify when the pattern matches
-- `severity` (optional) — `info`, `warning`, or `critical` (default: `info`)
-- `title` (optional) — custom notification title (default: `"Alert: {task_name}"`)
-- `notify` (optional) — override the global notification setting for this alert
-- `on_failure_only` (optional) — if true, only notify for warning/critical severity
+- `pattern` (necessary): the regular expression or text to find in the task output (stdout or stderr)
+- `message` (necessary): the text that signalbox records and shows in the notification
+- `severity` (optional): `info`, `warning` or `critical`. The default is `info`.
+- `title` (optional): the title of the notification. The default is `"Alert: {task_name}"`.
+- `notify` (optional): replaces the global notification setting for this alert
+- `on_failure_only` (optional): if true, signalbox sends a notification only for `warning` and `critical` alerts
 
 ### Viewing Alerts
 
@@ -299,84 +299,91 @@ signalbox alerts                                # all recent alerts
 signalbox alerts disk_check --severity critical # filter by task and severity
 ```
 
-Alerts are stored in `logs/<task_name>/alerts/alerts.jsonl` and pruned per the retention policy in `signalbox.yaml`.
+Signalbox keeps alerts in `logs/<task_name>/alerts/alerts.jsonl`. It deletes old alerts as the retention settings in `signalbox.yaml` tell it.
 
-See [documentation/NOTIFICATIONS.md](documentation/NOTIFICATIONS.md) for full notification configuration options.
+For all notification settings, refer to [documentation/NOTIFICATIONS.md](documentation/NOTIFICATIONS.md).
 
 ## Validation
 
-Before deploying schedules, validate your configuration:
+Before you install a schedule, examine your configuration:
 
 ```bash
 signalbox validate
 ```
 
-This checks for missing required fields, duplicate names, non-existent task references, invalid per-task timeouts, invalid cron syntax, and YAML errors.
+This command finds these problems:
+
+- Necessary fields that are missing
+- Names that two or more tasks (or groups) use
+- Groups that refer to tasks that do not exist
+- Incorrect task time limits
+- Cron expressions that are possibly incorrect (shown as warnings)
+- YAML errors
 
 ## Documentation
 
-Guides are available in the `documentation/` directory:
+The `documentation/` directory has these guides:
 
-- **[Configuration Guide](documentation/CONFIG_GUIDE.md)** — global settings, tasks, and groups
-- **[Writing Scripts Guide](documentation/WRITING_SCRIPTS.md)** — best practices for scripts that work with signalbox
-- **[File Structure](documentation/FILE_STRUCTURE.md)** — project layout and multi-file organization
-- **[Config System](documentation/CONFIG_SYSTEM.md)** — overview of the configuration system
-- **[Execution Modes](documentation/EXECUTION_MODES.md)** — parallel vs serial execution
-- **[Scheduling Examples](documentation/SCHEDULING_EXAMPLES.md)** — real-world scheduling patterns
-- **[Notifications](documentation/NOTIFICATIONS.md)** — desktop notification configuration
-- **[Tray Usage](documentation/TRAY_USAGE.md)** — system tray app
+- **[Configuration Guide](documentation/CONFIG_GUIDE.md)**: global settings, tasks and groups
+- **[Writing Scripts Guide](documentation/WRITING_SCRIPTS.md)**: how to write scripts that work well with signalbox
+- **[File Structure](documentation/FILE_STRUCTURE.md)**: the directories, and how to use more than one file
+- **[Config System](documentation/CONFIG_SYSTEM.md)**: a summary of the configuration system
+- **[Execution Modes](documentation/EXECUTION_MODES.md)**: how groups run in parallel or in series
+- **[Scheduling Examples](documentation/SCHEDULING_EXAMPLES.md)**: examples of schedules
+- **[Notifications](documentation/NOTIFICATIONS.md)**: the settings for desktop notifications
+- **[Tray Usage](documentation/TRAY_USAGE.md)**: the system tray app
 
 ## Exit Codes
 
-Signalbox follows POSIX conventions for exit codes:
+Signalbox uses the POSIX rules for exit codes:
 
 | Code | Meaning | Example |
 |------|---------|---------|
-| 0 | Success | All tasks completed successfully |
-| 1 | Task execution failure | A task failed (`task run`), or one or more tasks in the run failed (`task run --all`, `group run`) |
-| 2 | Usage/configuration error | Invalid config, bad arguments, validation failed |
-| 126 | Permission denied | Cannot execute command due to permissions |
-| 130 | Interrupted | User pressed Ctrl+C |
+| 0 | Success | All tasks ran correctly |
+| 1 | A task failed | A task failed (`task run`), or one or more tasks failed (`task run --all`, `group run`) |
+| 2 | Usage or configuration error | Incorrect configuration, incorrect arguments, or errors from `validate` |
+| 126 | Permission denied | The user does not have permission to run the command |
+| 130 | Interrupted | The user pushed Ctrl+C |
 
-**Note:** `signalbox task run --all` attempts every task even if some fail, and exits with code 1 only after all tasks have been attempted. `signalbox group run` exits with code 1 if any task in the group failed or was skipped by `stop_on_error`, so cron and systemd see the failure.
+**Note:** `signalbox task run --all` tries to run all tasks, also when some tasks fail. It exits with code 1 after it tries all tasks. `signalbox group run` exits with code 1 if a task in the group failed, or if `stop_on_error` stopped a task. Thus, cron and systemd see the failure.
 
 ## Security
 
-Signalbox executes commands with full shell access as the invoking user. Treat task YAML files like shell scripts: only use trusted config files, and run `signalbox config check-permissions` to verify nothing is writable by other users. See [SECURITY.md](SECURITY.md) for details.
+Signalbox runs commands in a shell, with all the permissions of the user who starts it. Think of task YAML files as shell scripts. Use only configuration files that you trust. To make sure that other users cannot change them, run `signalbox config check-permissions`. For more information, refer to [SECURITY.md](SECURITY.md).
 
 ## Troubleshooting
 
-### Tasks not running via scheduler
+### Scheduled tasks do not run
 
-- Check systemd timer status: `systemctl status signalbox-<group>.timer`
-- View logs: `journalctl -u signalbox-<group>.service`
-- Verify cron is running: `sudo systemctl status cron`
-- Check crontab: `crontab -l`
+- Examine the status of the systemd timer: `systemctl status signalbox-<group>.timer`
+- Examine the logs: `journalctl -u signalbox-<group>.service`
+- Make sure that cron runs: `sudo systemctl status cron`
+- Examine the crontab: `crontab -l`
 
 ### Configuration errors
 
-- Run `signalbox validate` to check for issues
-- Verify YAML syntax
-- Ensure task names match between task files and groups
+- Run `signalbox validate` to find problems.
+- Make sure that the YAML syntax is correct.
+- Make sure that the task names in the groups are the same as the names in the task files.
 
-### Logs not rotating
+### Old logs are not deleted
 
-- Check `log_limit` configuration in the task definition
-- Verify the log directory exists and is writable
-- Run the task manually to test rotation
+- Examine the `log_limit` setting of the task.
+- Make sure that the log directory exists and that you can write to it.
+- Run the task manually. Then make sure that signalbox deleted the old logs.
 
 ## Contributing
 
-Contributions welcome! Please feel free to submit a Pull Request.
+You can send a pull request.
 
-When adding features:
+When you add a feature:
 
-1. Document new patterns in the README
-2. Update the `validate` command for new fields
-3. Add tests (`pytest`) and keep `./dev.sh check` green
+1. Write about new patterns in the README.
+2. Change the `validate` command for new fields.
+3. Add tests (`pytest`). Make sure that `./dev.sh check` has no errors.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) file for details.
+MIT License. For more information, refer to the [LICENSE](LICENSE) file.
 
 Copyright (c) 2025 pdbeard

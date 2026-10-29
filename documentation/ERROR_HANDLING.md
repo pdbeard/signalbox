@@ -2,119 +2,76 @@
 
 ## Overview
 
-Signalbox implements a consistent error handling strategy across all components to ensure:
-- **Predictable behavior**: All errors propagate consistently
-- **Proper exit codes**: Shell scripts can detect and handle failures
-- **Clear messages**: Users understand what went wrong
-- **Separation of concerns**: Execution logic doesn't handle display
+All parts of signalbox use the same method to handle errors. This method gives these results:
+- **Predictable behavior**: all errors go to the command-line layer in the same way.
+- **Correct exit codes**: shell scripts can find and handle failures.
+- **Clear messages**: users can see what went wrong.
+- **Separate jobs**: the code that runs tasks does not show messages.
 
 ## Exception Hierarchy
 
-All signalbox exceptions inherit from `SignalboxError`:
+All signalbox exceptions come from `SignalboxError`:
 
 ```python
 SignalboxError (base, exit code 1)
 ├── ConfigurationError (exit code 2)
-├── ScriptNotFoundError (exit code 3)
+├── TaskNotFoundError (exit code 3)
 ├── GroupNotFoundError (exit code 3)
 ├── ExecutionError (exit code 4)
 │   └── ExecutionTimeoutError (exit code 4)
-├── ValidationError (exit code 5)
-├── ExportError (exit code 6)
-└── LogError (exit code 7)
+└── ValidationError (exit code 2)
 ```
 
 ## Exit Codes
 
 | Code | Exception | Meaning |
 |------|-----------|---------|
-| 0 | Success | Command completed successfully |
-| 1 | SignalboxError | Generic error |
-| 2 | ConfigurationError | Configuration invalid or cannot be loaded |
-| 3 | ScriptNotFoundError/GroupNotFoundError | Requested item not found |
-| 4 | ExecutionError/ExecutionTimeoutError | Script execution failed |
-| 5 | ValidationError | Configuration validation failed |
-| 6 | ExportError | Export operation failed |
-| 7 | LogError | Log operation failed |
+| 0 | Success | The command was successful |
+| 1 | SignalboxError, or a task failed | A general error, or one or more tasks failed |
+| 2 | ConfigurationError, ValidationError | The configuration is not correct, signalbox cannot load it, or the arguments are not correct |
+| 3 | TaskNotFoundError, GroupNotFoundError | The task or the group does not exist |
+| 4 | ExecutionError, ExecutionTimeoutError | Signalbox could not run the task, or the task did not stop before its time limit |
+| 126 | PermissionError | The user does not have the necessary permission |
+| 130 | KeyboardInterrupt | The user pushed Ctrl+C |
 
 ## Architecture
 
 ### Layer Separation
 
-1. **Core Modules** (executor.py, etc.)
-   - Raise exceptions for all errors
-   - Don't print to console
-   - Focus on business logic
+1. **Core modules** (for example, `executor.py` and `config.py`)
+   - Raise an exception for each error.
+   - Do not write error messages to the console.
+   - Do the work: load the configuration, run tasks, write logs.
 
-2. **CLI Layer** (cli_commands.py)
-   - Catch exceptions with `@handle_exceptions` decorator
-   - Format error messages for users
-   - Exit with appropriate codes
+2. **Command-line layer** (`signalbox/commands/`)
+   - Catch exceptions with the `@handle_exceptions` decorator (`signalbox/commands/utils.py`).
+   - Show the error message to the user.
+   - Exit with the correct code.
 
 ### Example Flow
 
 ```python
-# In executor.py
-def run_script(name, config):
-    script = next((s for s in config['scripts'] if s['name'] == name), None)
-    if not script:
-        raise ScriptNotFoundError(name)  # Raises exception
-    # ... execution logic
+# In signalbox/executor.py
+def _find_task(name, config):
+    task = next((t for t in config["tasks"] if isinstance(t, dict) and t.get("name") == name), None)
+    if not task:
+        raise TaskNotFoundError(name)
+    return task
 
-# In cli_commands.py
-@cli.command()
-@click.argument('name')
+# In signalbox/commands/task.py
+@task.command(name="run")
+@click.argument("name", required=False)
 @handle_exceptions  # Catches and formats exceptions
-def run(name):
-    config = load_config()
-    run_script(name, config)  # May raise ScriptNotFoundError
+def task_run(name, ...):
+    config = load_config(suppress_warnings=True)
+    run_task(name, config)  # Can raise TaskNotFoundError
 ```
 
-When user runs `signalbox run nonexistent`:
-1. `run_script()` raises `ScriptNotFoundError("nonexistent")`
-2. `@handle_exceptions` catches it
-3. Prints: `Error: Script 'nonexistent' not found` to stderr
-4. Exits with code 3
-
-## Benefits Over Previous Approach
-
-### Before (Inconsistent)
-```python
-# executor.py - returned False
-def run_script(name, config):
-    if not script:
-        click.echo(f"Script {name} not found")
-        return False
-
-# cli_commands.py - no error code
-def run(name):
-    run_script(name, config)
-    # No way to know if it failed
-```
-
-**Problems:**
-- Mixed concerns (executor printing to console)
-- No exit codes (shell scripts can't detect failure)
-- Inconsistent error handling across commands
-
-### After (Consistent)
-```python
-# executor.py - raises exception
-def run_script(name, config):
-    if not script:
-        raise ScriptNotFoundError(name)
-
-# cli_commands.py - handles display and exit
-@handle_exceptions
-def run(name):
-    run_script(name, config)
-```
-
-**Benefits:**
-- Clear separation: execution vs. display
-- Proper exit codes for scripting
-- Consistent error handling
-- Better testability
+When a user runs `signalbox run nonexistent`:
+1. `_find_task()` raises `TaskNotFoundError("nonexistent")`.
+2. `@handle_exceptions` catches the exception.
+3. Signalbox writes `Error: Task 'nonexistent' not found` to stderr.
+4. Signalbox exits with code 3.
 
 ## Usage in Scripts
 
@@ -122,15 +79,16 @@ def run(name):
 ```bash
 #!/bin/bash
 
-# Run script and check for errors
-if signalbox run my_script; then
+# Run a task and check for errors
+if signalbox run my_task; then
     echo "Success!"
 else
     code=$?
     case $code in
-        3) echo "Script not found" ;;
-        4) echo "Execution failed" ;;
-        *) echo "Unknown error" ;;
+        1) echo "Task failed" ;;
+        3) echo "Task not found" ;;
+        4) echo "Execution failed or timed out" ;;
+        *) echo "Other error" ;;
     esac
     exit $code
 fi
@@ -141,15 +99,15 @@ fi
 import subprocess
 import sys
 
-result = subprocess.run(['signalbox', 'run', 'my_script'])
+result = subprocess.run(['signalbox', 'run', 'my_task'])
 
 if result.returncode == 0:
     print("Success!")
 elif result.returncode == 3:
-    print("Script not found")
+    print("Task not found")
     sys.exit(1)
-elif result.returncode == 4:
-    print("Execution failed")
+elif result.returncode in (1, 4):
+    print("Task failed")
     sys.exit(1)
 ```
 
@@ -157,7 +115,7 @@ elif result.returncode == 4:
 
 ### Custom Exceptions
 
-Located in `core/exceptions.py`:
+The exceptions are in `signalbox/exceptions.py`:
 
 ```python
 class SignalboxError(Exception):
@@ -170,15 +128,22 @@ class SignalboxError(Exception):
 
 ### Exception Handler Decorator
 
-Located in `core/cli_commands.py`:
+The decorator is in `signalbox/commands/utils.py`. This is a short version:
 
 ```python
 def handle_exceptions(func):
-    """Decorator to handle exceptions consistently."""
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except KeyboardInterrupt:
+            sys.exit(130)
+        except (ValidationError, ConfigurationError, FileNotFoundError) as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(2)
+        except PermissionError as e:
+            click.echo(f"Permission Denied: {e}", err=True)
+            sys.exit(126)
         except SignalboxError as e:
             click.echo(f"Error: {e.message}", err=True)
             sys.exit(e.exit_code)
@@ -190,7 +155,7 @@ def handle_exceptions(func):
 
 ### Applying to Commands
 
-Simply add the decorator:
+Add the decorator to the command:
 
 ```python
 @cli.command()
@@ -206,7 +171,7 @@ def my_command(name):
 ### Verify Exit Codes
 ```bash
 # Should exit with code 3
-signalbox run nonexistent_script
+signalbox run nonexistent_task
 echo $?  # Should print 3
 
 # Should exit with code 3
@@ -222,16 +187,16 @@ echo $?  # Should print 0
 ```bash
 # Should print to stderr
 signalbox run nonexistent 2>&1 | grep "Error:"
-# Output: Error: Script 'nonexistent' not found
+# Output: Error: Task 'nonexistent' not found
 ```
 
-## Future Enhancements
+## Possible Future Changes
 
-1. **Structured Logging**: Add proper logging with levels (DEBUG, INFO, ERROR)
-2. **Error Context**: Include more context (file, line number, stack trace in debug mode)
-3. **Error Recovery**: Implement retry logic for transient failures
-4. **Error Hooks**: Allow custom error handlers via configuration
-5. **Localization**: Support error messages in multiple languages
+1. **Structured logging**: log levels (DEBUG, INFO, ERROR)
+2. **More context**: the file, the line number, and a stack trace in debug mode
+3. **Retries**: run a task again after a temporary failure
+4. **Error hooks**: custom error handlers in the configuration
+5. **Translations**: error messages in more than one language
 
 ## Related Documentation
 

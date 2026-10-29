@@ -121,7 +121,10 @@ def _execute(task, name, config):
     if timeout == 0:
         timeout = None
     elif timeout < min_timeout:
-        click.echo(f"Warning: Timeout {timeout}s is below minimum {min_timeout}s, using minimum", err=True)
+        click.echo(
+            f"Warning: Timeout {timeout}s is less than the minimum {min_timeout}s. Signalbox uses the minimum.",
+            err=True,
+        )
         timeout = min_timeout
 
     ensure_log_dir(name)

@@ -1,9 +1,13 @@
 # Signalbox Catalog
 
-The catalog contains curated, ready-to-use tasks and groups. It is not loaded by
-default: copy the files you want into your `tasks/` and `groups/` directories, or
-set `include_catalog: true` in `signalbox.yaml` to load all of it (note that
-`task run --all` would then run every catalog task too).
+The catalog has tasks and groups that are ready to use. Signalbox does not load
+the catalog by default. To use it, do one of these steps:
+
+- Copy the files that you want into your `tasks/` and `groups/` directories.
+- Set `include_catalog: true` in `signalbox.yaml` to load all of the catalog.
+
+**Caution:** if you set `include_catalog: true`, `task run --all` also runs all
+catalog tasks.
 
 ---
 
@@ -42,7 +46,7 @@ set `include_catalog: true` in `signalbox.yaml` to load all of it (note that
 | `signalbox_selfcheck` | Runs `signalbox validate`; turns tray red on config errors | No |
 
 ### alerts_test.yaml / test.yaml
-Demo tasks for learning alert patterns and error handling. Not for production.
+Demonstration tasks that show alert patterns and error handling. Do not use them in production.
 
 ---
 
@@ -70,15 +74,16 @@ Demo tasks for learning alert patterns and error handling. Not for production.
 | `comprehensive_monitoring` | all system + network tasks | **none** — reference only |
 
 ### test.yaml
-Demo groups for `stop_on_error` behaviour. Not for production.
+Demonstration groups that show how `stop_on_error` works. Do not use them in production.
 
 ---
 
 ## Notes
 
-- Tasks that need editing are marked above. Running them as-is with `example.com`
-  or `~/backups` placeholders is harmless but won't produce useful results.
-- `check_memory_pressure`, `check_disk_space`, `check_dns_resolution`, and
-  `check_updates` are portable across macOS and Linux without modification.
-- The `weekly_report` group requires tasks from both `maintenance.yaml` and
-  `dev_tools.yaml` to be present.
+- The tables above show the tasks that you must edit before use. If you run them
+  with the `example.com` or `~/backups` placeholders, they do no damage. But their
+  results are not useful.
+- `check_memory_pressure`, `check_disk_space`, `check_dns_resolution` and
+  `check_updates` work on macOS and Linux without changes.
+- The `weekly_report` group uses the tasks in `maintenance.yaml` and in
+  `dev_tools.yaml`.

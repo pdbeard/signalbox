@@ -16,7 +16,7 @@ from .utils import handle_exceptions
 
 @click.command()
 def init():
-    """Initialize signalbox configuration in the appropriate config directory (XDG/SIGNALBOX_HOME supported)"""
+    """Make the signalbox configuration directory (in SIGNALBOX_HOME or XDG_CONFIG_HOME, if set)."""
     # Never the current directory: reinitializing replaces what is there.
     config_dir = find_init_home()
 
@@ -48,9 +48,9 @@ def init():
         click.echo(f"✓ Copied default config from: {template_config}")
     else:
         # Config directory not found - this should not happen in a proper installation
-        click.echo(f"ERROR: Could not find config templates at: {template_config}", err=True)
-        click.echo("This may indicate an incomplete package installation.", err=True)
-        click.echo("Please reinstall signalbox or file an issue at:", err=True)
+        click.echo(f"ERROR: Signalbox cannot find the configuration templates at: {template_config}", err=True)
+        click.echo("Possibly, the package installation is not complete.", err=True)
+        click.echo("Install signalbox again, or report the problem at:", err=True)
         click.echo("  https://github.com/pdbeard/signalbox/issues", err=True)
         sys.exit(1)
 
@@ -69,9 +69,9 @@ def init():
     click.echo(f"  2. Add your tasks: {config_dir}/config/tasks/")
     click.echo("     (example tasks are in config/catalog/; set include_catalog: true to load them)")
     click.echo("  3. Run: signalbox list")
-    click.echo("SECURITY: Signalbox executes commands with full shell access.")
-    click.echo("   Only use trusted YAML files. See SECURITY.md for details.")
-    click.echo("   You can now run signalbox from any directory!")
+    click.echo("SECURITY: Signalbox runs commands in a shell, with all your permissions.")
+    click.echo("   Use only YAML files that you trust. Refer to SECURITY.md.")
+    click.echo("   You can now use signalbox in all directories.")
 
 
 @click.command()
@@ -113,7 +113,7 @@ def list_schedules():
 
 @click.command()
 @click.argument("group_name")
-@click.option("--user", is_flag=True, help="Generate for user systemd (not system-wide)")
+@click.option("--user", is_flag=True, help="Make a user unit (not a system unit)")
 def export_systemd(group_name, user):
     """Generate systemd service and timer files for a scheduled group."""
     config = load_config()
@@ -172,7 +172,7 @@ def export_cron(group_name):
 )
 @handle_exceptions
 def notify_test(title, message, urgency):
-    """Send a test notification to verify notification system works."""
+    """Send a test notification to make sure that notifications work."""
     import platform
 
     system = platform.system()
@@ -187,7 +187,7 @@ def notify_test(title, message, urgency):
     if success:
         click.echo("✓ Notification sent successfully!")
     else:
-        click.echo("✗ Failed to send notification. Check logs for details.", err=True)
+        click.echo("✗ Signalbox could not send the notification. Look for a warning above.", err=True)
         sys.exit(1)
 
 
@@ -197,7 +197,7 @@ def notify_test(title, message, urgency):
 @click.option("--days", type=int, help="Show alerts from last N days")
 @handle_exceptions
 def alerts_cmd(task_name, severity, days):
-    """List recent alerts. Optionally filter by task name, severity, or time range."""
+    """Show the recent alerts. You can filter them by task name, severity or age."""
 
     # Load alerts with filters
     alert_list = alerts.load_alerts(task_name=task_name, severity=severity, max_days=days)

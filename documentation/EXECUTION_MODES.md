@@ -2,20 +2,20 @@
 
 ## Overview
 
-Script-monitor supports two execution modes for groups:
+Signalbox can run the tasks of a group in two modes:
 
-- **Serial** - Scripts run one at a time in order
-- **Parallel** - Scripts run simultaneously for faster execution
+- **Serial**: the tasks run one at a time, in the sequence of the list.
+- **Parallel**: the tasks run at the same time. Thus, the group finishes faster.
 
 ## Serial Execution
 
 ### When to Use
 
-Use serial execution when:
-- Scripts depend on each other
-- Execution order matters
-- Scripts share resources (files, databases, etc.)
-- You need predictable, sequential execution
+Use serial execution in these conditions:
+- A task uses the result of a different task.
+- The sequence of the tasks is important.
+- The tasks use the same resources, for example files or databases.
+- You must know the sequence in which the tasks run.
 
 ### Configuration
 
@@ -33,14 +33,14 @@ groups:
 
 ### Stop on Error
 
-For critical workflows, you can stop execution if any script fails:
+For important workflows, you can stop the group when a task fails:
 
 ```yaml
 groups:
   - name: deployment
     description: Deploy application
     execution: serial
-    stop_on_error: true  # Stop if any script fails
+    stop_on_error: true  # Stop if any task fails
     tasks:
       - pre_deploy_check  # If this fails, stop here
       - build_app         # Won't run if previous failed
@@ -62,19 +62,19 @@ Running post_deploy_test... ✓ (still runs)
 Running deployment...
 Running pre_deploy_check... ✓
 Running build_app... ✗ FAILED
-⚠️  Script build_app failed. Stopping group execution
-(deploy_app and post_deploy_test are skipped)
+⚠️  Task build_app failed. Stopping group execution (stop_on_error=true)
+(deploy_app and post_deploy_test do not run)
 ```
 
 ## Parallel Execution
 
 ### When to Use
 
-Use parallel execution when:
-- Scripts are independent
-- Speed is important
-- Scripts don't modify shared resources
-- Monitoring multiple systems/services
+Use parallel execution in these conditions:
+- The tasks do not use the results of other tasks.
+- Speed is important.
+- The tasks do not change the same resources.
+- The tasks monitor different systems or services.
 
 ### Configuration
 
@@ -92,7 +92,7 @@ groups:
 
 ### Execution Summary
 
-Parallel execution shows a summary at the end:
+After a parallel run, signalbox shows a summary:
 
 ```
 Parallel execution summary:
@@ -105,19 +105,19 @@ Parallel execution summary:
 
 ### Global Config (signalbox.yaml)
 
-Control maximum concurrent scripts:
+This setting controls the maximum number of tasks that run at the same time:
 
 ```yaml
 execution:
-  max_parallel_workers: 5  # Max scripts running at once
+  max_parallel_workers: 5  # Max tasks running at once
 ```
 
-- **Higher values** (10-20): More concurrent scripts, faster but more resource-intensive
-- **Lower values** (3-5): Fewer concurrent scripts, slower but more controlled
+- **Higher values** (10 to 20): more tasks at the same time. The group is faster, but it uses more resources.
+- **Lower values** (3 to 5): fewer tasks at the same time. The group is slower, but it uses fewer resources.
 - **Default**: 5 workers
 
 ## Example
-Use both modes for different groups:
+You can use the two modes in different groups:
 
 ```yaml
 groups:

@@ -692,7 +692,7 @@ class TestNotifyTestCommand:
         result = runner.invoke(cli, ["notify-test"])
 
         assert result.exit_code == 1
-        assert "Failed to send notification" in result.output
+        assert "could not send the notification" in result.output
 
     @patch("signalbox.commands.misc.notifications.send_notification")
     @patch("platform.system")

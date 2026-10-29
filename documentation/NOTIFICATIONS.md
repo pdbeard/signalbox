@@ -1,22 +1,22 @@
 # Notifications Guide
 
-Signalbox includes a cross-platform desktop notification system with two types of notifications:
-1. **Alert notifications** - When task output matches alert patterns
-2. **Group notifications** - Summary after running groups of tasks
+Signalbox can send desktop notifications on macOS and Linux. There are two types of notifications:
+1. **Alert notifications**: signalbox sends one when the task output matches an alert pattern.
+2. **Group notifications**: signalbox sends a summary after a group runs.
 
 ## Features
 
-- **Cross-platform support:** Works on macOS and Linux
-- **Smart notifications:** Only notify on failures by default (configurable)
-- **Per-alert overrides:** Control notifications at the alert level
-- **Custom titles:** Set custom notification titles for alerts
-- **Summary messages:** Shows pass/fail counts and failed task names
-- **Urgency levels:** Critical notifications for failures (Linux)
-- **Zero dependencies:** Uses native OS tools (osascript on macOS, notify-send on Linux)
+- **macOS and Linux:** the notifications work on the two systems.
+- **Failures only:** by default, signalbox sends notifications only for failures. You can change this.
+- **Settings for each alert:** an alert can have its own notification settings.
+- **Titles:** you can set the notification title of each alert.
+- **Summaries:** a group notification shows the number of tasks that passed and failed, and the names of the failed tasks.
+- **Urgency levels:** on Linux, failure notifications are critical.
+- **No extra packages:** signalbox uses the tools of the operating system (osascript on macOS, notify-send on Linux).
 
 ## Configuration
 
-Add these sections to your `~/.config/signalbox/config/signalbox.yaml`:
+Add these sections to `~/.config/signalbox/config/signalbox.yaml`:
 
 ```yaml
 # Alert notifications (when task output matches alert patterns)
@@ -34,25 +34,25 @@ group_notifications:
 
 ### Alert Notification Options
 
-- **`alerts.notifications.enabled`** (default: `true`): Enable/disable alert notifications globally
-- **`alerts.notifications.on_failure_only`** (default: `true`): If true, only send notifications for critical/warning alerts (not info severity)
-- **`alerts.notifications.cooldown_minutes`** (default: `60`): After an alert notifies, the same task + pattern won't notify again within this window. Every occurrence is still recorded and shown by `signalbox alerts`. Set to `0` to notify on every run.
+- **`alerts.notifications.enabled`** (default: `true`): turns alert notifications on or off for all tasks.
+- **`alerts.notifications.on_failure_only`** (default: `true`): if true, signalbox sends notifications only for `critical` and `warning` alerts. It does not send them for `info` alerts.
+- **`alerts.notifications.cooldown_minutes`** (default: `60`): after an alert sends a notification, the same task and pattern do not send a notification again in this number of minutes. Signalbox records each alert. `signalbox alerts` shows all of them. Set `0` to send a notification on each run.
 
-On Linux, scheduled runs (cron, systemd) usually don't have `DBUS_SESSION_BUS_ADDRESS` set; signalbox falls back to `/run/user/<uid>/bus`, so notifications reach your desktop while you're logged in.
+On Linux, scheduled runs (cron and systemd) usually do not have `DBUS_SESSION_BUS_ADDRESS`. In this condition, signalbox uses `/run/user/<uid>/bus`. Thus, notifications get to your desktop while you are logged in.
 
 ### Group Notification Options
 
-- **`group_notifications.enabled`** (default: `true`): Enable/disable group execution summary notifications
-- **`group_notifications.on_failure_only`** (default: `true`): If true, only send notifications when tasks fail; if false, always notify
-- **`group_notifications.show_failed_names`** (default: `true`): If true and ≤3 tasks failed, include their names in the notification message
+- **`group_notifications.enabled`** (default: `true`): turns the group summary notifications on or off.
+- **`group_notifications.on_failure_only`** (default: `true`): if true, signalbox sends a notification only when a task fails. If false, it sends a notification after each group run.
+- **`group_notifications.show_failed_names`** (default: `true`): if true, and 3 or fewer tasks failed, the message has the names of the failed tasks.
 
 ### Tray Notification Options
 
-- **`tray.notify_on_success`** (default: `false`): If true, the tray shows a message when a run it started succeeds (failures are always shown while notifications are enabled). This is what the tray's "Notify on Success & Failure" toggle changes; it does not affect alert notifications.
+- **`tray.notify_on_success`** (default: `false`): if true, the tray shows a message when a run that it started is successful. The tray always shows failures while notifications are on. The tray menu item "Notify on Success & Failure" changes this setting. This setting does not change alert notifications.
 
 ## Testing Notifications
 
-Test your notification system without running any scripts:
+To test notifications without a task run, use these commands:
 
 ```bash
 # Basic test
@@ -70,7 +70,7 @@ signalbox notify-test --urgency critical
 ### Success (when `on_failure_only: false`)
 ```
 Title: Signalbox - Success
-Message: All scripts ran successfully (5/5)
+Message: All tasks ran successfully (5/5)
 ```
 
 ### Partial Failure
@@ -89,11 +89,11 @@ Message: Ran 3 tasks: 0 passed, 3 failed
 ## Platform Requirements
 
 ### macOS
-- **Built-in support:** Uses `osascript`, which is included with macOS
-- No additional installation required
+- **Built-in support:** signalbox uses `osascript`. macOS includes it.
+- You do not have to install more software.
 
 ### Linux
-- **Requires:** `notify-send` command (usually from `libnotify-bin` or `notification-daemon` package)
+- **Necessary:** the `notify-send` command. It is usually in the `libnotify-bin` package or the `notification-daemon` package.
 - **Installation:**
   ```bash
   # Debian/Ubuntu
@@ -108,41 +108,41 @@ Message: Ran 3 tasks: 0 passed, 3 failed
 
 ## Integration with Scheduling
 
-When running Signalbox via cron or systemd timer, notifications will appear even when the scripts run in the background:
+When cron or a systemd timer runs signalbox, notifications also show for tasks that run in the background.
 
-Generate the schedule entry with `signalbox export-cron GROUP` (or
-`signalbox export-systemd GROUP`) rather than writing it by hand: the export
-uses the group's `schedule`, the absolute path to signalbox and the right
-`SIGNALBOX_HOME`, which cron's minimal environment otherwise lacks.
+Use `signalbox export-cron GROUP` or `signalbox export-systemd GROUP` to make
+the schedule entry. Do not write it by hand. The export uses the `schedule` of
+the group, the absolute path to signalbox and the correct `SIGNALBOX_HOME`.
+Cron does not supply these items.
 
 ```bash
 signalbox export-cron scheduled
 ```
 
-If notifications aren't appearing, check:
-1. The `alerts.notifications.enabled` and `group_notifications.enabled` settings in your config
-2. That `notify-send` is installed (Linux)
-3. That your desktop environment supports notifications
-4. Log files for any error messages
+If notifications do not show, do these checks:
+1. Examine the `alerts.notifications.enabled` and `group_notifications.enabled` settings in your configuration.
+2. On Linux, make sure that `notify-send` is installed.
+3. Make sure that your desktop environment can show notifications.
+4. Look for warnings in the output of signalbox (stderr).
 
 ## Troubleshooting
 
-### macOS: Notifications not appearing
-- Ensure System Preferences → Notifications allows terminal/script notifications
-- Check that the terminal app has notification permissions
+### macOS: notifications do not show
+- In System Settings → Notifications, make sure that notifications from the terminal are on.
+- Make sure that the terminal app has permission to show notifications.
 
-### Linux: Notifications not appearing
-- Verify `notify-send` is installed: `which notify-send`
-- Test manually: `notify-send "Test" "Message"`
-- Check if your desktop environment supports system tray notifications
-- Ensure `DISPLAY` environment variable is set (for cron jobs, you may need to export it)
+### Linux: notifications do not show
+- Make sure that `notify-send` is installed: `which notify-send`
+- Test it manually: `notify-send "Test" "Message"`
+- Make sure that your desktop environment can show notifications.
+- For cron jobs, make sure that you are logged in to the desktop. Signalbox uses the session bus of your login session.
 
 ### Silent Failures
-Signalbox will log warnings if notifications fail but won't crash script execution. Check logs at `~/.config/signalbox/logs/` for details.
+If a notification fails, signalbox writes a warning to stderr. The task run continues and its result does not change. For scheduled runs, look for the warning in the cron mail or in `journalctl`.
 
 ## Per-Alert Overrides
 
-You can override notification settings for individual alerts in your task configuration:
+An alert in a task file can have its own notification settings. These settings replace the global settings for that alert:
 
 ```yaml
 tasks:
@@ -161,8 +161,8 @@ tasks:
 ```
 
 **Override precedence:**
-1. Per-alert setting (`notify`, `on_failure_only`) - highest priority
-2. Global setting (`alerts.notifications.*`) - fallback
+1. The setting of the alert (`notify`, `on_failure_only`). This has the highest priority.
+2. The global setting (`alerts.notifications.*`). Signalbox uses it if the alert does not have a setting.
 
 ## Examples
 
@@ -204,11 +204,10 @@ group_notifications:
   enabled: false
 ```
 
-## Future Enhancements
+## Possible Future Changes
 
-Planned features for future releases:
-- System tray icon with persistent status indicator
+We can add these features in a later version:
 - Windows support
-- Customizable notification sounds
-- Email/webhook notifications
-- Per-group notification settings
+- Notification sounds that you can change
+- Email and webhook notifications
+- Notification settings for each group

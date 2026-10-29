@@ -74,7 +74,7 @@ def task_list():
                 )
             except Exception as e:
                 click.echo(
-                    f"[CONFIG ERROR] Unexpected error in task config: {e}. Offending task: {task_item}", err=True
+                    f"[CONFIG ERROR] Unexpected error in the task configuration: {e}. Task: {task_item}", err=True
                 )
     print_task_list_table(all_rows)
 
@@ -91,7 +91,7 @@ def _latest_log_name(task_name):
 @task.command(name="run")
 @click.argument("name", required=False)
 @click.option("--all", "run_all_tasks", is_flag=True, help="Run all tasks")
-@click.option("--quiet", "-q", is_flag=True, help="Suppress inline output preview")
+@click.option("--quiet", "-q", is_flag=True, help="Do not show the output preview")
 @handle_exceptions
 def task_run(name, run_all_tasks, quiet):
     """Run a single task or all tasks."""
@@ -144,5 +144,5 @@ def task_run(name, run_all_tasks, quiet):
         if not success:
             sys.exit(1)
     else:
-        click.echo("Error: Provide task name or use --all", err=True)
+        click.echo("Error: Give a task name, or use --all", err=True)
         sys.exit(2)

@@ -1,11 +1,11 @@
 # Scheduling Examples
 
-This document shows practical examples of the group-only scheduling architecture.
+This document gives examples of schedules. In signalbox, only groups can have a schedule.
 
 ## Basic Patterns
 
-### Multi-Script Groups
-Groups that run multiple related scripts on the same schedule:
+### Groups With More Than One Task
+A group can run related tasks on the same schedule:
 
 ```yaml
 groups:
@@ -21,9 +21,9 @@ groups:
 
 ```
 
-### ❌ Schedules can not be added to individual scripts, they must be added to a group. However, a group can consist of an individual script. 
+### ❌ Do not add a schedule to a task. Add it to a group. A group can have only one task.
 
-When a single script needs a unique schedule, create a dedicated group:
+To give one task its own schedule, make a group for that task:
 ```yaml
 # WRONG - Don't do this
 tasks:
@@ -36,7 +36,7 @@ tasks:
 # Correct
 groups:
   - name: backup-group
-    description: 
+    description: Backup every 15 minutes
     schedule: "*/15 * * * *"
     tasks:
       - backup
@@ -85,15 +85,15 @@ groups:
 
 ## Tips for Organizing Schedules
 
-1. **Group by cadence** - "daily", "hourly", "weekly" make sense
-2. **Group by purpose** - "monitoring", "backups", "maintenance"
-3. **Use descriptive singleton names** - Include timing in name for clarity
-4. **Document why singletons exist** - Explain in description why special timing needed
-5. **Keep related scripts together** - Don't split logically related tasks
+1. **Make groups by frequency**: for example, "daily", "hourly" and "weekly".
+2. **Make groups by purpose**: for example, "monitoring", "backups" and "maintenance".
+3. **Give clear names to groups with one task**: put the time in the name, for example `backup-15min`.
+4. **Tell why a group has only one task**: write the reason for the special time in the description.
+5. **Keep related tasks together**: do not put related tasks in different groups.
 
 ## Deployment
 
-After adding a `schedule` to groups in `config/groups/*.yaml`:
+After you add a `schedule` to the groups in `config/groups/*.yaml`, do these steps:
 
 ```bash
 # Validate configuration

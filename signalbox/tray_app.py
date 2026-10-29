@@ -452,7 +452,7 @@ class SignalboxTray:
         import threading
 
         if self._is_loading:
-            self.tray_icon.showMessage("Signalbox", "A task is already running, please wait.")
+            self.tray_icon.showMessage("Signalbox", "A task is running. Wait until it is complete.")
             return
 
         def run_group_bg():
@@ -474,7 +474,7 @@ class SignalboxTray:
         import threading
 
         if self._is_loading:
-            self.tray_icon.showMessage("Signalbox", "A task is already running, please wait.")
+            self.tray_icon.showMessage("Signalbox", "A task is running. Wait until it is complete.")
             return
 
         def run_task_bg():
@@ -496,7 +496,7 @@ class SignalboxTray:
         import threading
 
         if self._is_loading:
-            self.tray_icon.showMessage("Signalbox", "A task is already running, please wait.")
+            self.tray_icon.showMessage("Signalbox", "A task is running. Wait until it is complete.")
             return
 
         def run_tasks_background():
@@ -530,7 +530,9 @@ class SignalboxTray:
         state = _load_tray_state()
         state["ignore_failures_before"] = int(time.time())
         _save_tray_state(state)
-        self.tray_icon.showMessage("Signalbox", "Error state cleared. Tray will ignore failures before now.")
+        self.tray_icon.showMessage(
+            "Signalbox", "Error state cleared. The tray ignores failures that occurred before now."
+        )
         self.update_status()
 
     def get_icon_path(self, status):
@@ -661,7 +663,7 @@ class SignalboxTray:
             if success and notify_on_success:
                 self.tray_icon.showMessage("Signalbox", "All tasks completed successfully")
             elif not success:
-                self.tray_icon.showMessage("Signalbox", "Some tasks failed - check logs")
+                self.tray_icon.showMessage("Signalbox", "One or more tasks failed. Examine the logs.")
 
         self.update_status()
 

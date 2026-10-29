@@ -3,27 +3,27 @@
 ## Configuration Files
 
 ### 1. `signalbox.yaml` - Global Settings
-Default settings and global options.
-**Documentation**: See [CONFIG_GUIDE.md](CONFIG_GUIDE.md)
+The default settings and the global options.
+**Documentation**: refer to [CONFIG_GUIDE.md](CONFIG_GUIDE.md)
 
-### 2. `scripts/*.yaml` - Script Definitions
-Define what scripts are available and how to run them
+### 2. `tasks/*.yaml` - Task Definitions
+These files tell signalbox which tasks are available and how to run them.
 
-**Summary**:
-  - Add new scripts
+**Use these files to**:
+  - Add new tasks
 
-**Documentation**: See [FILE_STRUCTURE.md](FILE_STRUCTURE.md)
+**Documentation**: refer to [FILE_STRUCTURE.md](FILE_STRUCTURE.md)
 
 ### 3. `groups/*.yaml` - Groups and Scheduling
-Organize scripts into groups and define when they run
+These files put tasks into groups and tell when the groups run.
 
-**Summary**:
-- Create new groups
-- Assign scripts to groups
-- Set up schedules
-- Organise script execution (cron and systemd generation)
+**Use these files to**:
+- Make new groups
+- Put tasks into groups
+- Set schedules
+- Make cron and systemd files for scheduled groups
 
-**Documentation**: See [FILE_STRUCTURE.md](FILE_STRUCTURE.md) and [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md)
+**Documentation**: refer to [FILE_STRUCTURE.md](FILE_STRUCTURE.md) and [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md)
 
 
 ## Configuration Commands
@@ -49,52 +49,48 @@ signalbox config show execution
 signalbox validate
 ```
 
-The validate command now:
-- Checks `signalbox.yaml` for valid values
-- Validates `tasks/*.yaml` for required fields, safe names, timeouts and alert patterns
-- Validates `groups/*.yaml` structure and references
-- Warns about unused scripts (configurable)
-- Warns about empty groups (configurable)
-- Shows summary with global config info
+The validate command does these checks:
+- It examines `signalbox.yaml` for incorrect values.
+- It examines `tasks/*.yaml` for necessary fields, safe names, time limits and alert patterns.
+- It examines the structure of `groups/*.yaml`, and the tasks that each group refers to.
+- It shows a warning for tasks that are not in a group. To stop this warning, set `validation.warn_unused_tasks: false`.
+- It shows a summary of the global configuration.
 
 
 ## Further Reading
 
-- [CONFIG_GUIDE.md](CONFIG_GUIDE.md) - Comprehensive guide with examples
-- [FILE_STRUCTURE.md](FILE_STRUCTURE.md) - Scripts and groups file format
-- [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md) - Scheduling patterns and examples
-
-
+- [CONFIG_GUIDE.md](CONFIG_GUIDE.md): a full guide with examples
+- [FILE_STRUCTURE.md](FILE_STRUCTURE.md): the format of task files and group files
+- [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md): examples of schedules
 
 
 ## Reference Table
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `default_log_limit.type` | string | count | Log rotation type: `count`, `age` or `size` |
-| `default_log_limit.value` | number | 10 | Number of logs, days, or MB (depending on type) |
-| `paths.log_dir` | string | logs | Directory for log files |
-| `paths.tasks_file` | string | config/tasks | Directory of task YAML files |
-| `paths.groups_file` | string | config/groups | Directory of group YAML files |
-| `include_catalog` | boolean | false | Also load the example tasks/groups in `config/catalog/` |
-| `paths.systemd_export_dir` | string | systemd | Directory for exported systemd files (relative to the signalbox home) |
-| `paths.cron_export_dir` | string | cron | Directory for exported cron files (relative to the signalbox home) |
-| `alerts.notifications.cooldown_minutes` | number | 60 | Don't repeat a notification for the same task and alert pattern within this many minutes (0 = every run) |
-| `tray.notify_on_success` | boolean | false | Show a tray message when a run started from the tray succeeds |
-| `execution.default_timeout` | number | 300 | Script timeout in seconds (0=none) |
-| `execution.capture_stdout` | boolean | true | Capture stdout in logs |
-| `execution.capture_stderr` | boolean | true | Capture stderr in logs |
-| `execution.continue_on_error` | boolean | true | Keep running after failures (deprecated) |
-| `execution.max_parallel_workers` | number | 5 | Max concurrent scripts in parallel mode |
-| `notifications.enabled` | boolean | false | Enable notifications (future) |
-| `scheduling.timezone` | string | UTC | Timezone for cron expressions |
-| `scheduling.enabled` | boolean | true | Enable scheduling features |
-| `logging.timestamp_format` | string | %Y%m%d_%H%M%S_%f | Log filename timestamp |
-| `logging.include_command` | boolean | true | Show command in log |
-| `logging.include_return_code` | boolean | true | Show exit code in log |
+| `default_log_limit.type` | string | count | The rule to delete old logs: `count`, `age` or `size` |
+| `default_log_limit.value` | number | 10 | The number of logs, days or MB to keep (as the type tells) |
+| `paths.log_dir` | string | logs | The directory for log files |
+| `paths.tasks_file` | string | config/tasks | The directory of task YAML files |
+| `paths.groups_file` | string | config/groups | The directory of group YAML files |
+| `include_catalog` | boolean | false | Also load the example tasks and groups in `config/catalog/` |
+| `paths.systemd_export_dir` | string | systemd | The directory for exported systemd files (relative to the signalbox home) |
+| `paths.cron_export_dir` | string | cron | The directory for exported cron files (relative to the signalbox home) |
+| `alerts.notifications.cooldown_minutes` | number | 60 | Do not send the same notification again (same task and alert pattern) in this number of minutes. 0 sends it on each run. |
+| `tray.notify_on_success` | boolean | false | Show a tray message when a run that you started from the tray is successful |
+| `execution.default_timeout` | number | 300 | The time limit of a task, in seconds. 0 removes the time limit. |
+| `execution.min_timeout` | number | 1 | The smallest time limit, in seconds. Signalbox increases a lower value (except 0) to this value. |
+| `execution.capture_stdout` | boolean | true | Write stdout to the logs |
+| `execution.capture_stderr` | boolean | true | Write stderr to the logs |
+| `execution.max_parallel_workers` | number | 5 | The maximum number of tasks that run at the same time in a parallel group |
+| `logging.timestamp_format` | string | %Y%m%d_%H%M%S_%f | The timestamp in log filenames |
+| `logging.max_file_size_mb` | number | 5 | The maximum size of one log file, in MB |
+| `logging.include_command` | boolean | true | Write the command in the log |
+| `logging.include_return_code` | boolean | true | Write the exit code in the log |
 | `validation.strict` | boolean | false | Treat warnings as errors |
-| `validation.warn_unused_scripts` | boolean | true | Warn about unused scripts |
-| `validation.warn_empty_groups` | boolean | true | Warn about empty groups |
-| `display.use_colors` | boolean | true | Colorize terminal output |
-| `display.show_full_paths` | boolean | false | Show complete file paths |
-| `display.date_format` | string | %Y-%m-%d %H:%M:%S | Display date format |
+| `validation.warn_unused_tasks` | boolean | true | Show a warning for tasks that are not in a group |
+| `display.colors` | boolean | true | Use colors in the terminal output |
+| `display.include_paths` | boolean | false | Show the full file paths |
+| `display.date_format` | string | %Y-%m-%d %H:%M:%S | The format of dates in the output |
+
+For the alert settings, the group notification settings and the tray settings, refer to [NOTIFICATIONS.md](NOTIFICATIONS.md) and [TRAY_USAGE.md](TRAY_USAGE.md).

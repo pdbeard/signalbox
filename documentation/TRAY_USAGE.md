@@ -1,75 +1,85 @@
 # Signalbox System Tray - Usage Guide
 
 ## Overview
-The Signalbox system tray provides a visual indicator of your task status directly in your system's taskbar. The icon changes color based on execution results:
-- **Green**: All tasks completed successfully
-- **Red**: One or more tasks failed
+The signalbox tray icon shows the status of your tasks in the system tray. The color of the icon shows the results:
+- **Green**: all tasks were successful, or no task has run yet.
+- **Red**: one or more tasks failed.
+- **Yellow**: a run that you started from the tray is in progress.
 
 ## Installation
-The tray feature requires PyQt6, which is included in the standard installation:
+The tray app must have PyQt6. PyQt6 is an optional extra. To install signalbox with the tray app, use one of these commands:
 ```bash
-pip install -e .
+pipx install ".[tray]"
+# or, in a development environment
+pip install -e ".[tray]"
 ```
 
 ## Running the Tray App
-Simply run:
+Run this command:
 ```bash
 signalbox-tray
 ```
 
-The tray icon will appear in your system tray/taskbar.
+The tray icon shows in your system tray or taskbar.
 
 ### Verbose Mode (Troubleshooting)
-For debugging and troubleshooting, run with verbose output:
+To find the cause of a problem, run the tray app with verbose output:
 ```bash
 signalbox-tray --verbose
 # or
 signalbox-tray -v
 ```
 
-This will print detailed information to the console including:
-- Configuration loading status
-- Icon file paths and loading status
-- Status update details (task counts, success/failure)
-- Terminal emulator detection
-- Button action execution and any errors
-- Poll interval settings
+In verbose mode, the tray app writes this data to the console:
+- The status of the configuration load
+- The paths of the icon files, and if the icons loaded
+- The details of each status update (the number of tasks, successes and failures)
+- The output of **Run All Tasks**
+- The poll interval
 
-Use verbose mode to diagnose issues like:
-- Missing terminal emulator errors
-- Icon file not found problems
-- Configuration loading issues
-- Runtime state polling errors
+Use verbose mode to find problems such as these:
+- Icon files that the tray cannot find
+- Problems when the tray loads the configuration
+- Errors when the tray reads the run status
 
 ## Configuration
-The tray can be configured in your `signalbox.yaml`:
+Set the tray settings in `signalbox.yaml`:
 
 ```yaml
 tray:
   enabled: true           # Enable/disable the tray icon
   poll_interval: 30       # How often to check status (seconds)
+  notify_on_success: false
 ```
 
-Set `enabled: false` to disable the tray in headless or server environments.
+On a server or a system without a display, set `enabled: false`.
+
+The tray reads `signalbox.yaml` again when the file changes. Thus, changes to the notification settings and the paths apply immediately. The tray reads `enabled` and `poll_interval` only when it starts. After you change them, start the tray again.
 
 ## Tray Menu Options
-Right-click the tray icon to access:
-- **View Status**: Opens a terminal showing task status
-- **Run All Tasks**: Executes all configured tasks
-- **Open Config**: Opens your config file in the default editor
-- **Exit**: Closes the tray application
+Right-click the tray icon to open the menu. The menu has these items:
+- **Task Status** and **Group Status**: the result and the time of the last run of each task and group
+- **View Status**: opens a window with the status of all tasks
+- **Run All Tasks**: runs all tasks
+- **Run Group** and **Run Task**: run one group or one task. The menus are sorted by configuration file.
+- **Enable Notifications**: turns `alerts.notifications.enabled` on or off
+- **Notify on Success & Failure**: turns `tray.notify_on_success` on or off
+- **Clear error state**: the icon ignores failures that occurred before now
+- **Open Config**: opens `signalbox.yaml` in the default editor
+- **Exit**: closes the tray app
 
 ## Platform Support
-- **Linux (X11)**: Full support
-- **Linux (Wayland)**: Depends on compositor (works on KDE Plasma, Sway with tray support)
-- **Hyprland**: May require waybar for tray support
-- **GNOME**: Limited support; may need tray extensions
+- **macOS**: full support
+- **Linux (X11)**: full support
+- **Linux (Wayland)**: the support depends on the compositor. The tray works on KDE Plasma, and on Sway with tray support.
+- **Hyprland**: possibly, waybar is necessary for tray support.
+- **GNOME**: limited support. Possibly, a tray extension is necessary.
 
 ## Autostart
-To run the tray on login:
+To start the tray when you log in, do the steps for your system.
 
 ### Linux
-Create `~/.config/autostart/signalbox-tray.desktop`:
+Make the file `~/.config/autostart/signalbox-tray.desktop`:
 ```desktop
 [Desktop Entry]
 Type=Application
@@ -81,21 +91,20 @@ X-GNOME-Autostart-enabled=true
 ```
 
 ### Compositor-specific (Hyprland, sway)
-Add to your compositor config:
+Add this line to the configuration of your compositor:
 ```
 exec-once = signalbox-tray
 ```
 
 ### macOS
-To autostart signalbox-tray on login:
 
 **Option 1: Login Items (GUI)**
 1. Open **System Settings** > **General** > **Login Items**.
-2. Click the **+** button and add the full path to your signalbox-tray executable (e.g., `/Users/USERNAME/.local/bin/signalbox-tray` or wherever pipx installs it).
-3. The tray will launch automatically on login.
+2. Click the **+** button. Add the full path to the signalbox-tray executable, for example `/Users/USERNAME/.local/bin/signalbox-tray`. If pipx put it in a different location, use that location.
+3. The tray starts automatically when you log in.
 
-**Option 2: launchd (advanced/manual)**
-1. Create a file at `~/Library/LaunchAgents/com.signalbox.tray.plist` with the following contents:
+**Option 2: launchd (advanced)**
+1. Make a file at `~/Library/LaunchAgents/com.signalbox.tray.plist` with these contents:
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -112,33 +121,29 @@ To autostart signalbox-tray on login:
 </dict>
 </plist>
 ```
-2. Load it with:
+2. Load the file with this command:
 ```sh
 launchctl load ~/Library/LaunchAgents/com.signalbox.tray.plist
 ```
-3. The tray will now start automatically at login.
+3. The tray starts automatically when you log in.
 
-**Note:** Adjust the path to signalbox-tray as needed. You can find it with `which signalbox-tray`.
+**Note:** change the path to signalbox-tray if necessary. To find the path, use `which signalbox-tray`.
 
 ## Customization
 ### Custom Icons
-Replace the default icons in the `icons/` directory:
-- `icons/green.png` - Success icon
-- `icons/red.png` - Failure icon
+The icons are in the `signalbox/icons/` directory of the package. To change them, replace these files:
+- `green.png`: the success icon
+- `red.png`: the failure icon
+- `yellow.png`: the icon for a run in progress
 
-Icons should be 64x64 PNG files for best results.
+For the best results, use PNG files of 64x64 pixels.
 
 ## Troubleshooting
-- **Icon not showing**: Check compositor tray support, especially on Wayland
-- **Permission errors**: Ensure signalbox config and logs are accessible
-- **Tray disabled**: Verify `tray.enabled: true` in config
-- **Buttons not working**: Run with `--verbose` to see detailed error messages. Common issues:
-  - No terminal emulator found (tray will try these in order: x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, xterm, alacritty, kitty, terminator)
-  - Signalbox command not in PATH
-- **Status not updating**: Check verbose output for runtime state loading errors
+- **The icon does not show**: make sure that your compositor has tray support. This is frequently the cause on Wayland.
+- **Permission errors**: make sure that you can read and write the signalbox configuration and logs.
+- **The tray stops immediately**: make sure that `tray.enabled` is `true` in the configuration.
+- **A menu item does not work**: run the tray with `--verbose` to see the error messages.
+- **The status does not change**: look in the verbose output for errors when the tray reads the run status.
 
-## Future Enhancements
-- Add inline status display (show task list in menu)
-- Support for showing individual task status
-- Integration with remote Signalbox instances
-- Desktop notifications for failures
+## Possible Future Changes
+- Show the status of remote signalbox instances

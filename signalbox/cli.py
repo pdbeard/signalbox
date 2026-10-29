@@ -72,7 +72,7 @@ cli.add_command(alerts_cmd, name="alerts")
 # Root-level shortcuts for frequently used commands
 @cli.command(name="run")
 @click.argument("name")
-@click.option("--quiet", "-q", is_flag=True, help="Suppress inline output preview")
+@click.option("--quiet", "-q", is_flag=True, help="Do not show the output preview")
 @click.pass_context
 def run_shortcut(ctx, name, quiet):
     """Run a task (shortcut for 'task run NAME')."""

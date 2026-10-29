@@ -1,24 +1,21 @@
 # Global Configuration Guide
 
-The `config/signalbox.yaml` file contains global settings that affect how signalbox operates. This file is separate from your scripts and groups configuration.
+The `config/signalbox.yaml` file has the global settings of signalbox. These settings apply to all tasks and groups. The task files and the group files are separate from this file.
 
 ## Configuration Location
 
-Signalbox searches for configuration in this order:
-1. **`$SIGNALBOX_HOME`** - Environment variable pointing to config directory
-2. **`~/.config/signalbox/`** - User configuration directory (recommended for system-wide installations)
-3. **Current working directory** - For development or project-specific setups
+Signalbox looks for its configuration in these locations, in this sequence:
+1. **`$SIGNALBOX_HOME`**: the directory in this environment variable
+2. **`$XDG_CONFIG_HOME/signalbox`**: used only if `XDG_CONFIG_HOME` has a value
+3. **`~/.config/signalbox/`**: the user configuration directory. Use this location for a normal installation.
+4. **The current working directory**: for development, or for the configuration of one project
 
-Example setup for system-wide use:
+This is an example for a normal installation:
 ```bash
-# Create config directory
-mkdir -p ~/.config/signalbox
+# Make the configuration directory
+signalbox init
 
-# Copy your configuration
-cp -r config ~/.config/signalbox/
-cp -r scripts ~/.config/signalbox/  # if applicable
-
-# Or set custom location
+# Or set a different location
 export SIGNALBOX_HOME=/path/to/your/config
 ```
 
@@ -26,8 +23,8 @@ export SIGNALBOX_HOME=/path/to/your/config
 
 ```yaml
 default_log_limit:
-  type: count      # 'count' or 'age'
-  value: 10        # Number of logs or days to keep
+  type: count      # 'count', 'age' or 'size'
+  value: 10        # Number of logs, days or MB to keep
 
 paths:
   log_dir: logs                  # Where to store log files (relative to config home)
@@ -35,25 +32,27 @@ paths:
   groups_file: config/groups     # Path to groups directory (relative to config home)
 
 execution:
-  default_timeout: 300           # Script timeout in seconds (0 = no timeout)
+  default_timeout: 300           # Task timeout in seconds (0 = no timeout)
+  min_timeout: 1                 # Smallest timeout allowed (except 0)
   capture_stdout: true           # Capture standard output in logs
   capture_stderr: true           # Capture standard error in logs
   max_parallel_workers: 5        # Maximum parallel workers for group execution
 
 logging:
   timestamp_format: '%Y%m%d_%H%M%S_%f'  # Format for log filenames
+  max_file_size_mb: 5                   # Maximum size of one log file
 
 display:
   date_format: '%Y-%m-%d %H:%M:%S'  # Format for displaying dates
 ```
 
-**Note:** All paths in the configuration are resolved relative to the configuration home directory (where `config/signalbox.yaml` is located), unless specified as absolute paths.
+**Note:** If a path in the configuration is not absolute, signalbox uses it relative to the configuration home. The configuration home is the directory that holds `config/signalbox.yaml`.
 
 ## Key Settings
 
 ### Default Log Limit
 
-Controls how many log files are kept for each script:
+This setting tells signalbox which old logs of a task to delete:
 
 ```yaml
 default_log_limit:
@@ -61,7 +60,7 @@ default_log_limit:
   value: 10
 ```
 
-Or limit by age:
+You can also use the age of the logs:
 
 ```yaml
 default_log_limit:
@@ -69,25 +68,33 @@ default_log_limit:
   value: 7
 ```
 
-Individual scripts can override this in their configuration.
+Or you can use the total size of the logs:
+
+```yaml
+default_log_limit:
+  type: size     # Keep the newest logs that fit in N MB
+  value: 50
+```
+
+A task can have its own `log_limit`. It replaces this setting for that task.
 
 ### Execution Settings
 
-**Timeout**: Maximum seconds a script can run before being killed:
+**Timeout**: the maximum time, in seconds, that a task can run. When the time is over, signalbox stops the task:
 ```yaml
 execution:
   default_timeout: 300  # 5 minutes
   # default_timeout: 0  # No timeout
 ```
 
-**Output Capture**: Control what output is saved to logs:
+**Output capture**: these settings tell signalbox which output to write to the logs:
 ```yaml
 execution:
   capture_stdout: true   # Save standard output
   capture_stderr: true   # Save error output
 ```
 
-**Parallel Workers**: Maximum concurrent workers for parallel group execution:
+**Parallel workers**: the maximum number of tasks that run at the same time in a parallel group:
 ```yaml
 execution:
   max_parallel_workers: 5  # Adjust based on system resources
@@ -95,7 +102,7 @@ execution:
 
 ### Path Configuration
 
-Customize where files are located:
+These settings tell signalbox where the files are:
 
 ```yaml
 paths:
@@ -104,10 +111,9 @@ paths:
   groups_file: config/groups       # Directory containing group YAML files
 ```
 
-- Scripts automatically load from all `.yaml`/`.yml` files in directory (and append accordingly)
+- Signalbox loads the tasks from all `.yaml` and `.yml` files in the directory, and adds them to one list.
 
-
-See [FILE_STRUCTURE.md](FILE_STRUCTURE.md) for directory organization examples.
+For examples of how to organize the directories, refer to [FILE_STRUCTURE.md](FILE_STRUCTURE.md).
 
 
 ## Viewing Configuration
@@ -118,7 +124,7 @@ See [FILE_STRUCTURE.md](FILE_STRUCTURE.md) for directory organization examples.
 signalbox validate
 ```
 
-Shows configuration summary and validates all YAML files.
+This command examines all YAML files and shows a summary of the configuration.
 
 ## Date/Time Formats
 
@@ -132,7 +138,4 @@ For `date_format` (display):
 - `%Y-%m-%d` - 2023-12-31
 - `%d %b %H:%M` - 31 Dec 14:30
 
-See Python's `strftime()` documentation for all format codes.
-
-
-
+For all format codes, refer to the Python `strftime()` documentation.

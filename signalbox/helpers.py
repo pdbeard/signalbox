@@ -48,7 +48,7 @@ def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool =
                     items.extend({"data": item, "source": filepath} for item in items_from_file)
         except Exception as e:
             if not suppress_warnings:
-                click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
+                click.echo(f"Warning: Cannot load {filepath}: {e}", err=True)
 
     return items
 
@@ -93,7 +93,7 @@ def load_yaml_dict_from_dir(directory: str, key: str, filename_prefix: str = "")
                     if isinstance(data[key], dict):
                         merged_dict.update(data[key])
         except Exception as e:
-            click.echo(f"Warning: Failed to load {filepath}: {e}", err=True)
+            click.echo(f"Warning: Cannot load {filepath}: {e}", err=True)
 
     return merged_dict
 
