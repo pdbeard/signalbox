@@ -1,4 +1,4 @@
-![signalbox logo](logo_ideas/event-portal-blocks.svg)
+![signalbox logo](logo/signalbox-logo.svg)
 
 # signalbox
 
@@ -121,6 +121,10 @@ signalbox --config /path/to/config/signalbox.yaml list
 - `signalbox config check-permissions`: show a warning if other users can read or write the configuration files or the logs
 - `signalbox config validate`: examine the configuration files for errors
 
+### Status
+
+- `signalbox status`: show what the tray shows (failed tasks and groups, and scheduled groups that did not run when due). It exits with 0 when all is OK, 1 when a group is overdue, and 2 when something failed (the convention of Nagios and similar monitoring tools). Use it on a machine without a tray.
+
 ### Alerts & Notifications
 
 - `signalbox alerts [TASK] [--severity LEVEL] [--days N]`: show the recent alerts
@@ -129,7 +133,7 @@ signalbox --config /path/to/config/signalbox.yaml list
 ### Scheduling Exports
 
 - `signalbox export-systemd GROUP [--user]`: make the systemd service file and timer file
-- `signalbox export-cron GROUP`: make a crontab line
+- `signalbox export-cron GROUP [--install]`: make a crontab line. With `--install`, also add it to your crontab (an older line for the same group and signalbox home is replaced; your other jobs are kept).
 
 ### Tray App
 
@@ -347,7 +351,7 @@ Signalbox uses the POSIX rules for exit codes:
 | 126 | Permission denied | The user does not have permission to run the command |
 | 130 | Interrupted | The user pushed Ctrl+C |
 
-**Note:** `signalbox task run --all` tries to run all tasks, also when some tasks fail. It exits with code 1 after it tries all tasks. `signalbox group run` exits with code 1 if a task in the group failed, or if `stop_on_error` stopped a task. Thus, cron and systemd see the failure.
+**Note:** `signalbox task run --all` tries to run all tasks, also when some tasks fail. It exits with code 1 after it tries all tasks, and also when a task file cannot be loaded (for example, a YAML syntax error). `signalbox group run` exits with code 1 if a task in the group failed, or if `stop_on_error` stopped a task. Thus, cron and systemd see the failure.
 
 ## Security
 

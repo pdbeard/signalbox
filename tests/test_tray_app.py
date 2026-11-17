@@ -80,7 +80,7 @@ def test_unreadable_state_keeps_last_view(home, monkeypatch):
     icons = []
     real_icon = tray_app.QIcon
     monkeypatch.setattr(tray_app, "QIcon", lambda path: icons.append(os.path.basename(path)) or real_icon(path))
-    monkeypatch.setattr(tray_app, "load_config", broken)
+    monkeypatch.setattr(tray_app, "read_status", broken)
     tray.refresh()
 
     assert tray.status is before
@@ -92,3 +92,16 @@ def test_text_poll_interval_falls_back_instead_of_crashing(home):
     home.write_settings({"tray": {"poll_interval": "30"}})
     tray = tray_app.SignalboxTray()
     assert tray.timer.interval() == 30_000
+
+
+def test_notifies_once_when_a_group_becomes_overdue(home, monkeypatch):
+    home.write_settings({"group_notifications": {"enabled": True}})
+    sent = []
+    monkeypatch.setattr(tray_app, "send_notification", lambda title, message: sent.append(message))
+    old = format_timestamp(datetime.now() - timedelta(hours=3))
+    save_group_runtime_state("every15", str(home.config_dir / "groups" / "groups.yaml"), old, "success", 1, 1, 1)
+
+    tray = tray_app.SignalboxTray()
+    tray.refresh()  # still overdue: no second notification
+
+    assert sent == ["Did not run when due: every15"]

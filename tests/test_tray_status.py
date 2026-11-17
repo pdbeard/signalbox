@@ -2,35 +2,11 @@
 
 from datetime import datetime, timedelta
 
-import pytest
 
 from signalbox.helpers import format_timestamp
-from signalbox.tray_status import compute_status, last_due_time
+from signalbox.tray_status import compute_status
 
 NOW = datetime(2026, 11, 2, 10, 7)  # a Monday
-
-
-@pytest.mark.parametrize(
-    "schedule, expected",
-    [
-        ("*/15 * * * *", datetime(2026, 11, 2, 10, 0)),
-        ("0 2 * * *", datetime(2026, 11, 2, 2, 0)),
-        ("0 12 * * *", datetime(2026, 11, 1, 12, 0)),  # not yet today: yesterday's run
-        ("0 9 * * 1-5", datetime(2026, 11, 2, 9, 0)),  # today, Monday, 09:00
-        ("30 10 * * mon-fri", datetime(2026, 10, 30, 10, 30)),  # today's 10:30 is still ahead: Friday's
-        ("0 0 * * 0", datetime(2026, 11, 1, 0, 0)),  # Sunday
-        ("0 0 * * 7", datetime(2026, 11, 1, 0, 0)),  # 7 is Sunday too
-        ("0 0 1 * 1", datetime(2026, 11, 2, 0, 0)),  # both day fields set: either matches (Monday)
-        ("0 9 */2 * 1", datetime(2026, 10, 19, 9, 0)),  # day field starts with '*': BOTH must match (odd Monday)
-        ("0 0 29 2 *", datetime(2024, 2, 29, 0, 0)),  # leap day, years back
-        ("@daily", datetime(2026, 11, 2, 0, 0)),
-        ("@reboot", None),  # no expected time
-        ("61 * * * *", None),  # out of range: no expectation rather than a false alarm
-        ("0 0 * * * *", None),  # 6 fields
-    ],
-)
-def test_last_due_time(schedule, expected):
-    assert last_due_time(schedule, NOW) == expected
 
 
 def ts(delta):

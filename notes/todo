@@ -41,3 +41,19 @@ Signalbox Alerts:
   - Display alert summary in CLI; allow filtering by time/severity.
 - Consider storing alerts in a dedicated log or database for efficient querying.
 - Design extensible pattern matching for future alert types.
+
+
+Taskfile / justfile support (revisit later, discussed 2026-11-17)
+- Goal: signalbox watches jobs whose logic lives in a Taskfile.yml or justfile (schedule, logs, alerts, tray), without becoming a task runner itself.
+- Never parse their formats: ask their CLIs for the list (task --list-all --json, just --dump --dump-format json). Check these flags first; neither tool was installed when this was written.
+- Level 1 (docs only): README section showing command: task -x backup / just --justfile PATH backup, with cwd.
+    - task needs -x (--exit-code) so the real exit code reaches signalbox (check this)
+- Level 2: signalbox import taskfile|justfile PATH --only a,b
+    - writes normal task entries (command, cwd, description) to tasks/<name>.yaml, so alerts/timeouts can be added and it stays in git
+    - --only matters: most recipes are dev commands (build, test, fmt) and would just add noise to the tray
+    - recipe names like db:backup must pass NAME_PATTERN: map ':' to '-' and say what was renamed
+    - validate warns when an imported recipe no longer exists in its Taskfile/justfile
+    - tests: fake task/just scripts on PATH, same as the crontab --install test
+- Not doing: live linking (taskfiles: in signalbox.yaml). The tray would run the CLIs every poll, and renamed recipes would silently vanish from monitoring.
+- Document the limit: only runs that go through signalbox are recorded, not a manual "task backup" in a terminal.
+- Legal: go-task is MIT, just is CC0. Calling their CLIs or borrowing ideas is fine; copied code keeps the MIT notice. Say "works with Task", no logos or implied endorsement.

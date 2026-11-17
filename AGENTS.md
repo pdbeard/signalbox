@@ -12,12 +12,12 @@
 
 ## Code Style Guidelines
 - **Imports:** Standard library first, then third-party, then local modules
-- **Formatting:** Follow PEP8, prefer `black` formatting (4 spaces, max line length 88/120)
+- **Formatting:** Follow PEP8, prefer `black` formatting (4 spaces, max line length 120)
 - **Types:** No type hints required, but use clear variable names and docstrings
 - **Naming:** Use snake_case for variables/functions, UPPER_CASE for constants
-- **Error Handling:** The project uses a single convention: raise custom exceptions from `signalbox/exceptions.py` (`TaskNotFoundError`, `ExecutionError`, etc.) and let the CLI layer's `@handle_exceptions` decorator translate them into user-facing messages and exit codes. Do not use result objects (e.g. `return ExportResult(success=False)`) for error paths in core modules, and do not print-and-continue for failures that the caller needs to know about.
+- **Error Handling:** The project uses a single convention: raise custom exceptions from `signalbox/exceptions.py` (`TaskNotFoundError`, `ExecutionError`, etc.) and let the CLI layer's `@handle_exceptions` decorator translate them into user-facing messages and exit codes. The one exception is `exporters.py`, whose `ExportResult` carries the files written or the error for the CLI to print. Do not print-and-continue for failures that the caller needs to know about.
 - **Configuration:** Use YAML for config, tasks, and groups; validate with CLI
-- **Logging:** Store logs in `logs/`, rotate by count or age
+- **Logging:** Store logs in `logs/`, rotate by count, age or size
 - **CLI:** Expose commands via `click` decorators
 - **Contributing:** Document new features, update validation logic, keep README up to date
 

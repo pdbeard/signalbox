@@ -61,13 +61,13 @@ alerts:
 
 ### Group Notification Options
 
-- **`group_notifications.enabled`** (default: `true`): turns the group summary notifications on or off.
+- **`group_notifications.enabled`** (default: `true`): turns the group summary notifications on or off. It also turns on or off the tray's notification when a scheduled group becomes overdue.
 - **`group_notifications.on_failure_only`** (default: `true`): if true, signalbox sends a notification only when a task fails. If false, it sends a notification after each group run.
 - **`group_notifications.show_failed_names`** (default: `true`): if true, and 3 or fewer tasks failed, the message has the names of the failed tasks.
 
 ### Tray Notification Switch
 
-The tray menu item "Notifications" turns alert notifications and group summary notifications on or off together. It replaces `alerts.notifications.enabled` and `group_notifications.enabled` (the tray stores its value in `runtime/tray_state.json`). The tray itself shows no messages: it shows the status with the color of its icon.
+The tray menu item "Notifications" turns alert notifications and group summary notifications on or off together. It replaces `alerts.notifications.enabled` and `group_notifications.enabled` (the tray stores its value in `runtime/tray_state.json`). The tray sends one notification of its own: when a scheduled group becomes overdue (a run that never started sends no other notification). It sends it once for each time a group becomes overdue.
 
 ## Testing Notifications
 

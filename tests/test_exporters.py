@@ -93,6 +93,7 @@ def test_generate_systemd_timer():
     content = exporters.generate_systemd_timer(group, "g1")
     assert "[Timer]" in content
     assert "OnCalendar=*-*-* *:0/15:00" in content
+    assert "Persistent=true" in content
 
 
 def test_generate_cron_entry(monkeypatch, tmp_path):

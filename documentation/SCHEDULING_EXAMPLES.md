@@ -104,15 +104,16 @@ signalbox list-schedules
 
 # Generate systemd files for each scheduled group
 # (the cron schedule is converted to OnCalendar; files go to <signalbox home>/systemd/<group>/)
+# The timer has Persistent=true: a start missed while the computer was off runs when it is on again
 signalbox export-systemd monitoring
 signalbox export-systemd daily-maintenance
 signalbox export-systemd critical-backup-15min
 
 # Or generate crontab entries (written to <signalbox home>/cron/<group>/<group>.cron)
-signalbox export-cron monitoring
-signalbox export-cron daily-maintenance
-crontab -l > my-crontab
-cat ~/.config/signalbox/cron/monitoring/monitoring.cron >> my-crontab
-cat ~/.config/signalbox/cron/daily-maintenance/daily-maintenance.cron >> my-crontab
-crontab my-crontab
+# and add them to your crontab. Run it again after you change a schedule: the old line is replaced.
+signalbox export-cron monitoring --install
+signalbox export-cron daily-maintenance --install
+
+# Check that every scheduled group ran when it was due (exit 0 OK, 1 overdue, 2 failed)
+signalbox status
 ```

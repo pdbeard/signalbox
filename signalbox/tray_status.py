@@ -6,91 +6,17 @@ so a scheduled group that missed its last due time counts as overdue.
 """
 
 import os
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 
-from .exporters import get_schedule_string, is_cron_schedule
+from .config import load_config
+from .cron import last_due_time
+from .exporters import get_schedule_string
 from .helpers import parse_timestamp
-
-MACROS = {
-    "@hourly": "0 * * * *",
-    "@daily": "0 0 * * *",
-    "@midnight": "0 0 * * *",
-    "@weekly": "0 0 * * 0",
-    "@monthly": "0 0 1 * *",
-    "@yearly": "0 0 1 1 *",
-    "@annually": "0 0 1 1 *",
-}
-DAY_NAMES = {name: i for i, name in enumerate(["sun", "mon", "tue", "wed", "thu", "fri", "sat"])}
-MONTH_NAMES = {name: i + 1 for i, name in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split())}
+from .runtime import filter_runtime_to_config, load_runtime_state, load_tray_state
 
 # How late a scheduled group may be before it is overdue, on top of its last run time
 OVERDUE_GRACE = timedelta(minutes=5)
-# Longest gap to search back for a due time: a Feb 29 schedule fires once in 4 years
-SEARCH_DAYS = 4 * 366
-
 ICONS = {"success": "✓", "failed": "✗", "partial": "✗", "overdue": "⚠", "never": "–"}
-
-
-def _cron_field(text, low, high, names=None):
-    """The set of values one cron field allows, e.g. '*/15' -> {0, 15, 30, 45}."""
-
-    def number(value):
-        value = value.lower()
-        return names[value[:3]] if names and value[:3] in names else int(value)
-
-    values = set()
-    for item in text.split(","):
-        base, _, step = item.partition("/")
-        step = int(step) if step else 1
-        if base == "*":
-            first, last = low, high
-        elif "-" in base:
-            first, last = (number(part) for part in base.split("-", 1))
-        else:
-            first = number(base)
-            last = high if step > 1 else first  # "5/15" means from 5 to the end, every 15
-        if not (low <= first <= last <= high) or step < 1:
-            raise ValueError(f"cron field {text!r} out of range")
-        values.update(range(first, last + 1, step))
-    return values
-
-
-def last_due_time(schedule, at):
-    """The latest time at or before `at` when cron would start this schedule, or None.
-
-    None also means "no expectation": @reboot, or syntax this parser does not know.
-    """
-    schedule = MACROS.get(schedule.strip(), schedule) if isinstance(schedule, str) else schedule
-    if not is_cron_schedule(schedule) or schedule.startswith("@"):
-        return None
-    minute, hour, day, month, weekday = schedule.split()
-    try:
-        minutes = sorted(_cron_field(minute, 0, 59), reverse=True)
-        hours = sorted(_cron_field(hour, 0, 23), reverse=True)
-        days = _cron_field(day, 1, 31)
-        months = _cron_field(month, 1, 12, MONTH_NAMES)
-        weekdays = {d % 7 for d in _cron_field(weekday, 0, 7, DAY_NAMES)}  # 7 is Sunday too
-    except ValueError:
-        return None
-
-    def day_matches(date):
-        cron_weekday = (date.weekday() + 1) % 7  # Python: Monday=0; cron: Sunday=0
-        # cron runs when EITHER day field matches, unless one starts with '*' (as in '*/2'): then BOTH must
-        if not day.startswith("*") and not weekday.startswith("*"):
-            return date.day in days or cron_weekday in weekdays
-        return date.day in days and cron_weekday in weekdays
-
-    at = at.replace(second=0, microsecond=0)
-    for back in range(SEARCH_DAYS + 1):
-        date = at.date() - timedelta(days=back)
-        if date.month not in months or not day_matches(date):
-            continue
-        for h in hours:
-            for m in minutes:
-                due = datetime.combine(date, time(h, m))
-                if due <= at:
-                    return due
-    return None
 
 
 def _when(value):
@@ -178,3 +104,11 @@ def compute_status(config, runtime_state, ignore_failures_before=0, now=None):
     else:
         tooltip = "signalbox: nothing has run yet"
     return {"colour": colour, "tooltip": tooltip, **rows}
+
+
+def read_status(now=None):
+    """compute_status for the current config and runtime state (shared by the tray and `signalbox status`)."""
+    config = load_config(suppress_warnings=True)
+    runtime_state = filter_runtime_to_config(load_runtime_state(), config)
+    ignore_before = load_tray_state().get("ignore_failures_before", 0)
+    return compute_status(config, runtime_state, ignore_before, now)

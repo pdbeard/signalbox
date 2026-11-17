@@ -10,6 +10,8 @@ The color of the icon shows the results:
 
 A task or group that never ran shows in the menu as "never run". It does not change the color of the icon.
 
+When a group becomes overdue, the tray also sends a desktop notification (once, unless `group_notifications.enabled` is false). On a machine without a tray, `signalbox status` shows the same information.
+
 A group is overdue when its `schedule` was due more than 5 minutes ago (plus the time its last run took), and its last run is older than that due time.
 
 ## Installation
@@ -121,12 +123,12 @@ launchctl load ~/Library/LaunchAgents/com.signalbox.tray.plist
 
 ## Customization
 ### Custom Icons
-The icons are in the `signalbox/icons/` directory of the package. To change them, replace these files:
-- `green.png`: the success icon
-- `red.png`: the failure icon
-- `yellow.png`: the icon for an overdue group
+The tray shows a single bar in the colour of the status. The icons are in the `signalbox/icons/` directory of the package:
+- `green.png`: all OK
+- `yellow.png`: a scheduled group is overdue
+- `red.png`: a task or a group failed
 
-For the best results, use PNG files of 64x64 pixels.
+They are made from the SVG files in `logo/` (`tray-icon-ok.svg`, `tray-icon-overdue.svg`, `tray-icon-failed.svg`). To change them, edit the SVG files and run `python3 generate_icons.py` from the repository root (it needs `rsvg-convert`, from librsvg). You can also replace the PNG files directly: use square PNG files of 128x128 pixels with a transparent background.
 
 ## Troubleshooting
 - **The icon does not show**: make sure that your compositor has tray support. This is frequently the cause on Wayland.

@@ -74,7 +74,7 @@ An autouse fixture in `tests/conftest.py` points every test at a temporary `SIGN
 | `commands/group.py` | `group run`, `group list` |
 | `commands/log.py` | `log show/history/list/tail/clear` |
 | `commands/config.py` | `config show/path/check-permissions/validate` |
-| `commands/misc.py` | `init`, `list-schedules`, `export-systemd`, `export-cron`, `notify-test`, `alerts` |
+| `commands/misc.py` | `init`, `list-schedules`, `export-systemd`, `export-cron [--install]`, `notify-test`, `alerts`, `status` |
 | `commands/utils.py` | `handle_exceptions` decorator, output preview helper |
 
 ### Core Modules (`signalbox/`)
@@ -84,12 +84,13 @@ An autouse fixture in `tests/conftest.py` points every test at a temporary `SIGN
 | `config.py` | `ConfigManager` class + module-level convenience functions; loads global config + all task/group YAML files from the config directory |
 | `validator.py` | `validate_task`/`validate_group` per-entry checks (also run before execution) plus cross-file checks: duplicates, missing task references, cron expressions |
 | `executor.py` | Runs shell commands via `subprocess.run(shell=True)`, captures output, applies timeouts (per-task `timeout:` overrides `execution.default_timeout`) |
-| `log_manager.py` | Writes logs to `logs/<task>/<timestamp>.log`, handles rotation by count or age |
+| `log_manager.py` | Writes logs to `logs/<task>/<timestamp>.log`, handles rotation by count, age or size |
 | `alerts.py` | Matches regex patterns against task output, appends to `logs/<task>/alerts/alerts.jsonl` |
 | `notifications.py` | Sends desktop notifications on alert/failure |
 | `runtime.py` | Reads/writes `runtime/tasks/` and `runtime/groups/` state files (last_run, last_status) |
 | `exporters.py` | Generates systemd service/timer files and crontab entries for groups with `schedule` field |
-| `tray_status.py` | Qt-free logic behind the tray: icon colour, menu rows, and "overdue" detection for scheduled groups (cron parsing) |
+| `cron.py` | The one cron parser: `schedule_error` (used by validate and the exporters) and `last_due_time` (used by the tray) |
+| `tray_status.py` | Qt-free logic behind the tray and `signalbox status`: icon colour, menu rows, "overdue" detection for scheduled groups |
 | `cli_output.py` | Rich-based terminal output (tables, status colours) for all CLI commands |
 
 ### Configuration Discovery Order

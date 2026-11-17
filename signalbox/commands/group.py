@@ -45,6 +45,10 @@ def group_run(name):
         if isinstance(t, str) and t not in known_tasks
     ]
     if errors:
+        # Record the failed attempt: otherwise the tray keeps the last good status and only later shows "overdue"
+        group_source_file = config["_group_sources"].get(name)
+        if group_source_file:
+            save_group_runtime_state(name, group_source_file, format_timestamp(datetime.now()), "failed", 0, 0, 0)
         raise ValidationError("; ".join(errors))
     execution_mode = group_item.get("execution", "serial")
     stop_on_error = group_item.get("stop_on_error", False)

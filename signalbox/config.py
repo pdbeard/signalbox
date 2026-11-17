@@ -27,7 +27,7 @@ class ConfigManager:
     Replaces module-level globals with a proper class-based approach.
     Benefits:
     - Better testability (can create independent instances)
-    - Thread-safe (each thread can have its own instance)
+    - One shared default instance: parallel group threads read the same cached config
     - Explicit state management (no hidden globals)
     - Easy to reset/reload configuration
     """

@@ -12,7 +12,6 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 try:
@@ -26,16 +25,11 @@ except ImportError:
     )
     raise SystemExit(1)
 
-from .config import find_config_home, get_config_value, load_config
+from .config import find_config_home, get_config_value
 from .log_manager import get_latest_log
-from .runtime import (
-    filter_runtime_to_config,
-    load_runtime_state,
-    load_tray_state,
-    set_tray_setting,
-    setting_with_tray_override,
-)
-from .tray_status import compute_status
+from .notifications import send_notification
+from .runtime import set_tray_setting, setting_with_tray_override
+from .tray_status import read_status
 from .validator import _invalid_whole_number
 
 ICON_DIR = Path(__file__).parent / "icons"
@@ -59,6 +53,7 @@ class SignalboxTray:
         self.tray.setIcon(QIcon(str(ICON_DIR / "green.png")))
         self.menu = None
         self.status = None
+        self.overdue_seen = set()
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.refresh)
@@ -75,10 +70,7 @@ class SignalboxTray:
         if self.menu is not None and self.menu.isVisible():
             return  # rebuilding would close it under the user; aboutToHide refreshes instead
         try:
-            config = load_config(suppress_warnings=True)
-            runtime_state = filter_runtime_to_config(load_runtime_state(), config)
-            ignore_before = load_tray_state().get("ignore_failures_before", 0)
-            self.status = compute_status(config, runtime_state, ignore_before, datetime.now())
+            self.status = read_status()
         except Exception as e:
             # e.g. a config file saved half-way: keep the menu, but never stay green while blind
             self.tray.setIcon(QIcon(str(ICON_DIR / "yellow.png")))
@@ -88,10 +80,19 @@ class SignalboxTray:
             return
         self.tray.setIcon(QIcon(str(ICON_DIR / f"{self.status['colour']}.png")))
         self.tray.setToolTip(self.status["tooltip"])
+        self._notify_new_overdue()
         self.menu = self._build_menu(self.status)
         self.tray.setContextMenu(self.menu)
         if self.verbose:
             print(f"[tray] {self.status['colour']}: {self.status['tooltip']}")
+
+    def _notify_new_overdue(self):
+        """Notify once when a group becomes overdue: a run that never started sends no other notification."""
+        overdue = {name for _, name, _, row_status in self.status["groups"] if row_status == "overdue"}
+        new = sorted(overdue - self.overdue_seen)
+        self.overdue_seen = overdue  # a group that recovers and is late again notifies again
+        if new and setting_with_tray_override("group_notifications.enabled", True):
+            send_notification("signalbox: group overdue", f"Did not run when due: {', '.join(new)}")
 
     def _build_menu(self, status):
         menu = QMenu()

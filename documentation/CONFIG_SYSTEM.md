@@ -53,6 +53,7 @@ The validate command does these checks:
 - It examines `signalbox.yaml` for incorrect values.
 - It examines `tasks/*.yaml` for necessary fields, safe names, time limits and alert patterns.
 - It examines the structure of `groups/*.yaml`, and the tasks that each group refers to.
+- It examines each `schedule` the same way as cron: 5 fields with values in range (for example, minute 0-59), or a macro such as `@daily`. The exports and the tray use the same check.
 - It shows a warning for tasks that are not in a group. To stop this warning, set `validation.warn_unused_tasks: false`.
 - It shows a summary of the global configuration.
 

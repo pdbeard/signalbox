@@ -53,7 +53,7 @@ SignalboxError (base, exit code 1)
 ```python
 # In signalbox/executor.py
 def find_task(name, config):
-    task = next((t for t in config["tasks"] if isinstance(t, dict) and t.get("name") == name), None)
+    task = find_entry(config, "tasks", name)
     if not task:
         raise TaskNotFoundError(name)
     return task

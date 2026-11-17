@@ -234,6 +234,7 @@ class TestGroupRun:
         assert result.exit_code == 2
         assert "ghost" in result.output
         assert sb_home.logs("a") == []
+        assert runtime(sb_home, "groups")["g"]["last_status"] == "failed"  # so the tray shows it as failed
 
 
 class TestCatalog:
@@ -789,15 +790,15 @@ class TestCommandInputEdges:
 
 
 class TestScheduleAndAlertFields:
-    @pytest.mark.parametrize("schedule", ["0 0 * * * *", {"every": "5m"}])
+    # 6 fields: cron would run "* cd ..." as the command; 61: crontab refuses the line; @often: no such macro
+    @pytest.mark.parametrize("schedule", ["0 0 * * * *", {"every": "5m"}, "61 * * * *", "@often"])
     def test_export_cron_refuses_schedules_cron_would_misread(self, sb_home, run, schedule):
-        # A 6th field would make cron run "* cd ..." as the command, so the group never runs
         sb_home.write_tasks([task("t")])
         sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["t"], "schedule": schedule}])
 
         result = run("export-cron", "g")
 
-        assert result.exit_code == 1 and "not a cron expression" in result.output
+        assert result.exit_code == 1 and "schedule is invalid" in result.output
         assert not (sb_home.path / "cron" / "g").exists()
         assert run("validate").exit_code == 2
 
@@ -848,3 +849,68 @@ class TestTrayNotificationSwitch:
 
         assert run("group", "run", "g").exit_code == 1
         assert len(sent) == expect_sent
+
+
+class TestStatus:
+    def test_exit_code_follows_the_tray_colour(self, sb_home, run):
+        sb_home.write_tasks([task("ok"), task("bad", "exit 1")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["ok"], "schedule": "*/15 * * * *"}])
+
+        result = run("status")
+        assert result.exit_code == 0 and "nothing has run yet" in result.output
+
+        run("group", "run", "g")
+        assert run("status").exit_code == 0
+
+        groups_file = next((sb_home.path / "runtime" / "groups").glob("runtime_*.yaml"))
+        state = yaml.safe_load(groups_file.read_text())
+        state["groups"]["g"]["last_run"] = format_timestamp(datetime.now().replace(year=2020))
+        groups_file.write_text(yaml.dump(state))
+        result = run("status")
+        assert result.exit_code == 1 and "overdue" in result.output
+
+        run("task", "run", "bad")
+        result = run("status")
+        assert result.exit_code == 2 and "1 failed: bad" in result.output
+
+
+class TestCronInstall:
+    @pytest.fixture
+    def crontab(self, tmp_path, monkeypatch):
+        """A fake crontab command that keeps the table in a file."""
+        table = tmp_path / "table"
+        fake = tmp_path / "bin" / "crontab"
+        fake.parent.mkdir()
+        fake.write_text(
+            "#!/bin/sh\n"
+            f'if [ "$1" = -l ]; then [ -f "{table}" ] || {{ echo "no crontab for you" >&2; exit 1; }}; cat "{table}";'
+            f' else cat > "{table}"; fi\n'
+        )
+        fake.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+        return table
+
+    def test_install_adds_then_replaces_and_keeps_other_jobs(self, sb_home, run, crontab):
+        sb_home.write_tasks([task("t")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["t"], "schedule": "0 2 * * *"}])
+
+        assert run("export-cron", "g", "--install").exit_code == 0
+        crontab.write_text(crontab.read_text() + "5 4 * * * /usr/bin/other-job\n")
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["t"], "schedule": "0 3 * * *"}])
+        result = run("export-cron", "g", "--install")
+
+        assert result.exit_code == 0 and "Updated" in result.output
+        lines = crontab.read_text().splitlines()
+        assert len(lines) == 2 and "/usr/bin/other-job" in lines[0] and lines[1].startswith("0 3 * * * ")
+
+    def test_unreadable_crontab_is_never_overwritten(self, sb_home, run, crontab, tmp_path):
+        (tmp_path / "bin" / "crontab").write_text(
+            f'#!/bin/sh\nif [ "$1" = -l ]; then echo "permission denied" >&2; exit 1; fi\ncat > "{crontab}"\n'
+        )
+        sb_home.write_tasks([task("t")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["t"], "schedule": "0 2 * * *"}])
+
+        result = run("export-cron", "g", "--install")
+
+        assert result.exit_code == 1 and "Cannot read your crontab" in result.output
+        assert not crontab.exists()

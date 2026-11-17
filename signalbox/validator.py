@@ -6,7 +6,7 @@ import re
 import yaml
 
 from .config import load_config, get_config_value, load_global_config, resolve_path, config_sources, CONFIG_FILE
-from .exporters import is_cron_schedule
+from .cron import schedule_error
 from .helpers import is_valid_name, yaml_files, NAME_RULE
 
 SEVERITIES = ("info", "warning", "critical")
@@ -383,10 +383,10 @@ def _validate_groups(result):
         schedule = group.get("schedule")
         if isinstance(schedule, dict):
             schedule = schedule.get("cron")
-        if isinstance(schedule, str) and not is_cron_schedule(schedule):
-            result.errors.append(
-                f"Group '{group_name}' in {source_file} schedule is invalid: '{schedule}' (expected 5 cron fields)"
-            )
+        # Not text: validate_group already reports the type
+        error = schedule_error(schedule) if isinstance(schedule, str) else None
+        if error:
+            result.errors.append(f"Group '{group_name}' in {source_file} schedule is invalid: {error}")
 
 
 def _validate_global_config(result):

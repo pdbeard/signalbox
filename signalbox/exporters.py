@@ -4,9 +4,12 @@ import getpass
 import os
 import shlex
 import shutil
+import subprocess
 import sys
 
 from .config import get_config_value, find_config_home, resolve_path
+from .cron import schedule_error
+from .exceptions import SignalboxError
 from .helpers import is_valid_name
 
 CRON_MACROS = {
@@ -47,20 +50,11 @@ def validate_group_for_export(group, group_name):
     if "schedule" not in group:
         return False, f"Group '{group_name}' has no schedule defined. Add a 'schedule' field with a cron expression."
 
-    schedule = get_schedule_string(group)
-    if not is_cron_schedule(schedule):
-        return False, f"Group '{group_name}' schedule {schedule!r} is not a cron expression (5 fields or an @macro)"
+    error = schedule_error(get_schedule_string(group))
+    if error:
+        return False, f"Group '{group_name}' schedule is invalid: {error}"
 
     return True, None
-
-
-def is_cron_schedule(schedule):
-    """True for 5 cron fields or an @macro.
-
-    cron reads the first 5 fields as the time and runs the rest as the command,
-    so a 6-field schedule would run '* cd ...' and the group would never run.
-    """
-    return isinstance(schedule, str) and (schedule.strip().startswith("@") or len(schedule.split()) == 5)
 
 
 def get_schedule_string(group):
@@ -194,6 +188,10 @@ def cron_to_oncalendar(cron_schedule):
         ValueError: If the expression uses syntax that has no systemd equivalent
     """
     cron_schedule = cron_schedule.strip()
+    # Same rule as validate and the tray first; the text conversion below only handles valid fields
+    error = schedule_error(cron_schedule)
+    if error:
+        raise ValueError(error)
     if cron_schedule in CRON_MACROS:
         return CRON_MACROS[cron_schedule]
 
@@ -279,6 +277,8 @@ Requires={service_name}.service
 # Converted from cron schedule: {cron_schedule}
 # Verify with: systemd-analyze calendar '{on_calendar}'
 OnCalendar={on_calendar}
+# Run a missed start (computer off or asleep) as soon as the timer is active again
+Persistent=true
 
 [Install]
 WantedBy=timers.target
@@ -416,6 +416,35 @@ def export_cron(group, group_name):
     result.cron_entry = cron_entry
 
     return result
+
+
+def install_cron_entry(cron_entry, group_name):
+    """Add cron_entry to the user's crontab, replacing an earlier entry for this group and signalbox home.
+
+    Returns:
+        int: the number of old entries replaced (0 for a new install)
+
+    Raises:
+        SignalboxError: if the crontab cannot be read or written (it is left unchanged)
+    """
+    listed = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+    if listed.returncode == 0:
+        lines = listed.stdout.splitlines()
+    elif "no crontab" in listed.stderr.lower():
+        lines = []
+    else:
+        # Never write a crontab built from a listing that failed: it would delete the user's other jobs
+        raise SignalboxError(f"Cannot read your crontab: {listed.stderr.strip()}")
+
+    home_part = f"SIGNALBOX_HOME={shlex.quote(get_task_dir())} "
+    suffix = f" group run {group_name}"
+    kept = [line for line in lines if not (line.rstrip().endswith(suffix) and home_part in line)]
+    written = subprocess.run(
+        ["crontab", "-"], input="\n".join(kept + [cron_entry]) + "\n", capture_output=True, text=True
+    )
+    if written.returncode != 0:
+        raise SignalboxError(f"Cannot write your crontab: {written.stderr.strip()}")
+    return len(lines) - len(kept)
 
 
 def get_cron_install_instructions(cron_file, cron_entry, group):

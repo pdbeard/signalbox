@@ -142,7 +142,11 @@ def export_systemd(group_name, user):
 
 @click.command()
 @click.argument("group_name")
-def export_cron(group_name):
+@click.option(
+    "--install", is_flag=True, help="Also add the entry to your crontab (replaces an older one for this group)"
+)
+@handle_exceptions
+def export_cron(group_name, install):
     """Generate crontab entry for a scheduled group."""
     group = find_entry(load_config(), "groups", group_name)
 
@@ -154,6 +158,11 @@ def export_cron(group_name):
 
     # Show generated file
     click.echo(f"✓ Generated {result.files[0]}")
+    if install:
+        replaced = exporters.install_cron_entry(result.cron_entry, group_name)
+        click.echo(f"✓ {'Updated' if replaced else 'Added'} the entry in your crontab:")
+        click.echo(result.cron_entry)
+        return
     click.echo("")
 
     # Show installation instructions
@@ -229,3 +238,29 @@ def alerts_cmd(task_name, severity, days):
 
     # Show summary
     click.echo(f"\nTotal alerts: {len(alert_list)}")
+
+
+# Monitoring-plugin convention (Nagios and similar): 0 OK, 1 warning, 2 critical
+STATUS_EXIT_CODES = {"green": 0, "yellow": 1, "red": 2}
+ROW_COLOURS = {"success": "green", "failed": "red", "partial": "red", "overdue": "yellow"}
+
+
+@click.command()
+@handle_exceptions
+def status():
+    """Show what the tray shows: failures and overdue groups.
+
+    Exits 0 when all is OK, 1 when a scheduled group is overdue and 2 when
+    something failed, so cron, systemd or a monitoring tool can check it on a
+    machine without a tray.
+    """
+    from ..tray_status import read_status
+
+    result = read_status()
+    click.echo(result["tooltip"])
+    for title, kind in (("Groups", "groups"), ("Tasks", "tasks")):
+        if result[kind]:
+            click.echo(f"\n{title}:")
+        for icon, name, detail, row_status in result[kind]:
+            click.echo(f"  {click.style(icon, fg=ROW_COLOURS.get(row_status))} {name}  {detail}")
+    sys.exit(STATUS_EXIT_CODES[result["colour"]])
