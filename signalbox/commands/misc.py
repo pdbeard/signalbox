@@ -75,7 +75,8 @@ def init():
     click.echo("     (example tasks are in config/catalog/; set include_catalog: true to load them)")
     click.echo("  3. Run: signalbox list")
     click.echo("SECURITY: Signalbox runs commands in a shell, with all your permissions.")
-    click.echo("   Use only YAML files that you trust. Refer to SECURITY.md.")
+    click.echo("   Use only YAML files that you trust. Refer to:")
+    click.echo("   https://github.com/pdbeard/signalbox/blob/main/documentation/SECURITY.md")
     click.echo("   You can now use signalbox in all directories.")
 
 

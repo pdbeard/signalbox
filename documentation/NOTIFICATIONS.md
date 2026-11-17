@@ -1,8 +1,9 @@
 # Notifications Guide
 
-Signalbox can send desktop notifications on macOS and Linux. There are two types of notifications:
+Signalbox can send desktop notifications on macOS and Linux. There are three types of notifications:
 1. **Alert notifications**: signalbox sends one when the task output matches an alert pattern.
 2. **Group notifications**: signalbox sends a summary after a group runs.
+3. **Overdue notifications**: the tray sends one when a scheduled group does not run when it is due. `group_notifications.enabled` also controls this notification.
 
 ## Features
 
@@ -147,8 +148,8 @@ If notifications do not show, do these checks:
 ## Troubleshooting
 
 ### macOS: notifications do not show
-- In System Settings → Notifications, make sure that notifications from the terminal are on.
-- Make sure that the terminal app has permission to show notifications.
+- Signalbox sends notifications with `osascript`. macOS shows them as notifications from **Script Editor**. In System Settings > Notifications, make sure that notifications from Script Editor are on.
+- Run `signalbox notify-test`. If no notification shows, macOS possibly asks for permission one time. Give the permission.
 
 ### Linux: notifications do not show
 - Make sure that `notify-send` is installed: `which notify-send`

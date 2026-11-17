@@ -4,7 +4,7 @@
 # pipes, redirection, and complex bash scripts. Commands are executed with the
 # full permissions of the user running signalbox.
 #
-# Configuration files MUST be trusted. See SECURITY.md for details.
+# Configuration files MUST be trusted. See documentation/SECURITY.md for details.
 #
 import os
 import signal
@@ -359,7 +359,7 @@ def run_group_serial(task_names, config, stop_on_error):
         result = _run_group_task(task_name, config)
         results.append(result)
         if result["status"] != "success" and stop_on_error:
-            click.echo(f"⚠️  Task {task_name} failed. Stopping group execution (stop_on_error=true)")
+            click.echo(f"Task {task_name} failed. The remaining tasks do not run (stop_on_error: true)")
 
     _notify_group_result(results)
     return results

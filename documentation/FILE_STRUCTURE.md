@@ -59,6 +59,6 @@ One file that has the global settings, for example time limits, log limits and p
 - `name` (necessary): a name that no other group uses (the same rules as task names)
 - `description` (necessary): the purpose of the group
 - `tasks` (necessary): a list of task names
-- `schedule` (optional): a cron expression for automatic runs
+- `schedule` (optional): a cron expression (5 fields, or a macro such as `@daily`) for automatic runs. Refer to [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md).
 - `execution` (optional): the execution mode, `serial` (the default) or `parallel`
 - `stop_on_error` (optional): for serial groups only. If true, signalbox stops the group when a task fails. The default is false.

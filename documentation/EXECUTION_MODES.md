@@ -23,7 +23,7 @@ Use serial execution in these conditions:
 groups:
   - name: deployment
     description: Deploy application
-    execution: serial  # Run one at a time
+    execution: serial  # One task at a time
     tasks:
       - pre_deploy_check
       - build_app
@@ -40,31 +40,39 @@ groups:
   - name: deployment
     description: Deploy application
     execution: serial
-    stop_on_error: true  # Stop if any task fails
+    stop_on_error: true  # Stop when a task fails
     tasks:
-      - pre_deploy_check  # If this fails, stop here
-      - build_app         # Won't run if previous failed
+      - pre_deploy_check  # If this task fails, the group stops here
+      - build_app         # This task runs only if the tasks before it were successful
       - deploy_app
       - post_deploy_test
 ```
 
-**With `stop_on_error: false` (default):**
+With `stop_on_error: false` (the default), a failed task does not stop the group. Signalbox runs all the tasks.
+
+With `stop_on_error: true`, signalbox stops at the first failed task. This is the output (shorter log paths):
 ```
-Running deployment...
-Running pre_deploy_check... ✓
-Running build_app... ✗ FAILED
-Running deploy_app... ✓ (still runs)
-Running post_deploy_test... ✓ (still runs)
+Running group deployment: Deploy application
+Execution mode: serial (stop_on_error: True)
+
+Running pre_deploy_check...
+Task pre_deploy_check success. Log: ~/.config/signalbox/logs/pre_deploy_check/20261117_143312_556447.log
+
+Running build_app...
+Task build_app failed. Log: ~/.config/signalbox/logs/build_app/20261117_143312_562623.log
+Task build_app failed. The remaining tasks do not run (stop_on_error: true)
 ```
 
-**With `stop_on_error: true`:**
-```
-Running deployment...
-Running pre_deploy_check... ✓
-Running build_app... ✗ FAILED
-⚠️  Task build_app failed. Stopping group execution (stop_on_error=true)
-(deploy_app and post_deploy_test do not run)
-```
+Then a table shows each task. The tasks that did not run have the status `skipped`.
+
+### Group Result
+
+After each run, signalbox records the status of the group:
+- `success`: all tasks were successful.
+- `partial`: some tasks were successful, and some failed or did not run.
+- `failed`: no task was successful.
+
+If the status is not `success`, `signalbox group run` exits with code 1. Thus, cron and systemd see the failure.
 
 ## Parallel Execution
 
@@ -82,13 +90,17 @@ Use parallel execution in these conditions:
 groups:
   - name: monitoring
     description: Check all services
-    execution: parallel  # Run simultaneously
+    execution: parallel  # All tasks at the same time
     tasks:
       - check_web_server
       - check_database
       - check_cache
       - check_queue
 ```
+
+### Stop a Parallel Group
+
+If you push Ctrl+C, signalbox stops all the tasks of the group that are running. The tasks that did not start, do not start.
 
 ### Execution Summary
 
@@ -123,6 +135,7 @@ You can use the two modes in different groups:
 groups:
   # Fast parallel monitoring
   - name: health_checks
+    description: Health checks of all services
     execution: parallel
     schedule: "* * * * *"  # Every minute
     tasks:
@@ -132,6 +145,7 @@ groups:
 
   # Critical serial deployment
   - name: deploy_api
+    description: Test, build and deploy the API
     execution: serial
     stop_on_error: true
     tasks:
@@ -142,6 +156,7 @@ groups:
 
   # Parallel data collection
   - name: metrics_collection
+    description: Collect system metrics
     execution: parallel
     schedule: "*/10 * * * *"  # Every 10 minutes
     tasks:

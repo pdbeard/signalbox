@@ -1,6 +1,6 @@
 # Writing Scripts for signalbox
 
-## ⚠️ Security First
+## Security First
 
 **Signalbox runs commands in a shell, with all the permissions of your user.** A command can do these things:
 - Read and write all files that you can access
@@ -8,7 +8,7 @@
 - Run all programs
 - Delete data
 
-**Read each script before you add it to your configuration.** For the security rules, refer to [SECURITY.md](../SECURITY.md).
+**Read each script before you add it to your configuration.** For the security rules, refer to [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -17,8 +17,8 @@ This guide tells you how to write scripts that work well with signalbox. In this
 ## Exit Code Requirements
 
 **All scripts must return the correct exit code:**
-- **0** = Success ✅
-- **Not 0 (1-255)** = Failure ❌
+- **0**: success
+- **Not 0 (1-255)**: failure
 
 Signalbox uses the exit code to find if a script was successful. All programming languages and shells use this rule.
 
@@ -194,24 +194,24 @@ You can add alerts to a task in its YAML file. An alert finds a pattern in the o
 
 ```yaml
 tasks:
-    - name: check_website_health
-        command: ./check_website.sh
-        description: Check website status
-        alerts:
-            - pattern: "HTTP 5.."
-                title: "Website Error"
-                message: "[CRITICAL] Website returned 5xx error!"
-                severity: critical
-            - pattern: "timeout"
-                title: "Connection Timeout"
-                message: "[Warning] Website check timed out"
-                severity: warning
-            - pattern: "^OK"
-                title: "Website Status"
-                message: "Website is healthy"
-                severity: info
-                notify: true           # Override: send notification for info alert
-                on_failure_only: false # Override: always notify
+  - name: check_website_health
+    command: ./check_website.sh
+    description: Check website status
+    alerts:
+      - pattern: "HTTP 5.."
+        title: "Website Error"
+        message: "[CRITICAL] Website returned 5xx error!"
+        severity: critical
+      - pattern: "timeout"
+        title: "Connection Timeout"
+        message: "[Warning] Website check timed out"
+        severity: warning
+      - pattern: "^OK"
+        title: "Website Status"
+        message: "Website is healthy"
+        severity: info
+        notify: true           # Send a notification for this info alert
+        on_failure_only: false # Notify for this alert also when nothing failed
 ```
 
 **Alert fields:**
@@ -330,8 +330,10 @@ command: /usr/local/bin/backup.sh
 
 **Option 2: Make sure that the script is in PATH**
 ```yaml
-command: backup.sh  # Works if in PATH
+command: backup.sh  # Works only if backup.sh is in PATH
 ```
+
+**Caution:** cron runs commands with a short PATH (usually `/usr/bin:/bin`). A script in `~/.local/bin` or `/usr/local/bin` can run when you start the task yourself, but fail when cron starts it. For scheduled tasks, use absolute paths (option 1).
 
 **Option 3: Give the interpreter in the command**
 ```yaml
@@ -339,24 +341,26 @@ command: python3 /path/to/script.py
 command: node /path/to/script.js
 ```
 
-### 6. Handle Signals Gracefully
+### 6. Make Scripts Safe to Stop at Any Time
 
-If a script runs for a long time, handle interrupts:
+When a task gets to its time limit, or when you push Ctrl+C, signalbox stops the task and all the processes that it started with `SIGKILL`. A script cannot catch `SIGKILL`. Thus, cleanup code in a signal handler does not run.
 
-```python
-import signal
-import sys
+Write scripts that you can stop at any point and then run again:
+- Write to a temporary file. Then rename it to the final name. A rename is complete or it did not occur.
+- At the start, remove the temporary files from an earlier run that did not finish.
 
-def signal_handler(sig, frame):
-    print("Interrupted", file=sys.stderr)
-    sys.exit(130)  # Standard exit code for SIGINT
-
-signal.signal(signal.SIGINT, signal_handler)
+```bash
+#!/bin/bash
+set -euo pipefail
+tmp="/backups/db.sql.tmp"
+rm -f "$tmp"                      # From an earlier run that did not finish
+pg_dump mydb > "$tmp"
+mv "$tmp" /backups/db.sql         # The backup file is always complete
 ```
 
 ### 7. Validate Inputs
 
-At the start, make sure that the necessary arguments and environment variables are available:
+At the start, make sure that the necessary arguments and environment variables are available. The script cannot ask for input: signalbox gives it no input (stdin is `/dev/null`).
 
 ```bash
 #!/bin/bash

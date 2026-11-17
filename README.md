@@ -254,13 +254,11 @@ To make a system unit, run `signalbox export-systemd daily` without `--user`. Th
 ### Option 2: cron
 
 ```bash
-# Generate entry (creates cron/<group>/ directory)
-signalbox export-cron daily
-
-# Add to crontab
-crontab -e
-# Paste the generated line
+# Make the line (in cron/<group>/) and add it to your crontab
+signalbox export-cron daily --install
 ```
+
+Without `--install`, signalbox only makes the file and shows the line. Then add the line to your crontab yourself (`crontab -e`). With `--install`, signalbox replaces an earlier line for the same group, and keeps your other cron jobs.
 
 ## Alerting
 
@@ -321,7 +319,7 @@ This command finds these problems:
 - Names that two or more tasks (or groups) use
 - Groups that refer to tasks that do not exist
 - Incorrect task time limits
-- Cron expressions that are possibly incorrect (shown as warnings)
+- Schedules that cron cannot use: not 5 fields, a value out of range (for example, minute 61), or an unknown macro
 - YAML errors
 
 ## Documentation
@@ -336,6 +334,8 @@ The `documentation/` directory has these guides:
 - **[Scheduling Examples](documentation/SCHEDULING_EXAMPLES.md)**: examples of schedules
 - **[Notifications](documentation/NOTIFICATIONS.md)**: the settings for desktop notifications
 - **[Tray Usage](documentation/TRAY_USAGE.md)**: the system tray app
+- **[Error Handling](documentation/ERROR_HANDLING.md)**: exit codes, and how to use them in scripts
+- **[Security](documentation/SECURITY.md)**: the security model, and how to report a vulnerability
 
 ## Exit Codes
 
@@ -355,12 +355,13 @@ Signalbox uses the POSIX rules for exit codes:
 
 ## Security
 
-Signalbox runs commands in a shell, with all the permissions of the user who starts it. Think of task YAML files as shell scripts. Use only configuration files that you trust. To make sure that other users cannot change them, run `signalbox config check-permissions`. For more information, refer to [SECURITY.md](SECURITY.md).
+Signalbox runs commands in a shell, with all the permissions of the user who starts it. Think of task YAML files as shell scripts. Use only configuration files that you trust. To make sure that other users cannot change them, run `signalbox config check-permissions`. For more information, refer to [documentation/SECURITY.md](documentation/SECURITY.md).
 
 ## Troubleshooting
 
 ### Scheduled tasks do not run
 
+- Run `signalbox status`. It shows the groups that did not run when they were due.
 - Examine the status of the systemd timer: `systemctl status signalbox-<group>.timer`
 - Examine the logs: `journalctl -u signalbox-<group>.service`
 - Make sure that cron runs: `sudo systemctl status cron`

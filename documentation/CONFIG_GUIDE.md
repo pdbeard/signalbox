@@ -7,8 +7,10 @@ The `config/signalbox.yaml` file has the global settings of signalbox. These set
 Signalbox looks for its configuration in these locations, in this sequence:
 1. **`$SIGNALBOX_HOME`**: the directory in this environment variable
 2. **`$XDG_CONFIG_HOME/signalbox`**: used only if `XDG_CONFIG_HOME` has a value
-3. **`~/.config/signalbox/`**: the user configuration directory. Use this location for a normal installation.
-4. **The current working directory**: for development, or for the configuration of one project
+3. **`~/.config/signalbox/`**: the user configuration directory. Signalbox uses it if it has `config/signalbox.yaml`. Use this location for a normal installation.
+4. **The current working directory**: for development, or for the configuration of one project. Signalbox uses it only if it has `config/signalbox.yaml`.
+
+The `--config` option replaces all of these locations for one command, for example `signalbox --config /path/to/home/config/signalbox.yaml list`. `signalbox init` never uses the current working directory.
 
 This is an example for a normal installation:
 ```bash

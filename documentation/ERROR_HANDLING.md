@@ -63,7 +63,7 @@ def find_task(name, config):
 @click.argument("name", required=False)
 @handle_exceptions  # Catches and formats exceptions
 def task_run(name, ...):
-    config = load_config(suppress_warnings=True)
+    config = load_config()
     run_task(name, config)  # Can raise TaskNotFoundError
 ```
 
@@ -86,6 +86,7 @@ else
     code=$?
     case $code in
         1) echo "Task failed" ;;
+        2) echo "Configuration error" ;;
         3) echo "Task not found" ;;
         4) echo "Execution failed or timed out" ;;
         *) echo "Other error" ;;

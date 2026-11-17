@@ -21,11 +21,11 @@ groups:
 
 ```
 
-### ❌ Do not add a schedule to a task. Add it to a group. A group can have only one task.
+### Schedule Groups, Not Tasks
 
-To give one task its own schedule, make a group for that task:
+Only groups can have a schedule. To give one task its own schedule, make a group that has only that task:
 ```yaml
-# WRONG - Don't do this
+# Incorrect: a task cannot have a schedule
 tasks:
   - name: backup
     command: /backup.sh
@@ -33,7 +33,7 @@ tasks:
 ```
 
 ```yaml
-# Correct
+# Correct: a group with one task
 groups:
   - name: backup-group
     description: Backup every 15 minutes
@@ -44,44 +44,22 @@ groups:
 
 ## Common Schedule Patterns
 
-```yaml
-groups:
-  # Every minute
-  - name: critical-checks
-    schedule: "* * * * *"
-    
-  # Every 5 minutes
-  - name: frequent-tasks
-    schedule: "*/5 * * * *"
-    
-  # Every 15 minutes
-  - name: regular-tasks
-    schedule: "*/15 * * * *"
-    
-  # Every 30 minutes
-  - name: semi-hourly
-    schedule: "*/30 * * * *"
-    
-  # Hourly at minute 0
-  - name: hourly-tasks
-    schedule: "0 * * * *"
-    
-  # Daily at 2 AM
-  - name: daily-tasks
-    schedule: "0 2 * * *"
-    
-  # Weekly on Monday at 3 AM
-  - name: weekly-tasks
-    schedule: "0 3 * * 1"
-    
-  # Monthly on the 1st at 4 AM
-  - name: monthly-tasks
-    schedule: "0 4 1 * *"
-    
-  # Business hours only (9 AM - 5 PM, Mon-Fri)
-  - name: business-hours-checks
-    schedule: "0 9-17 * * 1-5"
-```
+Put one of these values in the `schedule` field of a group:
+
+| Schedule | When the group runs |
+|----------|---------------------|
+| `"* * * * *"` | Every minute |
+| `"*/5 * * * *"` | Every 5 minutes |
+| `"*/15 * * * *"` | Every 15 minutes |
+| `"*/30 * * * *"` | Every 30 minutes |
+| `"0 * * * *"` | Every hour, at minute 0 |
+| `"0 2 * * *"` | Every day at 2 AM |
+| `"0 3 * * 1"` | Every Monday at 3 AM |
+| `"0 4 1 * *"` | On the first day of each month at 4 AM |
+| `"0 9-17 * * 1-5"` | Every hour from 9 AM to 5 PM, Monday to Friday |
+| `"@daily"` | Every day at midnight (also `@hourly`, `@weekly`, `@monthly`, `@yearly`) |
+
+`signalbox validate` examines each schedule the same way as cron. Each field must be in its range (for example, minute 0-59).
 
 ## Tips for Organizing Schedules
 
