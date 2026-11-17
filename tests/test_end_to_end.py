@@ -109,6 +109,25 @@ class TestTaskRun:
         assert result.exit_code == 1
         assert runtime(sb_home, "tasks")["after"]["last_status"] == "success"
 
+    def test_run_all_fails_when_a_task_file_does_not_load(self, sb_home, run):
+        sb_home.write_tasks([task("a")])
+        (sb_home.config_dir / "tasks" / "backup.yaml").write_text("tasks:\n- {name: backup, command: x\n")
+
+        result = run("task", "run", "--all")
+
+        assert result.exit_code == 1
+        assert "backup.yaml" in result.output
+        assert runtime(sb_home, "tasks")["a"]["last_status"] == "success"
+
+    def test_run_names_the_broken_file_of_a_missing_task(self, sb_home, run):
+        sb_home.write_tasks([task("a")])
+        (sb_home.config_dir / "tasks" / "backup.yaml").write_text("tasks:\n- {name: backup, command: x\n")
+
+        result = run("task", "run", "backup")
+
+        assert result.exit_code == 3
+        assert "backup.yaml" in result.output
+
     def test_run_all_reports_non_mapping_entry(self, sb_home, run):
         sb_home.write_tasks(["just a string", task("after")])
 
@@ -197,6 +216,14 @@ class TestGroupRun:
         for f in pid_files:
             with pytest.raises(ProcessLookupError):
                 os.kill(int(f.read_text()), 0)
+
+    def test_list_shows_dict_schedule_as_cron_text(self, sb_home, run):
+        sb_home.write_tasks([task("a")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["a"], "schedule": {"cron": "0 2 * * *"}}])
+
+        result = run("group", "list")
+
+        assert "0 2 * * *" in result.output and "cron" not in result.output
 
     def test_missing_task_reference_runs_nothing(self, sb_home, run):
         sb_home.write_tasks([task("a")])
@@ -314,6 +341,14 @@ class TestExport:
 
 
 class TestLogs:
+    def test_today_and_since_together_are_rejected(self, sb_home, run):
+        sb_home.write_tasks([task("a")])
+        run("task", "run", "a")
+
+        result = run("log", "list", "--today", "--since", "2020-01-01")
+
+        assert result.exit_code == 2 and "not both" in result.output
+
     def test_bracketed_output_is_shown_literally(self, sb_home, run):
         """Rich must not read task output or descriptions as markup ('[/x]' used to crash log list)."""
         sb_home.write_tasks([task("cp", "echo synced to [/mnt/backup]", description="copy [red]files[/red]")])

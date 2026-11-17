@@ -110,6 +110,13 @@ def test_failure_beats_overdue_and_tooltip_names_both():
     assert result["tooltip"] == "signalbox: 1 failed: bad; 1 overdue: late"
 
 
+def test_config_file_that_does_not_load_turns_red():
+    config = {"tasks": [], "groups": [], "_load_errors": {"/home/x/config/tasks/backup.yaml": "bad YAML"}}
+    result = compute_status(config, {"tasks": {}, "groups": {}}, 0, NOW)
+    assert result["colour"] == "red"
+    assert "cannot load backup.yaml" in result["tooltip"]
+
+
 def test_malformed_config_entries_are_skipped():
     config = {"tasks": ["oops", {"command": "x"}, {"name": "a"}], "groups": [5]}
     result = compute_status(config, {"tasks": {}, "groups": {}}, 0, NOW)

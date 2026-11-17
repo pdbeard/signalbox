@@ -162,13 +162,16 @@ class ConfigManager:
 
     def load_config(self, suppress_warnings=False):
         """Load configuration from tasks and groups directories."""
-        config = {"tasks": [], "groups": [], "_task_sources": {}, "_group_sources": {}}
+        # _load_errors: {path: message} for files that could not be read; their tasks/groups are missing, so callers must say so
+        config = {"tasks": [], "groups": [], "_task_sources": {}, "_group_sources": {}, "_load_errors": {}}
         sources_key = {"tasks": "_task_sources", "groups": "_group_sources"}
 
         for directory, kind, _ in self.config_sources():
             if not os.path.isdir(directory):
                 continue
-            items = load_yaml_files_from_dir(directory, key=kind, suppress_warnings=suppress_warnings)
+            items = load_yaml_files_from_dir(
+                directory, key=kind, suppress_warnings=suppress_warnings, errors=config["_load_errors"]
+            )
             for item in items:
                 name = item["data"].get("name") if isinstance(item["data"], dict) else None
                 if name:

@@ -36,6 +36,7 @@ from .runtime import (
     setting_with_tray_override,
 )
 from .tray_status import compute_status
+from .validator import _invalid_whole_number
 
 ICON_DIR = Path(__file__).parent / "icons"
 # The tray's Notifications switch mutes both kinds of desktop notification the CLI sends
@@ -61,7 +62,11 @@ class SignalboxTray:
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.refresh)
-        self.timer.start(get_config_value("tray.poll_interval", 30) * 1000)
+        poll_interval = get_config_value("tray.poll_interval", 30)
+        if _invalid_whole_number(poll_interval, minimum=1):
+            print(f"tray.poll_interval must be a whole number >= 1, got {poll_interval!r}; using 30", file=sys.stderr)
+            poll_interval = 30
+        self.timer.start(poll_interval * 1000)
         self.refresh()
         self.tray.show()
 

@@ -106,6 +106,11 @@ def task_run(name, run_all_tasks, quiet):
                     "error": error,
                 }
             )
+        # A file that failed to load has tasks that never ran: that is a failure, not "all OK"
+        results += [
+            {"name": os.path.basename(path), "status": "failed", "log_file": "", "error": f"{path}: {message}"}
+            for path, message in config.get("_load_errors", {}).items()
+        ]
         print_run_table(results)
         failed_tasks = [r["name"] for r in results if r["status"] != "success"]
         if failed_tasks:
@@ -115,7 +120,8 @@ def task_run(name, run_all_tasks, quiet):
             click.echo("\nAll tasks completed successfully")
             sys.exit(0)
     elif name:
-        config = load_config(suppress_warnings=True)
+        # Warnings on: a task in a file that does not load would otherwise just be "not found"
+        config = load_config()
         success = run_task(name, config)
         # The log this run wrote, not the newest file: a scheduled run of the same task may have finished since
         log_path = find_task(name, config).get("last_log")

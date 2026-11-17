@@ -5,6 +5,7 @@ in runtime/. A green icon must mean "ran and passed", not just "nothing failed",
 so a scheduled group that missed its last due time counts as overdue.
 """
 
+import os
 from datetime import datetime, time, timedelta
 
 from .exporters import get_schedule_string, is_cron_schedule
@@ -130,7 +131,8 @@ def _group_row(group, state, last_run, now):
 def compute_status(config, runtime_state, ignore_failures_before=0, now=None):
     """Work out the icon colour, tooltip and menu rows.
 
-    Red: a task or group failed (and the user did not clear it with "Clear error state").
+    Red: a task or group failed (and the user did not clear it with "Clear error state"),
+    or a config file does not load (its tasks and groups would otherwise just vanish).
     Yellow: nothing failed, but a scheduled group is overdue.
     Green: everything else. A task or group that never ran is shown but does not count.
 
@@ -159,6 +161,8 @@ def compute_status(config, runtime_state, ignore_failures_before=0, now=None):
                 overdue.append(name)
             rows[kind].append((ICONS.get(status, "?"), name, detail, status))
 
+    # A config file that does not load hides its tasks and groups: never report that as green
+    failed += [f"cannot load {os.path.basename(path)}" for path in config.get("_load_errors", {})]
     if failed:
         colour = "red"
     elif overdue:

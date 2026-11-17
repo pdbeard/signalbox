@@ -27,12 +27,13 @@ def yaml_files(directory):
     return [f for f in sorted(os.listdir(directory)) if not f.startswith(".") and f.endswith((".yaml", ".yml"))]
 
 
-def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool = False) -> list:
+def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool = False, errors=None) -> list:
     """
     Load the `key` entries from every YAML file in a directory, in filename order.
 
     Hidden files (editor swap files, .DS_Store, etc.) are skipped. A file that
-    fails to load is reported as a warning and skipped.
+    fails to load is reported as a warning and skipped; if `errors` is a dict,
+    errors[filepath] = message is added so callers can report the failure.
 
     Returns:
         List of dicts: [{"data": item, "source": filepath}, ...]
@@ -48,6 +49,8 @@ def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool =
                     items_from_file = data[key] if isinstance(data[key], list) else [data[key]]
                     items.extend({"data": item, "source": filepath} for item in items_from_file)
         except Exception as e:
+            if errors is not None:
+                errors[filepath] = str(e)
             if not suppress_warnings:
                 click.echo(f"Warning: Cannot load {filepath}: {e}", err=True)
 

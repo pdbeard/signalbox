@@ -6,6 +6,7 @@ import click
 
 from ..config import load_config, find_entry
 from ..executor import run_group_parallel, run_group_serial
+from ..exporters import get_schedule_string
 from ..runtime import save_group_runtime_state
 from ..exceptions import GroupNotFoundError, ValidationError
 from ..validator import validate_group, validate_run_settings
@@ -109,7 +110,7 @@ def group_list():
                 {
                     "name": group_item.get("name", ""),
                     "description": group_item.get("description", ""),
-                    "schedule": group_item.get("schedule", ""),
+                    "schedule": get_schedule_string(group_item),
                     "execution": group_item.get("execution", "serial"),
                     "stop_on_error": group_item.get("stop_on_error", False),
                     "tasks": group_item.get("tasks", []),

@@ -4,7 +4,7 @@
 The signalbox tray icon shows the status of your scheduled groups and your tasks. The tray does not run tasks. cron or systemd run them (see `signalbox export-cron` and `signalbox export-systemd`), and the tray shows the result of each run.
 
 The color of the icon shows the results:
-- **Red**: a task or a group failed.
+- **Red**: a task or a group failed, or a task or group file does not load (for example, a YAML syntax error). The tooltip names the file.
 - **Yellow**: nothing failed, but a scheduled group is overdue. Its last due time went by, and it did not run. Possible causes: the cron or systemd job is not installed, the export is out of date, or the computer was asleep.
 - **Green**: all tasks and groups were successful.
 

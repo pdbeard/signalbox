@@ -86,3 +86,9 @@ def test_unreadable_state_keeps_last_view(home, monkeypatch):
     assert tray.status is before
     assert "half-written file" in tray.tray.toolTip()
     assert icons == ["yellow.png"]  # never green while it cannot see the state
+
+
+def test_text_poll_interval_falls_back_instead_of_crashing(home):
+    home.write_settings({"tray": {"poll_interval": "30"}})
+    tray = tray_app.SignalboxTray()
+    assert tray.timer.interval() == 30_000

@@ -114,6 +114,9 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
     since_dt = None
     until_dt = None
 
+    if today and since:
+        click.echo("Error: Use --today or --since, not both", err=True)
+        sys.exit(2)
     if today:
         since_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     elif since:
