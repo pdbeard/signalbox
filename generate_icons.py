@@ -1,43 +1,22 @@
 #!/usr/bin/env python3
-"""
-Generate simple green and red status icons for the system tray.
-This is a one-time script to create basic icons.
-"""
-from PIL import Image, ImageDraw
+"""Render the tray icons (signalbox/icons/*.png) from their sources in logo/.
 
-def create_icon(color_name, rgb_color, size=64):
-    """
-    Create a simple circular icon with the specified color.
-    
-    Args:
-        color_name: Name for the output file (e.g., 'green', 'red')
-        rgb_color: RGB tuple for the icon color
-        size: Size of the icon in pixels
-    """
-    # Create image with transparent background
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    
-    # Draw a filled circle
-    margin = 4
-    draw.ellipse([margin, margin, size-margin, size-margin], fill=rgb_color)
-    
-    # Add a border for better visibility
-    border_width = 2
-    draw.ellipse([margin, margin, size-margin, size-margin], 
-                 outline=(0, 0, 0, 200), width=border_width)
-    
-    # Save the icon
-    output_path = f"signalbox/icons/{color_name}.png"
-    img.save(output_path, "PNG")
-    print(f"Created {output_path}")
+The tray picks the icon by the status colour, so the file names are fixed:
+logo/tray-icon-ok.svg -> green.png, tray-icon-overdue.svg -> yellow.png,
+tray-icon-failed.svg -> red.png. Needs rsvg-convert (librsvg: `brew install librsvg`
+or `apt install librsvg2-bin`). Run it from the repository root after editing an SVG.
+"""
+import shutil
+import subprocess
+import sys
+
+SIZE = 128  # px; the tray scales down, and 128 stays sharp on high-DPI screens
+ICONS = {"ok": "green", "overdue": "yellow", "failed": "red"}
 
 if __name__ == "__main__":
-    # Create green icon (success)
-    create_icon("green", (76, 175, 80))  # Material Design Green 500
-    
-    # Create red icon (failure)
-    create_icon("red", (244, 67, 54))  # Material Design Red 500
-    
-    print("\nIcons created successfully!")
-    print("You can replace these with custom SVG/PNG icons if desired.")
+    if not shutil.which("rsvg-convert"):
+        sys.exit("rsvg-convert not found: install librsvg (brew install librsvg / apt install librsvg2-bin)")
+    for state, colour in ICONS.items():
+        source, target = f"logo/tray-icon-{state}.svg", f"signalbox/icons/{colour}.png"
+        subprocess.run(["rsvg-convert", "-w", str(SIZE), "-h", str(SIZE), source, "-o", target], check=True)
+        print(f"{source} -> {target}")
