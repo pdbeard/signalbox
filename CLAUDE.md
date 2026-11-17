@@ -89,6 +89,7 @@ An autouse fixture in `tests/conftest.py` points every test at a temporary `SIGN
 | `notifications.py` | Sends desktop notifications on alert/failure |
 | `runtime.py` | Reads/writes `runtime/tasks/` and `runtime/groups/` state files (last_run, last_status) |
 | `exporters.py` | Generates systemd service/timer files and crontab entries for groups with `schedule` field |
+| `tray_status.py` | Qt-free logic behind the tray: icon colour, menu rows, and "overdue" detection for scheduled groups (cron parsing) |
 | `cli_output.py` | Rich-based terminal output (tables, status colours) for all CLI commands |
 
 ### Configuration Discovery Order
@@ -112,5 +113,5 @@ CLI command → `config.py` (load) → `validator.py` (validate) → `executor.p
 - Task and group names become paths, so they must match `helpers.NAME_PATTERN`; `check_name()` guards every path built from a name
 - No built-in scheduler daemon: scheduling is exported to systemd/cron
 - PyQt6 is an optional extra (`[tray]`), not a hard dependency
-- The tray app polls runtime state on a configurable interval (default 30s)
+- The tray app is a read-only monitor (it never runs tasks); it polls runtime state on a configurable interval (default 30s)
 - Developer notes and planning scratch files live in `notes/` (not shipped)

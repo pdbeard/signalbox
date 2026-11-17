@@ -5,8 +5,9 @@ import re
 
 import yaml
 
-from .config import load_config, get_config_value, load_global_config, resolve_path, CONFIG_FILE, CONFIG_SOURCES
-from .helpers import is_valid_name
+from .config import load_config, get_config_value, load_global_config, resolve_path, config_sources, CONFIG_FILE
+from .exporters import is_cron_schedule
+from .helpers import is_valid_name, yaml_files, NAME_RULE
 
 SEVERITIES = ("info", "warning", "critical")
 EXECUTION_MODES = ("serial", "parallel")
@@ -36,10 +37,76 @@ class ValidationResult:
 
 
 def _name_error(kind, name):
-    return (
-        f"{kind} name {name!r} is invalid: use only letters, digits, '_', '-' and '.', "
-        "and do not start with '.' or '-'"
-    )
+    return f"{kind} name {name!r} is invalid: {NAME_RULE}"
+
+
+def _invalid_number(value, minimum=0):
+    """True unless value is a real number >= minimum (YAML true/false are not numbers)."""
+    return isinstance(value, bool) or not isinstance(value, (int, float)) or value < minimum
+
+
+def _invalid_whole_number(value, minimum=0):
+    """True unless value is a whole number >= minimum."""
+    return _invalid_number(value, minimum) or not isinstance(value, int)
+
+
+# On/off settings: a quoted "false" is non-empty text, which Python treats as on
+BOOLEAN_SETTINGS = (
+    "include_catalog",
+    "alerts.notifications.enabled",
+    "alerts.notifications.on_failure_only",
+    "group_notifications.enabled",
+    "group_notifications.on_failure_only",
+    "group_notifications.show_failed_names",
+    "execution.capture_stdout",
+    "execution.capture_stderr",
+    "logging.include_command",
+    "logging.include_return_code",
+    "tray.enabled",
+    "validation.strict",
+    "display.colors",
+    "display.include_paths",
+)
+
+
+def validate_run_settings():
+    """Check the global settings that every run depends on.
+
+    Run before every task and group run as well as by `signalbox validate`, so
+    both apply the same rule. Fallbacks match the shipped signalbox.yaml.
+    """
+    errors = []
+    for key, default in (
+        ("execution.default_timeout", 300),
+        ("execution.min_timeout", 1),
+        ("logging.max_file_size_mb", 5),  # 0 = no size limit
+        ("alerts.notifications.cooldown_minutes", 60),
+        ("alerts.retention.max_days", 30),
+    ):
+        value = get_config_value(key, default)
+        if _invalid_number(value):
+            errors.append(f"{key} must be a number >= 0, got {value!r}")
+    for key, default, minimum in (
+        ("execution.max_parallel_workers", 5, 1),  # 0 would crash every parallel group
+        ("alerts.retention.max_entries", 1000, 0),
+    ):
+        value = get_config_value(key, default)
+        if _invalid_whole_number(value, minimum):
+            errors.append(f"{key} must be a whole number >= {minimum}, got {value!r}")
+
+    retention = get_config_value("alerts.retention", {})
+    per_severity = retention.get("per_severity", {}) if isinstance(retention, dict) else {}
+    if not isinstance(retention, dict):
+        errors.append(f"alerts.retention must be a mapping, got {retention!r}")
+    elif not isinstance(per_severity, dict):
+        errors.append(f"alerts.retention.per_severity must be a mapping, got {per_severity!r}")
+    else:
+        errors.extend(
+            f"alerts.retention.per_severity.{severity} must be a number >= 0, got {days!r}"
+            for severity, days in per_severity.items()
+            if _invalid_number(days)
+        )
+    return errors
 
 
 def validate_task_for_run(task):
@@ -68,7 +135,7 @@ def validate_task_for_run(task):
 
     if "timeout" in task:
         timeout = task["timeout"]
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout < 0:
+        if _invalid_number(timeout):
             errors.append(f"{label} has invalid timeout (must be a number >= 0, got {timeout!r})")
 
     if "cwd" in task and not isinstance(task["cwd"], str):
@@ -97,7 +164,7 @@ def validate_log_limit(log_limit, label):
             f"{label} log_limit type must be one of {', '.join(LOG_LIMIT_TYPES)}, got {log_limit.get('type')!r}"
         )
     value = log_limit.get("value")
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 1:
+    if _invalid_number(value, minimum=1):
         errors.append(f"{label} log_limit value must be a number >= 1, got {value!r}")
     return errors
 
@@ -128,7 +195,7 @@ def validate_task(task):
                     errors.append(f"{label} alert #{idx} missing '{field}' field")
             if "pattern" in alert:
                 try:
-                    re.compile(alert["pattern"])
+                    re.compile(str(alert["pattern"]))  # alerts.py searches for a number as text
                 except (re.error, TypeError) as e:
                     errors.append(f"{label} alert #{idx} has invalid regex pattern: {e}")
             if "severity" in alert and alert["severity"] not in SEVERITIES:
@@ -186,11 +253,6 @@ def validate_group(group):
     return errors
 
 
-def _yaml_files(directory):
-    """List YAML files in a directory the same way the config loader does (dotfiles skipped)."""
-    return [f for f in sorted(os.listdir(directory)) if not f.startswith(".") and f.endswith((".yaml", ".yml"))]
-
-
 def _validate_file(fpath, kind):
     """Parse one task or group file and validate every entry in it."""
     try:
@@ -222,20 +284,16 @@ def validate_configuration():
     result = ValidationResult()
 
     try:
-        include_catalog = get_config_value("include_catalog", False)
         task_files_found = False
         tasks_dir = None
 
-        # Per-file checks, so errors are grouped under the file they come from
-        for key, kind, fallback, is_catalog in CONFIG_SOURCES:
-            if is_catalog and not include_catalog:
-                continue
-            directory = resolve_path(get_config_value(key, fallback))
+        # Per-file checks over the same directories the loader reads, so errors are grouped by file
+        for directory, kind, is_catalog in config_sources():
             if kind == "tasks" and not is_catalog:
                 tasks_dir = directory
             if not os.path.isdir(directory):
                 continue
-            for fname in _yaml_files(directory):
+            for fname in yaml_files(directory):
                 fpath = os.path.join(directory, fname)
                 task_files_found = task_files_found or kind == "tasks"
                 result.files_used.append(fpath)
@@ -325,9 +383,9 @@ def _validate_groups(result):
         schedule = group.get("schedule")
         if isinstance(schedule, dict):
             schedule = schedule.get("cron")
-        if isinstance(schedule, str) and not schedule.startswith("@") and len(schedule.split()) != 5:
-            result.warnings.append(
-                f"Group '{group_name}' in {source_file} schedule may be invalid: '{schedule}' (expected 5 cron fields)"
+        if isinstance(schedule, str) and not is_cron_schedule(schedule):
+            result.errors.append(
+                f"Group '{group_name}' in {source_file} schedule is invalid: '{schedule}' (expected 5 cron fields)"
             )
 
 
@@ -338,21 +396,21 @@ def _validate_global_config(result):
     if not result.global_config:
         return
 
-    # Validate timeout value
-    timeout = get_config_value("execution.default_timeout", 300)
-    if not isinstance(timeout, (int, float)) or timeout < 0:
-        result.warnings.append("Invalid timeout value: {} (should be >= 0)".format(timeout))
+    result.errors.extend(validate_run_settings())
 
     default_limit = get_config_value("default_log_limit", None)
     if default_limit is not None:
         result.errors.extend(validate_log_limit(default_limit, "Global default"))
 
-    # 0 crashes every parallel group; a tray poll interval of 0 never pauses
-    # Fallbacks match the values in the shipped signalbox.yaml
-    for key, default in (("execution.max_parallel_workers", 5), ("tray.poll_interval", 30)):
-        value = get_config_value(key, default)
-        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-            result.errors.append(f"{key} must be a whole number >= 1, got {value!r}")
+    # A tray poll interval of 0 never pauses (fallback matches the shipped signalbox.yaml)
+    poll_interval = get_config_value("tray.poll_interval", 30)
+    if _invalid_whole_number(poll_interval, minimum=1):
+        result.errors.append(f"tray.poll_interval must be a whole number >= 1, got {poll_interval!r}")
+
+    for key in BOOLEAN_SETTINGS:
+        value = get_config_value(key)
+        if value is not None and not isinstance(value, bool):
+            result.errors.append(f"{key} must be true or false, got {value!r}")
 
 
 def get_validation_summary(result):

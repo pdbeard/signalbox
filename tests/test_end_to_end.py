@@ -8,12 +8,18 @@ sb_home fixture.
 """
 
 import os
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime
 
 import pytest
 import yaml
 from click.testing import CliRunner
 
 from signalbox.cli import cli
+from signalbox.helpers import format_timestamp
 
 
 @pytest.fixture
@@ -75,6 +81,16 @@ class TestTaskRun:
 
         assert run("task", "run", "hang").exit_code == 4
         assert "Disk full" in (sb_home.path / "logs" / "hang" / "alerts" / "alerts.jsonl").read_text()
+
+    def test_preview_shows_this_runs_log_not_the_newest_file(self, sb_home, run):
+        # Stands in for a cron run of the same task that finished meanwhile: a log with a newer mtime
+        other = sb_home.path / "logs" / "t" / f"{format_timestamp(datetime(2099, 1, 1))}.log"
+        sb_home.write_tasks([task("t", f"echo mine; echo other > '{other}'; touch -t 209901010000 '{other}'")])
+
+        result = run("task", "run", "t")
+
+        assert result.exit_code == 0, result.output
+        assert "mine" in result.output
 
     def test_undecodable_output_is_logged_not_fatal(self, sb_home, run):
         sb_home.write_tasks([task("binout", r"printf 'ok \377 done\n'")])
@@ -163,6 +179,24 @@ class TestGroupRun:
 
         assert run("group", "run", "p").exit_code == 0
         assert sorted(runtime(sb_home, "tasks")) == names
+
+    def test_ctrl_c_kills_running_parallel_tasks(self, sb_home):
+        pid_files = [sb_home.path / f"{n}.pid" for n in ("a", "b")]
+        sb_home.write_tasks([task(f.stem, f"echo $$ > '{f}'; exec sleep 30") for f in pid_files])
+        sb_home.write_groups([{"name": "p", "description": "d", "tasks": ["a", "b"], "execution": "parallel"}])
+        proc = subprocess.Popen([sys.executable, "-m", "signalbox", "group", "run", "p"], stdout=subprocess.DEVNULL)
+        try:
+            deadline = time.time() + 10
+            while not all(f.exists() and f.read_text().strip() for f in pid_files):
+                assert time.time() < deadline, "tasks did not start"
+                time.sleep(0.05)
+            proc.send_signal(signal.SIGINT)
+            proc.wait(timeout=10)  # would hang ~30 s if the sleeps survived
+        finally:
+            proc.kill()
+        for f in pid_files:
+            with pytest.raises(ProcessLookupError):
+                os.kill(int(f.read_text()), 0)
 
     def test_missing_task_reference_runs_nothing(self, sb_home, run):
         sb_home.write_tasks([task("a")])
@@ -534,3 +568,248 @@ class TestSystemdUnits:
         service = self._export(sb_home, run, "--user")
 
         assert "User=" not in service
+
+
+class TestAuditFixes:
+    def test_tray_switch_overrides_yaml_without_rewriting_it(self, sb_home, run, monkeypatch):
+        from signalbox import notifications
+        from signalbox.runtime import save_tray_state
+
+        yaml_before = (sb_home.config_dir / "signalbox.yaml").read_text()  # notifications disabled here
+        save_tray_state({"alerts.notifications.enabled": True})
+        sent = []
+        monkeypatch.setattr(notifications, "send_notification", lambda **kw: sent.append(kw))
+        alert = {"pattern": "FULL", "message": "full", "severity": "critical"}
+        sb_home.write_tasks([task("disk", "echo FULL", alerts=[alert])])
+
+        assert run("task", "run", "disk").exit_code == 0
+        assert len(sent) == 1
+        assert (sb_home.config_dir / "signalbox.yaml").read_text() == yaml_before
+
+    def test_numeric_alert_pattern_matches_as_text(self, sb_home, run):
+        sb_home.write_tasks([task("http", "echo got 404", alerts=[{"pattern": 404, "message": "not found"}])])
+
+        result = run("task", "run", "http")
+
+        assert result.exit_code == 0, result.output
+        assert "not found" in (sb_home.path / "logs" / "http" / "alerts" / "alerts.jsonl").read_text()
+        assert runtime(sb_home, "tasks")["http"]["last_status"] == "success"
+        assert run("validate").exit_code == 0
+
+    def test_fractional_count_limit_still_rotates(self, sb_home, run):
+        sb_home.write_tasks([task("rot", log_limit={"type": "count", "value": 2.5})])
+
+        for _ in range(4):
+            assert run("task", "run", "-q", "rot").exit_code == 0
+
+        assert len(sb_home.logs("rot")) == 2
+
+    def test_list_survives_nameless_and_non_mapping_tasks(self, sb_home, run):
+        sb_home.write_tasks([task("good"), {"command": "echo x"}, "not a mapping"])
+
+        result = run("list")
+
+        assert result.exit_code == 0, result.output
+        assert "good" in result.output
+
+    def test_preview_shows_this_runs_log_not_newest_file(self, sb_home, run):
+        sb_home.write_tasks([task("t", "echo MINE")])
+        log_dir = sb_home.path / "logs" / "t"
+        log_dir.mkdir(parents=True)
+        other = log_dir / "20990101_000000_000000.log"
+        other.write_text("STDOUT:\nOTHER RUN\nSTDERR:\n")
+        future = os.path.getmtime(other) + 100  # as if another process finished after this run
+        os.utime(other, (future, future))
+
+        result = run("task", "run", "t")
+
+        assert "MINE" in result.output and "OTHER RUN" not in result.output
+
+    def test_group_table_names_this_runs_log(self, sb_home, run):
+        sb_home.write_tasks([task("a")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["a"]}])
+
+        result = run("group", "run", "g")
+
+        assert sb_home.logs("a")[0].name[:15] in result.output
+
+    def test_validate_prints_names_with_brackets(self, sb_home, run):
+        sb_home.write_tasks([task("[/fix] backup")])
+
+        result = run("validate")
+
+        assert result.exit_code == 2
+        assert "Unexpected error" not in result.output
+        assert "[/fix] backup" in result.output
+
+    def test_ctrl_c_stops_parallel_group_and_its_tasks(self, sb_home, tmp_path):
+        import signal
+        import subprocess
+        import sys
+        import time
+
+        pid_files = [tmp_path / f"{name}.pid" for name in ("a", "b")]
+        sb_home.write_tasks([task(p.stem, f"echo $$ > {p}; exec sleep 30") for p in pid_files])
+        sb_home.write_groups([{"name": "pg", "description": "d", "execution": "parallel", "tasks": ["a", "b"]}])
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "signalbox", "group", "run", "pg"],
+            env=dict(os.environ, SIGNALBOX_HOME=str(sb_home.path)),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            deadline = time.time() + 10
+            while not all(p.exists() and p.read_text().strip() for p in pid_files) and time.time() < deadline:
+                time.sleep(0.05)
+            proc.send_signal(signal.SIGINT)
+            assert proc.wait(timeout=10) == 130
+        finally:
+            proc.kill()
+
+        time.sleep(0.5)
+        for p in pid_files:
+            with pytest.raises(ProcessLookupError):
+                os.kill(int(p.read_text()), 0)
+
+
+class TestGlobalSettingTypes:
+    def test_sections_with_all_keys_commented_out_use_defaults(self, sb_home, run):
+        # `retention:` / `default_log_limit:` with every child commented out load as None
+        sb_home.write_settings({"alerts": {"retention": None}, "default_log_limit": None})
+        sb_home.write_tasks([task("t", "echo hi", alerts=[{"pattern": "hi", "message": "m"}])])
+
+        for _ in range(12):
+            assert run("task", "run", "-q", "t").exit_code == 0
+
+        assert len(sb_home.logs("t")) == 10  # default count limit still applies
+        assert runtime(sb_home, "tasks")["t"]["last_status"] == "success"
+        result = run("validate")
+        assert result.exit_code == 0 and "Unexpected error" not in result.output
+
+    @pytest.mark.parametrize(
+        "settings, message",
+        [
+            ({"execution": {"default_timeout": "300"}}, "execution.default_timeout must be a"),
+            ({"execution": {"default_timeout": True}}, "execution.default_timeout must be a"),
+            # "5" * 1024 * 1024 used to build a million-digit string
+            ({"logging": {"max_file_size_mb": "5"}}, "logging.max_file_size_mb must be a"),
+            ({"execution": {"max_parallel_workers": "5"}}, "execution.max_parallel_workers must be a"),
+            ({"execution": {"max_parallel_workers": 0}}, "execution.max_parallel_workers must be a"),
+            ({"alerts": {"notifications": {"cooldown_minutes": "60"}}}, "cooldown_minutes must be a"),
+            ({"alerts": {"retention": {"max_entries": "1000"}}}, "alerts.retention.max_entries must be a"),
+            ({"alerts": {"retention": {"per_severity": {"critical": "90"}}}}, "per_severity.critical must be a"),
+            ({"alerts": {"retention": 30}}, "alerts.retention must be a mapping"),
+        ],
+    )
+    def test_bad_run_setting_is_an_error_everywhere(self, sb_home, run, settings, message):
+        sb_home.write_settings(settings)
+        alert = {"pattern": "ok", "message": "m", "severity": "critical"}
+        sb_home.write_tasks([task("t", alerts=[alert])])
+        sb_home.write_groups([{"name": "g", "description": "d", "execution": "parallel", "tasks": ["t"]}])
+
+        for args in (("validate",), ("task", "run", "t"), ("group", "run", "g")):
+            result = run(*args)
+            assert result.exit_code == 2, (args, result.output)
+            assert message in result.output and "Unexpected error" not in result.output
+
+    def test_quoted_false_is_an_error_and_keeps_catalog_off(self, sb_home, run):
+        sb_home.write_settings({"include_catalog": "false", "alerts": {"notifications": {"enabled": "false"}}})
+        sb_home.write_tasks([task("mine")])
+        (sb_home.config_dir / "catalog" / "tasks").mkdir(parents=True)
+        sb_home._dump(sb_home.config_dir / "catalog" / "tasks" / "examples.yaml", {"tasks": [task("example")]})
+
+        assert "example" not in run("list").output
+        result = run("validate")
+        assert result.exit_code == 2
+        assert "include_catalog must be true or false" in result.output
+        assert "alerts.notifications.enabled must be true or false" in result.output
+
+    def test_tilde_in_path_settings_means_home(self, sb_home, run, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        sb_home.write_settings({"paths": {"log_dir": "~/sb-logs"}})
+        sb_home.write_tasks([task("t")])
+
+        assert run("task", "run", "t").exit_code == 0
+
+        assert list((tmp_path / "sb-logs" / "t").glob("*.log"))
+        assert not (sb_home.path / "~").exists()
+
+
+class TestCommandInputEdges:
+    def test_list_schedules_skips_non_mapping_groups(self, sb_home, run):
+        sb_home.write_tasks([task("t")])
+        sb_home.write_groups([5, {"name": "g", "description": "d", "tasks": ["t"], "schedule": "0 * * * *"}])
+
+        result = run("list-schedules")
+
+        assert result.exit_code == 0 and "0 * * * *" in result.output
+
+    @pytest.mark.parametrize("args", [("log", "tail", "t", "-n", "-1", "--no-follow"), ("log", "list", "--last", "0")])
+    def test_bad_counts_are_rejected_as_usage_errors(self, sb_home, run, args):
+        sb_home.write_tasks([task("t")])
+
+        result = run(*args)
+
+        assert result.exit_code == 2 and "Unexpected error" not in result.output
+
+
+class TestScheduleAndAlertFields:
+    @pytest.mark.parametrize("schedule", ["0 0 * * * *", {"every": "5m"}])
+    def test_export_cron_refuses_schedules_cron_would_misread(self, sb_home, run, schedule):
+        # A 6th field would make cron run "* cd ..." as the command, so the group never runs
+        sb_home.write_tasks([task("t")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["t"], "schedule": schedule}])
+
+        result = run("export-cron", "g")
+
+        assert result.exit_code == 1 and "not a cron expression" in result.output
+        assert not (sb_home.path / "cron" / "g").exists()
+        assert run("validate").exit_code == 2
+
+    def test_numeric_alert_severity_does_not_fail_the_run(self, sb_home, run):
+        sb_home.write_tasks([task("t", "echo hi", alerts=[{"pattern": "hi", "message": "m", "severity": 1}])])
+
+        assert run("task", "run", "t").exit_code == 0
+        assert runtime(sb_home, "tasks")["t"]["last_status"] == "success"
+        assert run("validate").exit_code == 2
+
+
+class TestInitPermissions:
+    def test_fresh_init_passes_check_permissions(self, isolate_signalbox_home, run, monkeypatch):
+        from signalbox.config import reset_config
+
+        home = isolate_signalbox_home / "home"
+        monkeypatch.setenv("SIGNALBOX_HOME", str(home))
+        reset_config()
+
+        assert run("init").exit_code == 0
+        result = run("config", "check-permissions")
+
+        assert result.exit_code == 0, result.output
+        assert os.stat(home).st_mode & 0o077 == 0
+
+    def test_reinit_backup_is_private(self, sb_home, run):
+        sb_home.write_tasks([task("t")])
+
+        assert run("init", input="y\n").exit_code == 0
+
+        (backup,) = sb_home.path.parent.glob(f"{sb_home.path.name}.backup.*")
+        assert os.stat(backup).st_mode & 0o077 == 0
+
+
+class TestTrayNotificationSwitch:
+    @pytest.mark.parametrize("tray_switch, expect_sent", [(None, 1), (False, 0)])
+    def test_switch_mutes_group_failure_summaries(self, sb_home, run, monkeypatch, tray_switch, expect_sent):
+        from signalbox import notifications
+        from signalbox.runtime import save_tray_state
+
+        sb_home.write_settings({"group_notifications": {"enabled": True}})
+        if tray_switch is not None:
+            save_tray_state({"group_notifications.enabled": tray_switch})
+        sent = []
+        monkeypatch.setattr(notifications, "send_notification", lambda *a, **k: sent.append(a))
+        sb_home.write_tasks([task("bad", "exit 1")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["bad"]}])
+
+        assert run("group", "run", "g").exit_code == 1
+        assert len(sent) == expect_sent

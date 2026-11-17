@@ -121,7 +121,7 @@ def format_summary(total, passed, failed, context="tasks", failed_names=None):
     return message
 
 
-def notify_execution_result(total, passed, failed, context="tasks", failed_names=None, config=None):
+def notify_execution_result(total, passed, failed, context="tasks", failed_names=None):
     """
     Send a notification summarizing execution results.
 
@@ -131,15 +131,15 @@ def notify_execution_result(total, passed, failed, context="tasks", failed_names
         failed: Number that failed
         context: "tasks" or "groups"
         failed_names: Optional list of failed names
-        config: Config dict with notification settings
 
     Returns:
         bool: True if notification sent successfully
     """
     from .config import get_config_value
+    from .runtime import setting_with_tray_override
 
-    # Get settings from global config under group_notifications
-    enabled = get_config_value("group_notifications.enabled", True)
+    # The tray's Notifications switch covers group summaries as well as alerts
+    enabled = setting_with_tray_override("group_notifications.enabled", True)
     on_failure_only = get_config_value("group_notifications.on_failure_only", True)
     show_failed_names = get_config_value("group_notifications.show_failed_names", True)
 

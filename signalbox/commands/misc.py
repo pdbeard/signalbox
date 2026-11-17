@@ -6,11 +6,11 @@ from datetime import datetime
 
 import click
 
-from ..config import load_config, get_config_value, find_init_home
+from ..config import load_config, find_init_home, find_entry
 from .. import exporters
 from .. import notifications
 from .. import alerts
-from ..helpers import format_timestamp, parse_timestamp
+from ..helpers import format_timestamp, display_time
 from .utils import handle_exceptions
 
 
@@ -32,6 +32,8 @@ def init():
         replaced = [d for d in ("config", "runtime") if os.path.isdir(os.path.join(config_dir, d))]
         for subdir in replaced:
             shutil.copytree(os.path.join(config_dir, subdir), os.path.join(backup_dir, subdir), symlinks=True)
+        if replaced:
+            os.chmod(backup_dir, 0o700)  # the backup holds the same task commands
         click.echo(f"Backed up existing config to: {backup_dir}")
         for subdir in replaced:
             shutil.rmtree(os.path.join(config_dir, subdir))
@@ -58,6 +60,9 @@ def init():
     os.makedirs(os.path.join(config_dir, "logs"), exist_ok=True)
     os.makedirs(os.path.join(config_dir, "runtime/tasks"), exist_ok=True)
     os.makedirs(os.path.join(config_dir, "runtime/groups"), exist_ok=True)
+    # Task commands often hold tokens: keep the home private (what check-permissions expects)
+    os.chmod(config_dir, 0o700)
+    os.chmod(os.path.join(config_dir, "logs"), 0o700)
 
     click.echo(f"✓ Created logs directory: {config_dir}/logs")
     click.echo(f"✓ Created runtime directory: {config_dir}/runtime")
@@ -79,19 +84,19 @@ def list_schedules():
     """List all scheduled groups with their cron schedules."""
     config = load_config()
     groups = config.get("groups", [])
-    scheduled = [g for g in groups if "schedule" in g]
+    scheduled = [g for g in groups if isinstance(g, dict) and "schedule" in g]
 
     if not scheduled:
         click.echo("No scheduled groups defined.")
         return
 
-    from ..cli_output import print_schedule_list_table, get_schedule_display
+    from ..cli_output import print_schedule_list_table
 
     schedule_rows = []
     for group in scheduled:
         # Ensure all values are strings for rich table rendering
         group_name = str(group.get("name", ""))
-        schedule = str(get_schedule_display(group.get("schedule")))
+        schedule = str(exporters.get_schedule_string(group))
         description = str(group.get("description", "N/A"))
         tasks_list = group.get("tasks", [])
         if isinstance(tasks_list, (list, tuple)):
@@ -116,9 +121,7 @@ def list_schedules():
 @click.option("--user", is_flag=True, help="Make a user unit (not a system unit)")
 def export_systemd(group_name, user):
     """Generate systemd service and timer files for a scheduled group."""
-    config = load_config()
-    groups = config.get("groups", [])
-    group = next((g for g in groups if isinstance(g, dict) and g.get("name") == group_name), None)
+    group = find_entry(load_config(), "groups", group_name)
 
     result = exporters.export_systemd(group, group_name, user=user)
 
@@ -141,9 +144,7 @@ def export_systemd(group_name, user):
 @click.argument("group_name")
 def export_cron(group_name):
     """Generate crontab entry for a scheduled group."""
-    config = load_config()
-    groups = config.get("groups", [])
-    group = next((g for g in groups if isinstance(g, dict) and g.get("name") == group_name), None)
+    group = find_entry(load_config(), "groups", group_name)
 
     result = exporters.export_cron(group, group_name)
 
@@ -209,16 +210,8 @@ def alerts_cmd(task_name, severity, days):
             click.echo("No alerts found")
         return
 
-    # Display alerts
-    date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-
     for alert in alert_list:
-        timestamp_str = alert.get("timestamp", "")
-        try:
-            dt = parse_timestamp(timestamp_str)
-            human_date = dt.strftime(date_format)
-        except Exception:
-            human_date = timestamp_str
+        human_date = display_time(alert.get("timestamp", ""))
 
         severity_str = alert.get("severity", "info")
         task = alert.get("task_name", "unknown")

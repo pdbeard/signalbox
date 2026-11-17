@@ -70,7 +70,7 @@ The validate command does these checks:
 |---------|------|---------|-------------|
 | `default_log_limit.type` | string | count | The rule to delete old logs: `count`, `age` or `size` |
 | `default_log_limit.value` | number | 10 | The number of logs, days or MB to keep (as the type tells) |
-| `paths.log_dir` | string | logs | The directory for log files |
+| `paths.log_dir` | string | logs | The directory for log files (relative to the signalbox home; `~` means your home folder, as in all `paths.*` settings) |
 | `paths.tasks_file` | string | config/tasks | The directory of task YAML files |
 | `paths.groups_file` | string | config/groups | The directory of group YAML files |
 | `include_catalog` | boolean | false | Also load the example tasks and groups in `config/catalog/` |
@@ -80,7 +80,6 @@ The validate command does these checks:
 | `alerts.retention.max_entries` | number | 1000 | The maximum number of alerts that each task keeps |
 | `alerts.retention.per_severity` | mapping | critical 90, warning 30, info 7 | The number of days to keep alerts of each severity. It replaces `max_days` for these severities. |
 | `alerts.notifications.cooldown_minutes` | number | 60 | Do not send the same notification again (same task and alert pattern) in this number of minutes. 0 sends it on each run. |
-| `tray.notify_on_success` | boolean | false | Show a tray message when a run that you started from the tray is successful |
 | `execution.default_timeout` | number | 300 | The time limit of a task, in seconds. 0 removes the time limit. |
 | `execution.min_timeout` | number | 1 | The smallest time limit, in seconds. Signalbox increases a lower value (except 0) to this value. |
 | `execution.capture_stdout` | boolean | true | Write stdout to the logs |

@@ -13,17 +13,21 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import click
 
-from .config import get_config_value, find_config_home
-from .runtime import save_task_runtime_state
+from .config import get_config_value, find_config_home, find_entry, resolve_path
+from .runtime import save_task_runtime_state, setting_with_tray_override
 from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
 from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError, ValidationError, ConfigurationError
 from . import notifications
 from . import alerts
 from .helpers import format_timestamp
-from .validator import validate_task_for_run
+from .validator import validate_task_for_run, validate_run_settings
 
 # After a timeout kill, how long to wait for the pipes to close before giving up on the output
 KILL_GRACE_SECONDS = 5
+
+# Processes started by run_command that are still running, so an interrupted
+# parallel group can kill them (Ctrl+C reaches only the main thread).
+_running = set()
 
 
 def _kill_process_group(proc):
@@ -62,6 +66,7 @@ def run_command(command, timeout=None, cwd=None):
         errors="replace",
         start_new_session=True,
     )
+    _running.add(proc)
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -81,28 +86,37 @@ def run_command(command, timeout=None, cwd=None):
         _kill_process_group(proc)
         proc.wait()
         raise
+    finally:
+        _running.discard(proc)
     return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
 
 
 def resolve_task_cwd(task):
     """Working directory for a task: its 'cwd' (relative to the signalbox home), or the home itself."""
-    home = find_config_home()
     cwd = task.get("cwd")
-    if not cwd:
-        return home
-    return os.path.join(home, os.path.expanduser(cwd))
+    return resolve_path(cwd) if cwd else find_config_home()
 
 
-def _find_task(name, config):
+def find_task(name, config):
     """Find a task in the config by name.
 
     Raises:
         TaskNotFoundError: If no task with the given name exists in config.
     """
-    task = next((t for t in config["tasks"] if isinstance(t, dict) and t.get("name") == name), None)
+    task = find_entry(config, "tasks", name)
     if not task:
         raise TaskNotFoundError(name)
     return task
+
+
+def last_log_name(name, config):
+    """File name of the log this process wrote for the task's latest run ('' if it did not run).
+
+    Recorded per run rather than looked up as the newest file, which could be
+    another process's run of the same task.
+    """
+    task = find_entry(config, "tasks", name) or {}
+    return os.path.basename(task.get("last_log", ""))
 
 
 def _execute(task, name, config):
@@ -165,7 +179,7 @@ def _should_notify(name, alert):
     """
     notify = alert.get("notify")
     if notify is None:
-        notify = get_config_value("alerts.notifications.enabled", True)
+        notify = setting_with_tray_override("alerts.notifications.enabled", True)
     if not notify:
         return False
 
@@ -191,7 +205,8 @@ def _post_execution(name, task, result, log_file, timestamp, config):
     for alert in triggered_alerts:
         alert["notified"] = _should_notify(name, alert)
         alerts.save_alert(name, alert)
-        click.echo(f"  [{alert['severity'].upper()}] {alert['message']}")
+        # str(): a number here is reported by `signalbox validate`; it must not fail the run after the command
+        click.echo(f"  [{str(alert['severity']).upper()}] {alert['message']}")
         if alert["notified"]:
             notifications.send_notification(
                 title=alert.get("title") or f"Alert: {name}",
@@ -219,6 +234,7 @@ def _post_execution(name, task, result, log_file, timestamp, config):
 
     task["last_status"] = status
     task["last_run"] = timestamp
+    task["last_log"] = log_file
 
 
 def run_task(name, config):
@@ -238,8 +254,8 @@ def run_task(name, config):
         ExecutionTimeoutError: If task execution times out
         ExecutionError: If task execution fails for any other reason
     """
-    task = _find_task(name, config)
-    errors = validate_task_for_run(task)
+    task = find_task(name, config)
+    errors = validate_task_for_run(task) + validate_run_settings()
     if errors:
         raise ValidationError("; ".join(errors))
     cwd = resolve_task_cwd(task)
@@ -260,15 +276,16 @@ def _run_group_task(task_name, config):
     click.echo("")  # Add a blank line before each group task execution output
     click.echo(f"Running {task_name}...")
     try:
-        success = run_task(task_name, config)
-        return {"name": task_name, "status": "success" if success else "failed", "error": ""}
+        status = "success" if run_task(task_name, config) else "failed"
+        error = ""
     except Exception as e:
-        message = e.message if hasattr(e, "message") else str(e)
-        click.echo(f"Error: {message}")
-        return {"name": task_name, "status": "failed", "error": message}
+        status = "failed"
+        error = e.message if hasattr(e, "message") else str(e)
+        click.echo(f"Error: {error}")
+    return {"name": task_name, "status": status, "error": error, "log_file": last_log_name(task_name, config)}
 
 
-def _notify_group_result(results, config):
+def _notify_group_result(results):
     """Send the group summary notification for a list of task results."""
     ran = [r for r in results if r["status"] != "skipped"]
     failed_names = [r["name"] for r in ran if r["status"] != "success"]
@@ -279,7 +296,6 @@ def _notify_group_result(results, config):
         failed=len(failed_names),
         context="tasks",
         failed_names=failed_names or None,
-        config=config,
     )
 
 
@@ -292,13 +308,22 @@ def run_group_parallel(task_names, config):
 
     Returns:
             list: One dict per task, in task_names order, with keys
-                  'name', 'status' ('success' or 'failed') and 'error'
+                  'name', 'status' ('success' or 'failed'), 'error' and 'log_file'
     """
     max_workers = get_config_value("execution.max_parallel_workers", 5)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(_run_group_task, name, config) for name in task_names]
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    futures = [executor.submit(_run_group_task, name, config) for name in task_names]
+    try:
         results = [future.result() for future in futures]
+    except KeyboardInterrupt:
+        # Tasks run in their own sessions, so Ctrl+C never reaches them: stop
+        # queued tasks from starting, then kill the ones already running.
+        executor.shutdown(wait=False, cancel_futures=True)
+        for proc in _running.copy():
+            _kill_process_group(proc)
+        raise
+    executor.shutdown()
 
     # Print summary
     click.echo("\nParallel execution summary:")
@@ -309,7 +334,7 @@ def run_group_parallel(task_names, config):
         failed_names = [r["name"] for r in results if r["status"] != "success"]
         click.echo(f"  Failed: {', '.join(failed_names)}")
 
-    _notify_group_result(results, config)
+    _notify_group_result(results)
     return results
 
 
@@ -324,17 +349,17 @@ def run_group_serial(task_names, config, stop_on_error):
     Returns:
             list: One dict per task, in task_names order, with keys 'name',
                   'status' ('success', 'failed', or 'skipped' for tasks not run
-                  because of stop_on_error) and 'error'
+                  because of stop_on_error), 'error' and 'log_file'
     """
     results = []
     for task_name in task_names:
         if results and results[-1]["status"] != "success" and stop_on_error:
-            results.append({"name": task_name, "status": "skipped", "error": ""})
+            results.append({"name": task_name, "status": "skipped", "error": "", "log_file": ""})
             continue
         result = _run_group_task(task_name, config)
         results.append(result)
         if result["status"] != "success" and stop_on_error:
             click.echo(f"⚠️  Task {task_name} failed. Stopping group execution (stop_on_error=true)")
 
-    _notify_group_result(results, config)
+    _notify_group_result(results)
     return results

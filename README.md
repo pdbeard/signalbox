@@ -11,7 +11,7 @@ Signalbox is a command-line tool that runs and monitors shell tasks. It keeps a 
 - Keep one log for each run, and delete old logs by count, age or size
 - Record alerts when task output matches a pattern, and send desktop notifications
 - Make systemd and cron files for scheduled groups
-- Show a red or green status in the system tray (optional)
+- Show the status in the system tray: red when something failed, yellow when a scheduled group did not run (optional)
 
 ## Installation
 
@@ -133,7 +133,7 @@ signalbox --config /path/to/config/signalbox.yaml list
 
 ### Tray App
 
-- `signalbox-tray`: a system tray icon that shows the task status. You must install it with `pip install "signalbox[tray]"`.
+- `signalbox-tray`: a system tray icon that shows the status of your tasks and scheduled groups, including groups that did not run when they were due. You must install it with `pip install "signalbox[tray]"`.
 
 For more information, refer to [documentation/TRAY_USAGE.md](documentation/TRAY_USAGE.md).
 

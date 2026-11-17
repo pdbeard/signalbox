@@ -1,10 +1,11 @@
 # Runtime state management for signalbox
 import fcntl
+import json
 import os
 import tempfile
 
 import yaml
-from .config import resolve_path
+from .config import resolve_path, get_config_value
 from .helpers import load_yaml_dict_from_dir
 
 
@@ -99,7 +100,9 @@ def save_group_runtime_state(
 def merge_config_with_runtime_state(config, runtime_state):
     """Merge user configuration with runtime state."""
     for task in config["tasks"]:
-        task_name = task["name"]
+        if not isinstance(task, dict):
+            continue  # reported by `signalbox validate`; must not break listing the rest
+        task_name = task.get("name")
         if task_name in runtime_state["tasks"]:
             runtime_info = runtime_state["tasks"][task_name]
             task["last_run"] = runtime_info.get("last_run", "")
@@ -123,3 +126,54 @@ def filter_runtime_to_config(runtime_state, config):
         "tasks": {k: v for k, v in runtime_state.get("tasks", {}).items() if k in task_names},
         "groups": {k: v for k, v in runtime_state.get("groups", {}).items() if k in group_names},
     }
+
+
+TRAY_STATE_FILE = "runtime/tray_state.json"
+LEGACY_TRAY_STATE_FILE = "~/.signalbox_tray_state.json"
+
+
+def load_tray_state():
+    """Load the tray's own settings (ignore_failures_before, menu toggles).
+
+    Kept out of signalbox.yaml so the tray never rewrites (and strips the
+    comments from) the user's config file. The old
+    ~/.signalbox_tray_state.json is still read if no new file exists yet.
+    """
+    for state_file in (resolve_path(TRAY_STATE_FILE), os.path.expanduser(LEGACY_TRAY_STATE_FILE)):
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+    return {}
+
+
+def save_tray_state(state):
+    """Save the tray's settings atomically."""
+    state_file = resolve_path(TRAY_STATE_FILE)
+    state_dir = os.path.dirname(state_file)
+    os.makedirs(state_dir, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=state_dir, suffix=".json.tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(state, f)
+        os.replace(tmp_path, state_file)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def set_tray_setting(key, value):
+    """Store one value in the tray state file, keeping the others."""
+    state = load_tray_state()
+    state[key] = value
+    save_tray_state(state)
+
+
+def setting_with_tray_override(key, default):
+    """A signalbox.yaml setting, unless the tray menu has switched it (stored in the tray state)."""
+    return load_tray_state().get(key, get_config_value(key, default))

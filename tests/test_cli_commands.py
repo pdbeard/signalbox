@@ -159,7 +159,7 @@ class TestListCommand:
     @patch("signalbox.commands.task.load_config")
     @patch("signalbox.commands.task.load_runtime_state")
     @patch("signalbox.commands.task.merge_config_with_runtime_state")
-    @patch("signalbox.commands.task.get_config_value")
+    @patch("signalbox.config.get_config_value")
     def test_list_displays_scripts(self, mock_get_config, mock_merge, mock_runtime, mock_load, runner, sample_config):
         """Test list command displays all scripts."""
         mock_load.return_value = sample_config
@@ -178,7 +178,7 @@ class TestListCommand:
     @patch("signalbox.commands.task.load_config")
     @patch("signalbox.commands.task.load_runtime_state")
     @patch("signalbox.commands.task.merge_config_with_runtime_state")
-    @patch("signalbox.commands.task.get_config_value")
+    @patch("signalbox.config.get_config_value")
     def test_list_handles_timestamp_formatting(
         self, mock_get_config, mock_merge, mock_runtime, mock_load, runner, sample_config
     ):
@@ -260,15 +260,12 @@ class TestRunGroupCommand:
     @staticmethod
     def _results(*statuses):
         names = ["test_task", "another_task"]
-        return [{"name": n, "status": st, "error": ""} for n, st in zip(names, statuses)]
+        return [{"name": n, "status": st, "error": "", "log_file": ""} for n, st in zip(names, statuses)]
 
-    @patch("signalbox.commands.group._latest_log_name", return_value="")
     @patch("signalbox.commands.group.load_config")
     @patch("signalbox.commands.group.run_group_serial")
     @patch("signalbox.commands.group.save_group_runtime_state")
-    def test_run_group_serial_execution(
-        self, mock_save, mock_run_serial, mock_load, mock_log_name, runner, sample_config
-    ):
+    def test_run_group_serial_execution(self, mock_save, mock_run_serial, mock_load, runner, sample_config):
         """Test group run with serial execution."""
         mock_load.return_value = sample_config
         mock_run_serial.return_value = self._results("success", "success")
@@ -280,13 +277,10 @@ class TestRunGroupCommand:
         assert "serial" in result.output
         assert mock_run_serial.called
 
-    @patch("signalbox.commands.group._latest_log_name", return_value="")
     @patch("signalbox.commands.group.load_config")
     @patch("signalbox.commands.group.run_group_parallel")
     @patch("signalbox.commands.group.save_group_runtime_state")
-    def test_run_group_parallel_execution(
-        self, mock_save, mock_run_parallel, mock_load, mock_log_name, runner, sample_config
-    ):
+    def test_run_group_parallel_execution(self, mock_save, mock_run_parallel, mock_load, runner, sample_config):
         """Test group run with parallel execution."""
         # Modify config for parallel execution
         sample_config["groups"][0]["execution"] = "parallel"
@@ -309,13 +303,10 @@ class TestRunGroupCommand:
         assert result.exit_code == 3
         assert "not found" in result.output
 
-    @patch("signalbox.commands.group._latest_log_name", return_value="")
     @patch("signalbox.commands.group.load_config")
     @patch("signalbox.commands.group.run_group_serial")
     @patch("signalbox.commands.group.save_group_runtime_state")
-    def test_run_group_calculates_status(
-        self, mock_save, mock_run_serial, mock_load, mock_log_name, runner, sample_config
-    ):
+    def test_run_group_calculates_status(self, mock_save, mock_run_serial, mock_load, runner, sample_config):
         """Test group run derives status and exit code from this run's results."""
         mock_load.return_value = sample_config
 

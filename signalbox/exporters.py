@@ -47,7 +47,20 @@ def validate_group_for_export(group, group_name):
     if "schedule" not in group:
         return False, f"Group '{group_name}' has no schedule defined. Add a 'schedule' field with a cron expression."
 
+    schedule = get_schedule_string(group)
+    if not is_cron_schedule(schedule):
+        return False, f"Group '{group_name}' schedule {schedule!r} is not a cron expression (5 fields or an @macro)"
+
     return True, None
+
+
+def is_cron_schedule(schedule):
+    """True for 5 cron fields or an @macro.
+
+    cron reads the first 5 fields as the time and runs the rest as the command,
+    so a 6-field schedule would run '* cd ...' and the group would never run.
+    """
+    return isinstance(schedule, str) and (schedule.strip().startswith("@") or len(schedule.split()) == 5)
 
 
 def get_schedule_string(group):

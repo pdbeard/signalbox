@@ -1,10 +1,16 @@
 # Signalbox System Tray - Usage Guide
 
 ## Overview
-The signalbox tray icon shows the status of your tasks in the system tray. The color of the icon shows the results:
-- **Green**: all tasks were successful, or no task has run yet.
-- **Red**: one or more tasks failed.
-- **Yellow**: a run that you started from the tray is in progress.
+The signalbox tray icon shows the status of your scheduled groups and your tasks. The tray does not run tasks. cron or systemd run them (see `signalbox export-cron` and `signalbox export-systemd`), and the tray shows the result of each run.
+
+The color of the icon shows the results:
+- **Red**: a task or a group failed.
+- **Yellow**: nothing failed, but a scheduled group is overdue. Its last due time went by, and it did not run. Possible causes: the cron or systemd job is not installed, the export is out of date, or the computer was asleep.
+- **Green**: all tasks and groups were successful.
+
+A task or group that never ran shows in the menu as "never run". It does not change the color of the icon.
+
+A group is overdue when its `schedule` was due more than 5 minutes ago (plus the time its last run took), and its last run is older than that due time.
 
 ## Installation
 The tray app must have PyQt6. PyQt6 is an optional extra. To install signalbox with the tray app, use one of these commands:
@@ -20,27 +26,13 @@ Run this command:
 signalbox-tray
 ```
 
-The tray icon shows in your system tray or taskbar.
+The tray icon shows in your system tray or taskbar. To start it each time you log in, see [Autostart](#autostart).
 
 ### Verbose Mode (Troubleshooting)
-To find the cause of a problem, run the tray app with verbose output:
+To print each status update and each error to the console, use `--verbose` (or `-v`):
 ```bash
 signalbox-tray --verbose
-# or
-signalbox-tray -v
 ```
-
-In verbose mode, the tray app writes this data to the console:
-- The status of the configuration load
-- The paths of the icon files, and if the icons loaded
-- The details of each status update (the number of tasks, successes and failures)
-- The output of **Run All Tasks**
-- The poll interval
-
-Use verbose mode to find problems such as these:
-- Icon files that the tray cannot find
-- Problems when the tray loads the configuration
-- Errors when the tray reads the run status
 
 ## Configuration
 Set the tray settings in `signalbox.yaml`:
@@ -49,24 +41,22 @@ Set the tray settings in `signalbox.yaml`:
 tray:
   enabled: true           # Enable/disable the tray icon
   poll_interval: 30       # How often to check status (seconds)
-  notify_on_success: false
 ```
 
 On a server or a system without a display, set `enabled: false`.
 
-The tray reads `signalbox.yaml` again when the file changes. Thus, changes to the notification settings and the paths apply immediately. The tray reads `enabled` and `poll_interval` only when it starts. After you change them, start the tray again.
+The tray reads the configuration and the run status again at each poll. The tray reads `enabled` and `poll_interval` only when it starts. After you change them, start the tray again.
 
 ## Tray Menu Options
 Right-click the tray icon to open the menu. The menu has these items:
-- **Task Status** and **Group Status**: the result and the time of the last run of each task and group
-- **View Status**: opens a window with the status of all tasks
-- **Run All Tasks**: runs all tasks
-- **Run Group** and **Run Task**: run one group or one task. The menus are sorted by configuration file.
-- **Enable Notifications**: turns `alerts.notifications.enabled` on or off
-- **Notify on Success & Failure**: turns `tray.notify_on_success` on or off
-- **Clear error state**: the icon ignores failures that occurred before now
-- **Open Config**: opens `signalbox.yaml` in the default editor
-- **Exit**: closes the tray app
+- **Groups**: each group, with the time of its last run, or "overdue" with the time it was due.
+- **Tasks**: each task, with the time of its last run. Click a task to open its latest log.
+- **Notifications**: turns on or off the desktop notifications that signalbox sends (alerts and group summaries). This replaces `alerts.notifications.enabled` and `group_notifications.enabled` for the CLI too. The tray stores this switch in `runtime/tray_state.json`, not in `signalbox.yaml`. To use the values from `signalbox.yaml` again, delete their keys from `runtime/tray_state.json`.
+- **Clear error state**: the icon ignores failures that occurred before now. Overdue groups still show.
+- **Open config folder**: opens the `config/` folder of your signalbox home.
+- **Quit**: closes the tray app.
+
+To run a task or a group by hand, use the CLI: `signalbox run NAME` or `signalbox group run NAME`.
 
 ## Platform Support
 - **macOS**: full support
@@ -134,7 +124,7 @@ launchctl load ~/Library/LaunchAgents/com.signalbox.tray.plist
 The icons are in the `signalbox/icons/` directory of the package. To change them, replace these files:
 - `green.png`: the success icon
 - `red.png`: the failure icon
-- `yellow.png`: the icon for a run in progress
+- `yellow.png`: the icon for an overdue group
 
 For the best results, use PNG files of 64x64 pixels.
 
@@ -142,8 +132,8 @@ For the best results, use PNG files of 64x64 pixels.
 - **The icon does not show**: make sure that your compositor has tray support. This is frequently the cause on Wayland.
 - **Permission errors**: make sure that you can read and write the signalbox configuration and logs.
 - **The tray stops immediately**: make sure that `tray.enabled` is `true` in the configuration.
-- **A menu item does not work**: run the tray with `--verbose` to see the error messages.
-- **The status does not change**: look in the verbose output for errors when the tray reads the run status.
+- **The status does not change**: hold the pointer on the icon. If the tray cannot read the status, the tooltip shows the error. You can also run the tray with `--verbose`.
+- **A group shows as overdue, but you did not schedule it**: the group has a `schedule` field. Remove the field, or install the job with `signalbox export-cron` or `signalbox export-systemd`.
 
 ## Possible Future Changes
 - Show the status of remote signalbox instances

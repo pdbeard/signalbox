@@ -119,13 +119,14 @@ def config_validate():
     from rich.panel import Panel
     from rich.table import Table
     from rich import box
+    from rich.markup import escape
 
     console = Console()
     result = validator.validate_configuration()
 
     # Show which files are being validated
     if result.files_used:
-        files_text = "\n".join([f"  • {f}" for f in result.files_used])
+        files_text = "\n".join([f"  • {escape(f)}" for f in result.files_used])
         console.print(
             Panel(
                 files_text,
@@ -142,16 +143,16 @@ def config_validate():
             if not error.strip():
                 error_text += "\n"
             elif error.strip().endswith(".yaml") or error.strip().startswith(("Task Config File", "Group Config File")):
-                error_text += f"[bold red]{error}[/bold red]\n"
+                error_text += f"[bold red]{escape(error)}[/bold red]\n"
             else:
-                error_text += f"  [red]✗[/red] {error}\n"
+                error_text += f"  [red]✗[/red] {escape(error)}\n"
         console.print(
             Panel(error_text.rstrip(), title="[bold red]Errors Found[/bold red]", border_style="red", box=box.ROUNDED)
         )
 
     # Show warnings
     if result.warnings:
-        warning_text = "\n".join([f"  [yellow]⚠[/yellow] {w}" for w in result.warnings])
+        warning_text = "\n".join([f"  [yellow]⚠[/yellow] {escape(w)}" for w in result.warnings])
         console.print(
             Panel(warning_text, title="[bold yellow]Warnings[/bold yellow]", border_style="yellow", box=box.ROUNDED)
         )

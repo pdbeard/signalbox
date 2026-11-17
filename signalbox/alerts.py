@@ -42,8 +42,10 @@ def check_alert_patterns(task_name, task_config, output):
     triggered = []
     for alert in alerts:
         pattern = alert.get("pattern")
-        if not pattern:
+        if pattern is None or pattern == "":
             continue
+        # YAML reads `pattern: 404` as a number; search for it as text
+        pattern = str(pattern)
 
         # Check if pattern matches; a bad pattern must not abort post-run bookkeeping
         try:
@@ -207,29 +209,13 @@ def _prune_alert_log(alert_log, max_days, max_entries, per_severity):
 
     # Apply retention policies
     kept_alerts = []
-    cutoff_time = datetime.now() - timedelta(days=max_days) if max_days else None
-
+    now = datetime.now()
     for alert in alerts:
-        # Check per-severity retention
-        severity = alert.get("severity", "info")
-        severity_days = per_severity.get(severity) if per_severity else None
-
-        if severity_days:
-            severity_cutoff = datetime.now() - timedelta(days=severity_days)
-            try:
-                alert_time = parse_timestamp(alert.get("timestamp", ""))
-                if alert_time < severity_cutoff:
-                    continue
-            except Exception:
-                pass
-        elif cutoff_time:
-            try:
-                alert_time = parse_timestamp(alert.get("timestamp", ""))
-                if alert_time < cutoff_time:
-                    continue
-            except Exception:
-                pass
-
+        # A per-severity limit replaces max_days; an alert whose time does not parse is kept
+        days = (per_severity or {}).get(alert.get("severity", "info")) or max_days
+        alert_time = parse_timestamp(str(alert.get("timestamp", "")))
+        if days and alert_time is not None and alert_time < now - timedelta(days=days):
+            continue
         kept_alerts.append(alert)
 
     # Apply max_entries limit

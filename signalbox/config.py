@@ -106,7 +106,8 @@ class ConfigManager:
         return self._config_home
 
     def resolve_path(self, path):
-        """Resolve a path relative to config home if it's not absolute."""
+        """Resolve a path relative to config home if it's not absolute ('~' means the user's home)."""
+        path = os.path.expanduser(path)
         if os.path.isabs(path):
             return path
         config_home = self.find_config_home()
@@ -142,11 +143,13 @@ class ConfigManager:
                 value = value[key]
             else:
                 return default
-        return value
+        # A section whose keys are all commented out loads as None; treat it as unset
+        return default if value is None else value
 
     def include_catalog(self):
         """Whether catalog tasks/groups are loaded. Off by default: catalog entries are examples."""
-        return self.get_config_value("include_catalog", False)
+        # Only a real `true`: a quoted "false" is non-empty text, and the catalog has a task that deletes files
+        return self.get_config_value("include_catalog", False) is True
 
     def config_sources(self):
         """Return (directory, kind, is_catalog) for each enabled task/group directory."""
@@ -174,51 +177,6 @@ class ConfigManager:
 
         # Note: runtime state merging should be handled in runtime.py
         return config
-
-    def save_global_config_value(self, path, value):
-        """Write a single value into signalbox.yaml using dot notation.
-
-        Navigates or creates the nested key structure, writes the file
-        atomically (temp file + rename), then invalidates the in-memory
-        cache so the next read reflects the change.
-
-        Args:
-            path: Dot-notation key e.g. 'alerts.notifications.enabled'
-            value: Value to set
-        """
-        import tempfile
-
-        config_file = self.resolve_path(CONFIG_FILE)
-
-        if os.path.exists(config_file):
-            with open(config_file, "r") as f:
-                config = yaml.safe_load(f) or {}
-        else:
-            config = {}
-
-        keys = path.split(".")
-        d = config
-        for key in keys[:-1]:
-            if key not in d or not isinstance(d[key], dict):
-                d[key] = {}
-            d = d[key]
-        d[keys[-1]] = value
-
-        config_dir = os.path.dirname(config_file)
-        fd, tmp_path = tempfile.mkstemp(dir=config_dir, suffix=".yaml.tmp")
-        try:
-            with os.fdopen(fd, "w") as f:
-                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-            os.replace(tmp_path, config_file)
-        except Exception:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
-
-        # Invalidate cache so next read picks up the new value
-        self._global_config = None
 
     def set_config_home(self, config_home):
         """Set the config home directory explicitly and invalidate cached config.
@@ -274,6 +232,11 @@ def load_config(suppress_warnings=False):
     return _default_config_manager.load_config(suppress_warnings=suppress_warnings)
 
 
+def find_entry(config, kind, name):
+    """Return the task or group mapping called name from a loaded config ('tasks' or 'groups'), or None."""
+    return next((e for e in config.get(kind, []) if isinstance(e, dict) and e.get("name") == name), None)
+
+
 def config_sources():
     """Return (directory, kind, is_catalog) for each enabled task/group directory."""
     return _default_config_manager.config_sources()
@@ -282,11 +245,6 @@ def config_sources():
 def set_config_home(config_home):
     """Set the config home directory on the default configuration manager."""
     _default_config_manager.set_config_home(config_home)
-
-
-def save_global_config_value(path, value):
-    """Write a single value into signalbox.yaml using dot notation."""
-    _default_config_manager.save_global_config_value(path, value)
 
 
 def reset_config():

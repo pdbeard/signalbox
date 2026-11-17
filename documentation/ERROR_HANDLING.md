@@ -52,7 +52,7 @@ SignalboxError (base, exit code 1)
 
 ```python
 # In signalbox/executor.py
-def _find_task(name, config):
+def find_task(name, config):
     task = next((t for t in config["tasks"] if isinstance(t, dict) and t.get("name") == name), None)
     if not task:
         raise TaskNotFoundError(name)
@@ -68,7 +68,7 @@ def task_run(name, ...):
 ```
 
 When a user runs `signalbox run nonexistent`:
-1. `_find_task()` raises `TaskNotFoundError("nonexistent")`.
+1. `find_task()` raises `TaskNotFoundError("nonexistent")`.
 2. `@handle_exceptions` catches the exception.
 3. Signalbox writes `Error: Task 'nonexistent' not found` to stderr.
 4. Signalbox exits with code 3.

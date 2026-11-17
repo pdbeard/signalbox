@@ -24,18 +24,6 @@ def status_markup(status):
     return f"[{colour}]{escape(str(status))}[/{colour}]"
 
 
-def get_schedule_display(schedule):
-    """Extract schedule string for display.
-
-    Handles both formats:
-    - String: "0 * * * *"
-    - Dict: {"cron": "0 * * * *"}
-    """
-    if isinstance(schedule, dict):
-        return schedule.get("cron", "")
-    return schedule or ""
-
-
 def _text(value):
     """Escape config or task-output text so Rich shows it as-is.
 
@@ -118,7 +106,7 @@ def print_group_list_table(group_rows):
         table.add_row(
             _text(row["name"]),
             _text(row["description"]),
-            _text(get_schedule_display(row["schedule"])),
+            _text(row["schedule"]),
             _text(execution),
             _text(tasks),
         )

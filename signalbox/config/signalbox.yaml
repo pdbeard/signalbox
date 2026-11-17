@@ -71,7 +71,6 @@ group_notifications:
 tray:
   enabled: true            # Enable/disable system tray icon
   poll_interval: 30        # How often to poll status (in seconds)
-  notify_on_success: false # Show a tray message when a run started from the tray succeeds
 
 # Display settings
 display:

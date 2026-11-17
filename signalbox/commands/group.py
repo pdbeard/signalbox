@@ -4,14 +4,13 @@ from datetime import datetime
 
 import click
 
-from ..config import load_config
+from ..config import load_config, find_entry
 from ..executor import run_group_parallel, run_group_serial
 from ..runtime import save_group_runtime_state
 from ..exceptions import GroupNotFoundError, ValidationError
-from ..validator import validate_group
+from ..validator import validate_group, validate_run_settings
 from ..helpers import format_timestamp
 from .utils import handle_exceptions
-from .task import _latest_log_name
 
 
 @click.group()
@@ -33,11 +32,10 @@ def group():
 def group_run(name):
     """Run a group of tasks."""
     config = load_config()
-    groups = config.get("groups", [])
-    group_item = next((g for g in groups if isinstance(g, dict) and g.get("name") == name), None)
+    group_item = find_entry(config, "groups", name)
     if not group_item:
         raise GroupNotFoundError(name)
-    errors = validate_group(group_item)
+    errors = validate_group(group_item) + validate_run_settings()
     known_tasks = {t.get("name") for t in config.get("tasks", []) if isinstance(t, dict)}
     task_refs = group_item.get("tasks") if isinstance(group_item.get("tasks"), list) else []
     errors += [
@@ -64,8 +62,6 @@ def group_run(name):
         results = run_group_parallel(task_names, config)
     else:
         results = run_group_serial(task_names, config, stop_on_error)
-    for result in results:
-        result["log_file"] = _latest_log_name(result["name"]) if result["status"] != "skipped" else ""
     end_time = datetime.now()
     execution_time = (end_time - start_time).total_seconds()
     tasks_total = len(task_names)

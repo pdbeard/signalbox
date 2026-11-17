@@ -14,6 +14,17 @@ from .exceptions import ConfigurationError
 # Task and group names become directory and file names (logs/<task>/,
 # signalbox-<group>.service), so they are restricted to a safe character set.
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+NAME_RULE = "use only letters, digits, '_', '-' and '.', and do not start with '.' or '-'"
+
+
+def yaml_files(directory):
+    """Names of the YAML files in a directory, sorted; hidden files (editor swap files, .DS_Store) are skipped.
+
+    The one rule for which files count as config, shared by the loaders and `signalbox validate`.
+    """
+    if not os.path.isdir(directory):
+        return []
+    return [f for f in sorted(os.listdir(directory)) if not f.startswith(".") and f.endswith((".yaml", ".yml"))]
 
 
 def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool = False) -> list:
@@ -26,18 +37,8 @@ def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool =
     Returns:
         List of dicts: [{"data": item, "source": filepath}, ...]
     """
-    # Allow global suppression via env var
-    if os.environ.get("SIGNALBOX_SUPPRESS_CONFIG_WARNINGS", "0") == "1":
-        suppress_warnings = True
-
     items = []
-
-    if not os.path.exists(directory):
-        return items
-
-    for filename in sorted(os.listdir(directory)):
-        if filename.startswith(".") or not filename.endswith((".yaml", ".yml")):
-            continue
+    for filename in yaml_files(directory):
         filepath = os.path.join(directory, filename)
 
         try:
@@ -69,21 +70,9 @@ def load_yaml_dict_from_dir(directory: str, key: str, filename_prefix: str = "")
         Merged dictionary from all matching YAML files
     """
     merged_dict = {}
-
-    if not os.path.exists(directory):
-        return merged_dict
-
-    for filename in sorted(os.listdir(directory)):
-        # Skip hidden files (editor swap files, .DS_Store, etc.)
-        if filename.startswith("."):
+    for filename in yaml_files(directory):
+        if not filename.startswith(filename_prefix):
             continue
-
-        if filename_prefix and not filename.startswith(filename_prefix):
-            continue
-
-        if not filename.endswith((".yaml", ".yml")):
-            continue
-
         filepath = os.path.join(directory, filename)
 
         try:
@@ -99,23 +88,10 @@ def load_yaml_dict_from_dir(directory: str, key: str, filename_prefix: str = "")
 
 
 def get_resolved_log_dir() -> str:
-    """
-    Resolve the configured log directory to an absolute path.
+    """The configured log directory, resolved like every other path setting (used by alerts.py and log_manager.py)."""
+    from .config import get_config_value, resolve_path
 
-    Centralizes the resolution logic used across alerts.py and log_manager.py
-    so both modules read from the same location regardless of working directory
-    or SIGNALBOX_HOME / XDG_CONFIG_HOME settings.
-
-    Returns:
-        Absolute path to the log directory
-    """
-    from .config import get_config_value, _default_config_manager
-
-    log_dir = get_config_value("paths.log_dir", "logs")
-    if not os.path.isabs(log_dir):
-        config_home = _default_config_manager.find_config_home()
-        log_dir = os.path.join(config_home, log_dir)
-    return log_dir
+    return resolve_path(get_config_value("paths.log_dir", "logs"))
 
 
 # Log file names, runtime last_run values and alert timestamps all use this
@@ -158,6 +134,19 @@ def parse_timestamp(timestamp_str: str):
         return None
 
 
+def display_time(timestamp):
+    """A signalbox timestamp formatted with display.date_format; values that do not parse are shown as-is."""
+    from .config import get_config_value
+
+    dt = parse_timestamp(str(timestamp)) if timestamp else None
+    if dt is None:
+        return timestamp or ""
+    try:
+        return dt.strftime(get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S"))
+    except (TypeError, ValueError):
+        return timestamp
+
+
 def is_valid_name(name) -> bool:
     """Return True if name is safe to use as a task or group name."""
     return isinstance(name, str) and bool(NAME_PATTERN.match(name))
@@ -170,8 +159,5 @@ def check_name(name, kind="task"):
     or '..' could read, write or delete files outside the log directory.
     """
     if not is_valid_name(name):
-        raise ConfigurationError(
-            f"Invalid {kind} name {name!r}: use only letters, digits, '_', '-' and '.', "
-            "and do not start with '.' or '-'"
-        )
+        raise ConfigurationError(f"Invalid {kind} name {name!r}: {NAME_RULE}")
     return name

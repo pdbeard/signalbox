@@ -9,17 +9,9 @@ import click
 
 from ..config import load_config, get_config_value
 from .. import log_manager
-from ..exceptions import TaskNotFoundError
+from ..executor import find_task
 from ..helpers import get_resolved_log_dir
 from .utils import handle_exceptions
-
-
-def _find_task_or_raise(config, name):
-    """Return the task dict for name or raise TaskNotFoundError."""
-    task = next((t for t in config["tasks"] if isinstance(t, dict) and t.get("name") == name), None)
-    if not task:
-        raise TaskNotFoundError(name)
-    return task
 
 
 @click.group()
@@ -44,7 +36,7 @@ def log():
 def log_show(name):
     """Show the latest log for a task."""
     config = load_config()
-    _find_task_or_raise(config, name)
+    find_task(name, config)
 
     log_path, exists = log_manager.get_latest_log(name)
     if not exists:
@@ -75,7 +67,7 @@ def log_show(name):
 def log_history_cmd(name):
     """Show all the log files of a task."""
     config = load_config()
-    _find_task_or_raise(config, name)
+    find_task(name, config)
 
     log_info, exists = log_manager.get_log_history(name)
     if not exists:
@@ -103,7 +95,7 @@ def log_history_cmd(name):
 @click.option("--since", help="Show logs since date (YYYY-MM-DD)")
 @click.option("--until", help="Show logs until date (YYYY-MM-DD)")
 @click.option("--today", is_flag=True, help="Show only today's logs")
-@click.option("--last", "limit", type=int, default=50, help="Show last N runs (default: 50)")
+@click.option("--last", "limit", type=click.IntRange(min=1), default=50, help="Show last N runs (default: 50)")
 @click.option("--verbose", "-v", is_flag=True, help="Show the first lines of output of each log")
 @handle_exceptions
 def log_list_cmd(task, status, failed, success, since, until, today, limit, verbose):
@@ -196,7 +188,9 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
 @log.command(name="tail")
 @click.argument("name")
 @click.option("-f/-F", "--follow/--no-follow", default=True, help="Keep following new runs (default: follow)")
-@click.option("-n", "--lines", type=int, default=10, help="Number of lines to show first (default: 10)")
+@click.option(
+    "-n", "--lines", type=click.IntRange(min=0), default=10, help="Number of lines to show first (default: 10)"
+)
 @handle_exceptions
 def log_tail_cmd(name, follow, lines):
     """Show the latest log for a task and follow new runs (like tail -f).
@@ -205,7 +199,7 @@ def log_tail_cmd(name, follow, lines):
     switches to it instead of watching the old file forever.
     """
     config = load_config()
-    _find_task_or_raise(config, name)
+    find_task(name, config)
 
     log_path, exists = log_manager.get_latest_log(name)
     if not exists:
@@ -263,7 +257,7 @@ def log_clear(task_name, clear_all, yes):
             click.echo("No logs directory found")
     elif task_name:
         config = load_config()
-        _find_task_or_raise(config, task_name)
+        find_task(task_name, config)
         if log_manager.clear_task_logs(task_name):
             click.echo(f"Cleared logs for {task_name}")
         else:

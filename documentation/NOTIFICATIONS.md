@@ -34,7 +34,7 @@ group_notifications:
 
 ### Alert Notification Options
 
-- **`alerts.notifications.enabled`** (default: `true`): turns alert notifications on or off for all tasks.
+- **`alerts.notifications.enabled`** (default: `true`): turns alert notifications on or off for all tasks. The tray menu item "Notifications" replaces this setting (the tray stores its value in `runtime/tray_state.json`).
 - **`alerts.notifications.on_failure_only`** (default: `true`): if true, signalbox sends notifications only for `critical` and `warning` alerts. It does not send them for `info` alerts.
 - **`alerts.notifications.cooldown_minutes`** (default: `60`): after an alert sends a notification, the same task and pattern do not send a notification again in this number of minutes. Signalbox records each alert. `signalbox alerts` shows all of them. Set `0` to send a notification on each run.
 
@@ -65,9 +65,9 @@ alerts:
 - **`group_notifications.on_failure_only`** (default: `true`): if true, signalbox sends a notification only when a task fails. If false, it sends a notification after each group run.
 - **`group_notifications.show_failed_names`** (default: `true`): if true, and 3 or fewer tasks failed, the message has the names of the failed tasks.
 
-### Tray Notification Options
+### Tray Notification Switch
 
-- **`tray.notify_on_success`** (default: `false`): if true, the tray shows a message when a run that it started is successful. The tray always shows failures while notifications are on. The tray menu item "Notify on Success & Failure" changes this setting. This setting does not change alert notifications.
+The tray menu item "Notifications" turns alert notifications and group summary notifications on or off together. It replaces `alerts.notifications.enabled` and `group_notifications.enabled` (the tray stores its value in `runtime/tray_state.json`). The tray itself shows no messages: it shows the status with the color of its icon.
 
 ## Testing Notifications
 
@@ -139,7 +139,7 @@ signalbox export-cron scheduled
 ```
 
 If notifications do not show, do these checks:
-1. Examine the `alerts.notifications.enabled` and `group_notifications.enabled` settings in your configuration.
+1. Examine the `alerts.notifications.enabled` and `group_notifications.enabled` settings in your configuration, and the tray's "Notifications" switch (`runtime/tray_state.json`).
 2. On Linux, make sure that `notify-send` is installed.
 3. Make sure that your desktop environment can show notifications.
 4. Look for warnings in the output of signalbox (stderr).

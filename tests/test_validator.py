@@ -49,6 +49,7 @@ def test_validate_configuration_valid(monkeypatch):
     )
     monkeypatch.setattr(validator, "load_global_config", lambda *a, **kw: {})
     monkeypatch.setattr(validator.os.path, "isdir", lambda p: p == "dummy_tasks")
+    monkeypatch.setattr(validator, "config_sources", lambda: [("dummy_tasks", "tasks", False)])
     monkeypatch.setattr(validator.os.path, "exists", lambda p: p == "dummy_tasks")
     monkeypatch.setattr(validator.os, "listdir", lambda p: ["tasks.yaml"])
     valid_data = {"tasks": [{"name": "s1", "command": "echo 1", "description": "Test"}]}
@@ -76,6 +77,7 @@ def test_validate_configuration_invalid_task_timeout(monkeypatch):
     monkeypatch.setattr(validator, "load_config", lambda *a, **kw: {"tasks": [], "groups": []})
     monkeypatch.setattr(validator, "load_global_config", lambda *a, **kw: {})
     monkeypatch.setattr(validator.os.path, "isdir", lambda p: p == "dummy_tasks")
+    monkeypatch.setattr(validator, "config_sources", lambda: [("dummy_tasks", "tasks", False)])
     monkeypatch.setattr(validator.os.path, "exists", lambda p: p == "dummy_tasks")
     monkeypatch.setattr(validator.os, "listdir", lambda p: ["tasks.yaml"])
     bad_data = {"tasks": [{"name": "s1", "command": "echo 1", "description": "Test", "timeout": -5}]}
@@ -102,6 +104,7 @@ def test_validate_configuration_invalid_alert_regex(monkeypatch):
     monkeypatch.setattr(validator, "load_config", lambda *a, **kw: {"tasks": [], "groups": []})
     monkeypatch.setattr(validator, "load_global_config", lambda *a, **kw: {})
     monkeypatch.setattr(validator.os.path, "isdir", lambda p: p == "dummy_tasks")
+    monkeypatch.setattr(validator, "config_sources", lambda: [("dummy_tasks", "tasks", False)])
     monkeypatch.setattr(validator.os.path, "exists", lambda p: p == "dummy_tasks")
     monkeypatch.setattr(validator.os, "listdir", lambda p: ["tasks.yaml"])
     bad_data = {

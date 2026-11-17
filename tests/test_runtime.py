@@ -4,13 +4,17 @@ Tests for signalbox.runtime module.
 Tests runtime state loading, saving, and merging with configuration.
 """
 
+import json
 import os
 
 import yaml
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
+from signalbox.config import reset_config
 from signalbox.runtime import (
+    load_tray_state,
+    save_tray_state,
     load_runtime_state,
     save_task_runtime_state,
     save_group_runtime_state,
@@ -58,7 +62,7 @@ class TestLoadRuntimeState:
             assert result == {"scripts": {}, "groups": {}}
 
     @patch("signalbox.runtime.resolve_path")
-    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.path.isdir")
     @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_script_runtime_state(self, mock_file, mock_listdir, mock_exists, mock_resolve):
@@ -85,7 +89,7 @@ class TestLoadRuntimeState:
         assert result[key]["test_script"]["last_status"] == "success"
 
     @patch("signalbox.runtime.resolve_path")
-    @patch("signalbox.runtime.os.path.exists")
+    @patch("signalbox.runtime.os.path.isdir")
     @patch("signalbox.runtime.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_group_runtime_state(self, mock_file, mock_listdir, mock_exists, mock_resolve):
@@ -118,7 +122,7 @@ class TestLoadRuntimeState:
         assert result["groups"]["test_group"]["execution_count"] == 5
 
     @patch("signalbox.runtime.resolve_path")
-    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.path.isdir")
     @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_ignores_non_runtime_files(self, mock_file, mock_listdir, mock_exists, mock_resolve):
@@ -144,7 +148,7 @@ class TestLoadRuntimeState:
         assert len(result[key]) == 1
 
     @patch("signalbox.runtime.resolve_path")
-    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.path.isdir")
     @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_handles_invalid_yaml(self, mock_file, mock_listdir, mock_exists, mock_resolve):
@@ -188,7 +192,7 @@ class TestLoadRuntimeState:
         assert result["tasks"] == {}
 
     @patch("signalbox.runtime.resolve_path")
-    @patch("signalbox.helpers.os.path.exists")
+    @patch("signalbox.helpers.os.path.isdir")
     @patch("signalbox.helpers.os.listdir")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_multiple_runtime_files(self, mock_file, mock_listdir, mock_exists, mock_resolve):
@@ -615,3 +619,18 @@ def test_filter_runtime_to_config_drops_removed_entries():
 
     assert filtered == {"tasks": {"kept": {"last_status": "success"}}, "groups": {"g": {"last_status": "success"}}}
     assert "deleted" in runtime_state["tasks"]  # the original is not modified
+
+
+# Tray state lives in runtime.py (no Qt needed), so these run without PyQt6.
+def test_tray_state_lives_in_config_home(sb_home, monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    save_tray_state({"ignore_failures_before": 42})
+    assert json.loads((sb_home.path / "runtime" / "tray_state.json").read_text()) == {"ignore_failures_before": 42}
+    assert load_tray_state() == {"ignore_failures_before": 42}
+
+
+def test_tray_state_falls_back_to_legacy_file(sb_home, monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".signalbox_tray_state.json").write_text('{"ignore_failures_before": 7}')
+    reset_config()
+    assert load_tray_state() == {"ignore_failures_before": 7}

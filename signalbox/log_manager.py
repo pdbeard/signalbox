@@ -245,6 +245,8 @@ def _rotate_by_count(task_log_dir, log_files, max_count):
             log_files: List of log filenames
             max_count: Maximum number of log files to keep
     """
+    # The validator accepts any number >= 1; a slice needs a whole one (2.5 keeps 2)
+    max_count = int(max_count)
     if len(log_files) <= max_count:
         return
 
