@@ -7,7 +7,7 @@ import yaml
 
 from .config import load_config, get_config_value, load_global_config, resolve_path, config_sources, CONFIG_FILE
 from .cron import schedule_error
-from .helpers import is_valid_name, yaml_files, NAME_RULE
+from .helpers import is_valid_name, yaml_files, NAME_RULE, ENV_NAME_PATTERN
 
 SEVERITIES = ("info", "warning", "critical")
 EXECUTION_MODES = ("serial", "parallel")
@@ -82,6 +82,7 @@ def validate_run_settings():
         ("logging.max_file_size_mb", 5),  # 0 = no size limit
         ("alerts.notifications.cooldown_minutes", 60),
         ("alerts.retention.max_days", 30),
+        ("execution.stop_grace_seconds", 5),  # 0 = SIGKILL at once
     ):
         value = get_config_value(key, default)
         if _invalid_number(value):
@@ -141,6 +142,8 @@ def validate_task_for_run(task):
     if "cwd" in task and not isinstance(task["cwd"], str):
         errors.append(f"{label} 'cwd' must be a path string")
 
+    errors.extend(_environment_errors(task, label))
+
     # Alerts are checked after the command has run, so a malformed list would
     # fail every run after its side effects, without saving state or rotating logs.
     if "alerts" in task:
@@ -151,6 +154,30 @@ def validate_task_for_run(task):
                 if not isinstance(alert, dict):
                     errors.append(f"{label} alert #{idx} must be a dict")
 
+    return errors
+
+
+def _environment_errors(task, label):
+    """Check env (a mapping of variable names to text or numbers), env_file (a path) and mask (variable names)."""
+    errors = []
+    env = task.get("env")
+    if env is not None:
+        if not isinstance(env, dict):
+            errors.append(f"{label} 'env' must be a mapping of variable names to values")
+        else:
+            for key, value in env.items():
+                if not isinstance(key, str) or not ENV_NAME_PATTERN.match(key):
+                    errors.append(
+                        f"{label} env name {key!r} is invalid: use letters, digits and '_', not a digit first"
+                    )
+                # A YAML true/false or an empty value is almost always a mistake; quote it to pass it as text
+                if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+                    errors.append(f"{label} env {key} must be text or a number, got {value!r}")
+    if "env_file" in task and not isinstance(task["env_file"], str):
+        errors.append(f"{label} 'env_file' must be a path string")
+    mask = task.get("mask")
+    if mask is not None and (not isinstance(mask, list) or not all(isinstance(m, str) for m in mask)):
+        errors.append(f"{label} 'mask' must be a list of variable names")
     return errors
 
 
@@ -184,6 +211,8 @@ def validate_task(task):
         errors.append(f"{label} missing 'description' field")
     if "log_limit" in task:
         errors.extend(validate_log_limit(task["log_limit"], label))
+    if isinstance(task.get("env_file"), str) and not os.path.isfile(resolve_path(task["env_file"])):
+        errors.append(f"{label} env_file not found: {resolve_path(task['env_file'])}")
 
     alerts_list = task.get("alerts")
     if isinstance(alerts_list, list):

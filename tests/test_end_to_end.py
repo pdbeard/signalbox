@@ -72,7 +72,7 @@ class TestTaskRun:
         assert result.exit_code == 4
         assert "timed out" in result.output
         log = sb_home.logs("slow")[0].read_text()
-        assert "Return code: -9" in log and "[TIMED OUT" in log
+        assert "Return code: -15" in log and "[TIMED OUT" in log  # stopped by SIGTERM within the grace period
         assert runtime(sb_home, "tasks")["slow"]["last_status"] == "failed"
 
     def test_timeout_still_checks_alerts_on_partial_output(self, sb_home, run):
@@ -914,3 +914,118 @@ class TestCronInstall:
 
         assert result.exit_code == 1 and "Cannot read your crontab" in result.output
         assert not crontab.exists()
+
+
+class TestTaskEnv:
+    def test_env_and_env_file_reach_the_command_in_order(self, sb_home, run):
+        (sb_home.path / "app.env").write_text("# settings\nexport FROM_FILE=file\nBOTH=file\n")
+        sb_home.write_tasks(
+            [
+                task(
+                    "envtask",
+                    'echo "$FROM_FILE $BOTH $INLINE"; echo "path=$PATH"',
+                    env_file="app.env",
+                    env={"BOTH": "inline", "INLINE": "${FROM_FILE}-x", "PATH": "/opt/tools/bin:${PATH}"},
+                )
+            ]
+        )
+
+        result = run("task", "run", "envtask")
+
+        assert result.exit_code == 0, result.output
+        assert "file inline file-x" in result.output  # env wins over env_file, and can use its values
+        assert "path=/opt/tools/bin:" in result.output  # PATH extended, not replaced
+
+    def test_env_file_values_are_masked_in_logs_but_alerts_still_match(self, sb_home, run):
+        (sb_home.path / "secret.env").write_text('API_TOKEN="tok-123456"\n')
+        alert = {"pattern": "tok-123456", "message": "token printed", "severity": "warning"}
+        sb_home.write_tasks([task("leaky", 'echo "token is $API_TOKEN"', env_file="secret.env", alerts=[alert])])
+
+        result = run("task", "run", "leaky")
+
+        assert result.exit_code == 0, result.output
+        log = sb_home.logs("leaky")[0].read_text()
+        assert "tok-123456" not in log and "token is *****" in log
+        assert "tok-123456" not in result.output  # the preview reads the masked log
+        assert "token printed" in (sb_home.path / "logs" / "leaky" / "alerts" / "alerts.jsonl").read_text()
+
+    def test_mask_lists_more_variables_to_hide(self, sb_home, run):
+        # WEBHOOK_URL does not look secret by name, so only 'mask' hides it
+        sb_home.write_tasks(
+            [task("m", 'echo "url=$WEBHOOK_URL"', env={"WEBHOOK_URL": "https://hook/abc"}, mask=["WEBHOOK_URL"])]
+        )
+
+        assert run("task", "run", "m").exit_code == 0
+        assert "url=*****" in sb_home.logs("m")[0].read_text()
+
+    def test_ordinary_settings_stay_readable_and_secret_names_are_masked(self, sb_home, run):
+        (sb_home.path / "app.env").write_text("BACKUP_DIR=/mnt/backup\nDB_PASSWORD=hunter22\n")
+        sb_home.write_tasks([task("plain", 'echo "$BACKUP_DIR $DB_PASSWORD"', env_file="app.env")])
+
+        assert run("task", "run", "plain").exit_code == 0
+        assert "/mnt/backup *****" in sb_home.logs("plain")[0].read_text()
+
+    def test_missing_env_file_fails_before_running(self, sb_home, run):
+        sb_home.write_tasks([task("nofile", "touch ran", env_file="missing.env")])
+
+        result = run("task", "run", "nofile")
+
+        assert result.exit_code == 2 and "env_file not found" in result.output
+        assert not (sb_home.path / "ran").exists()
+        assert run("validate").exit_code == 2
+
+    def test_invalid_env_is_rejected_by_validate_and_before_running(self, sb_home, run):
+        sb_home.write_tasks([task("badenv", "true", env={"1BAD": "x", "FLAG": True})])
+
+        result = run("task", "run", "badenv")
+
+        assert result.exit_code == 2
+        assert "env name '1BAD' is invalid" in result.output and "env FLAG must be text or a number" in result.output
+
+    def test_check_permissions_warns_about_a_readable_env_file(self, sb_home, run):
+        env_file = sb_home.path / "secret.env"
+        env_file.write_text("TOKEN=abcd1234\n")
+        env_file.chmod(0o644)
+        sb_home.write_tasks([task("t", "true", env_file="secret.env")])
+
+        result = run("config", "check-permissions")
+
+        assert result.exit_code == 1 and "env_file of task 't'" in result.output
+
+
+class TestGracefulStop:
+    def test_timeout_lets_the_task_clean_up_after_sigterm(self, sb_home, run):
+        marker = sb_home.path / "cleaned"
+        sb_home.write_tasks([task("tidy", f"trap 'touch {marker}; exit 1' TERM; sleep 30 & wait", timeout=1)])
+
+        result = run("task", "run", "tidy")
+
+        assert result.exit_code == 4
+        assert marker.exists()
+
+    def test_task_that_ignores_sigterm_is_killed_after_the_grace_period(self, sb_home, run):
+        sb_home.write_settings({"execution": {"stop_grace_seconds": 1}})
+        sb_home.write_tasks([task("stubborn", "trap '' TERM; sleep 30 & wait; sleep 30", timeout=1)])
+
+        start = time.monotonic()
+        result = run("task", "run", "stubborn")
+
+        assert result.exit_code == 4
+        assert time.monotonic() - start < 8  # time limit + grace + margin, not 30 s
+        assert "Return code: -9" in sb_home.logs("stubborn")[0].read_text()
+
+    def test_grace_zero_kills_at_once(self, sb_home, run):
+        marker = sb_home.path / "cleaned"
+        sb_home.write_settings({"execution": {"stop_grace_seconds": 0}})
+        sb_home.write_tasks([task("quick", f"trap 'touch {marker}' TERM; sleep 30 & wait", timeout=1)])
+
+        assert run("task", "run", "quick").exit_code == 4
+        assert not marker.exists()  # SIGKILL: no chance to clean up
+
+    def test_invalid_grace_setting_is_rejected(self, sb_home, run):
+        sb_home.write_settings({"execution": {"stop_grace_seconds": "soon"}})
+        sb_home.write_tasks([task("t")])
+
+        result = run("task", "run", "t")
+
+        assert result.exit_code == 2 and "execution.stop_grace_seconds must be a number" in result.output

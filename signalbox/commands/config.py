@@ -5,7 +5,15 @@ import sys
 import click
 import yaml
 
-from ..config import get_config_value, load_global_config, find_config_home, resolve_path, config_sources, CONFIG_FILE
+from ..config import (
+    get_config_value,
+    load_global_config,
+    load_config,
+    find_config_home,
+    resolve_path,
+    config_sources,
+    CONFIG_FILE,
+)
 from ..helpers import get_resolved_log_dir
 from .. import validator
 from .utils import handle_exceptions
@@ -100,6 +108,17 @@ def config_check_permissions():
             fpath = os.path.join(directory, fname)
             if os.path.isfile(fpath):
                 check_not_writable(fpath, f"{label.capitalize()} file '{fname}'", "0o600")
+
+    # env files usually hold secrets: other users must not even read them
+    for task in load_config(suppress_warnings=True)["tasks"]:
+        env_file = task.get("env_file") if isinstance(task, dict) else None
+        if isinstance(env_file, str) and os.path.isfile(resolve_path(env_file)):
+            path = resolve_path(env_file)
+            if mode_of(path) & 0o077:
+                issues.append(
+                    f"env_file of task '{task.get('name')}' is accessible by group/others: {path}  "
+                    f"(current: {oct(mode_of(path))}, recommended: 0o600)"
+                )
 
     if issues:
         click.echo("Permission issues found:", err=True)

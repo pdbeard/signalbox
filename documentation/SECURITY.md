@@ -24,7 +24,7 @@ These features have important security risks. Signalbox treats each configuratio
 
 - **Unsafe YAML loading**: signalbox loads YAML only with `yaml.safe_load()`. A YAML file cannot make Python objects.
 - **Directory traversal**: task names and group names can have only letters, digits, `_`, `-` and `.`. A name cannot start with `.` or `-`, and it cannot have `/`. Thus, a name cannot move a log path, an alert path or an export path out of its directory.
-- **Tasks that do not stop**: each task has a time limit (300 seconds by default). When the time is over, signalbox stops the task and all the processes that it started.
+- **Tasks that do not stop**: each task has a time limit (300 seconds by default). When the time is over, signalbox stops the task and all the processes that it started: first with SIGTERM, then with SIGKILL.
 - **Tasks that wait for input**: commands get no input (stdin is `/dev/null`). A command that asks for input stops with an error immediately. It does not wait until the time limit.
 - **Full disks**: each log file has a maximum size (5 MB by default), and signalbox deletes old logs. **Caution:** this limit does not limit memory. Signalbox keeps all the output in memory while the task runs.
 - **Unauthorized log access**: signalbox makes log files with the permissions `0o600`. `signalbox init` sets the permissions of the signalbox home and of `logs/` to `0o700`.
@@ -66,9 +66,30 @@ tasks:
 
 Signalbox writes the command at the start of each log file (the `Command:` line). If the `command` field has a secret (for example, a token or a password), each log of that task has the secret. The log files have the permissions `0o600`. But other tools, for example backup or sync tools, can copy them.
 
-Do one of these steps:
-- Keep the secret in a file that only you can read. Let the script read the secret from that file.
-- Set `logging.include_command: false` in `signalbox.yaml`. Then signalbox does not write the command in the logs.
+Put secrets in an `env_file`, not in the command:
+
+```yaml
+tasks:
+  - name: upload
+    description: Upload the report
+    command: 'curl -H "Authorization: Bearer $API_TOKEN" https://api.example/upload'
+    env_file: secrets/upload.env   # API_TOKEN=..., chmod 600
+```
+
+The command has only the name `$API_TOKEN`. The shell gets the value when the task runs.
+
+Signalbox also masks secret values in the logs. It replaces them with `*****` in the command, in stdout and in stderr. It masks these variables:
+- The variables of the task (from `env_file` or `env`) whose names have `TOKEN`, `SECRET`, `PASS`, `KEY`, `AUTH`, `CREDENTIAL` or `SIGNATURE`.
+- The variables in the `mask` list of the task.
+
+Masking has limits:
+- Signalbox masks only exact copies of a value. It does not find a value that the task changes, for example to base64 or URL encoding.
+- Signalbox does not mask values that are shorter than 4 characters.
+- Alert patterns still compare with the real output. An alert records only its pattern and its message, not the output.
+
+Other steps:
+- Make each `env_file` readable only by you (`chmod 600`). `signalbox config check-permissions` shows a warning for an `env_file` that other users can read.
+- To keep the command out of the logs completely, set `logging.include_command: false` in `signalbox.yaml`.
 
 ### Security Best Practices
 
@@ -225,7 +246,7 @@ Before you use signalbox in production, do these steps:
 
 - [ ] Keep the configuration files in version control.
 - [ ] Run `signalbox config check-permissions`, and correct each problem that it shows.
-- [ ] Keep secrets out of the `command` fields.
+- [ ] Keep secrets out of the `command` fields: use `env_file`, with the permissions 0o600.
 - [ ] Examine each configuration change before you use it.
 - [ ] Run signalbox as a user with the minimum privileges.
 - [ ] Make sure that no task uses `timeout: 0`, and that `execution.default_timeout` is not 0, unless a task must run without a time limit.
@@ -241,12 +262,13 @@ Before you use signalbox in production, do these steps:
 ### 1. Time Limits
 
 **Problem:** a command that does not stop can stop its group from continuing.
-**Mitigation:** each task has the time limit `execution.default_timeout` (300 seconds), or its own `timeout`. When the time is over, signalbox stops the task and all the processes that it started (the process group). Signalbox does the same when you push Ctrl+C.
+**Mitigation:** each task has the time limit `execution.default_timeout` (300 seconds), or its own `timeout`. When the time is over, signalbox stops the task and all the processes that it started (the process group). Signalbox does the same when you push Ctrl+C. First, it sends SIGTERM, so the task can clean up. After `execution.stop_grace_seconds` (5 seconds by default), it sends SIGKILL to the processes that did not stop.
 
 ```yaml
 execution:
-  default_timeout: 300  # Applies to each task that does not have its own timeout
-  min_timeout: 1        # The smallest time limit (except 0)
+  default_timeout: 300    # Applies to each task that does not have its own timeout
+  min_timeout: 1          # The smallest time limit (except 0)
+  stop_grace_seconds: 5   # Time between SIGTERM and SIGKILL (0 = SIGKILL at once)
 ```
 
 `min_timeout` only increases a very small limit, for example 0.1 seconds, to this value. It does not stop a task that never stops. A value of 0 removes the time limit: `timeout: 0` for one task, or `execution.default_timeout: 0` for all the tasks that do not have their own `timeout`. Examine each task that has no time limit.

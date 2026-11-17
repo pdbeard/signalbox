@@ -36,6 +36,11 @@ execution:
   # Maximum number of parallel workers for parallel group execution
   max_parallel_workers: 5
 
+  # When a task reaches its time limit (or you push Ctrl+C), signalbox sends
+  # SIGTERM so the task can clean up, then SIGKILL after this many seconds.
+  # 0 = SIGKILL at once.
+  stop_grace_seconds: 5
+
 # Logging settings
 logging:
   # Security: Maximum log file size in MB to prevent disk filling

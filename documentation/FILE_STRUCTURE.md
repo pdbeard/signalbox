@@ -48,6 +48,9 @@ One file that has the global settings, for example time limits, log limits and p
 - `command` (necessary): the shell command to run
 - `timeout` (optional): the time limit in seconds. After this time, signalbox stops the task and all processes that it started. 0 removes the time limit.
 - `cwd` (optional): the working directory. Use an absolute path, or a path relative to the signalbox home. The default is the signalbox home.
+- `env` (optional): environment variables for the command (a mapping of names to text or numbers). A value can use `$VAR` or `${VAR}`.
+- `env_file` (optional): a file of `KEY=VALUE` lines, relative to the signalbox home. Lines that start with `#` are comments. `export` at the start of a line is allowed. Signalbox uses the values as written, without `$VAR` expansion.
+- `mask` (optional): variable names whose values signalbox replaces with `*****` in the logs. Variables of the task whose names have `TOKEN`, `SECRET`, `PASS`, `KEY`, `AUTH`, `CREDENTIAL` or `SIGNATURE` are always masked.
 - `log_limit` (optional): the rule to delete old logs: `{type: count|age|size, value: N}`
 - `alerts` (optional): the regular expressions to find in the output
 

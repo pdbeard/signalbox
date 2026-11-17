@@ -333,7 +333,11 @@ command: /usr/local/bin/backup.sh
 command: backup.sh  # Works only if backup.sh is in PATH
 ```
 
-**Caution:** cron runs commands with a short PATH (usually `/usr/bin:/bin`). A script in `~/.local/bin` or `/usr/local/bin` can run when you start the task yourself, but fail when cron starts it. For scheduled tasks, use absolute paths (option 1).
+**Caution:** cron runs commands with a short PATH (usually `/usr/bin:/bin`). A script in `~/.local/bin` or `/usr/local/bin` can run when you start the task yourself, but fail when cron starts it. For scheduled tasks, use absolute paths (option 1), or add the directory to PATH with `env`:
+```yaml
+env:
+  PATH: "/usr/local/bin:${PATH}"
+```
 
 **Option 3: Give the interpreter in the command**
 ```yaml
@@ -341,11 +345,24 @@ command: python3 /path/to/script.py
 command: node /path/to/script.js
 ```
 
-### 6. Make Scripts Safe to Stop at Any Time
+### 6. Clean Up When Signalbox Stops the Script
 
-When a task gets to its time limit, or when you push Ctrl+C, signalbox stops the task and all the processes that it started with `SIGKILL`. A script cannot catch `SIGKILL`. Thus, cleanup code in a signal handler does not run.
+When a task gets to its time limit, or when you push Ctrl+C, signalbox stops the task and all the processes that it started:
+1. It sends `SIGTERM`. The script can catch this signal and clean up.
+2. After `execution.stop_grace_seconds` (5 seconds by default), it sends `SIGKILL` to the processes that did not stop. A script cannot catch `SIGKILL`.
 
-Write scripts that you can stop at any point and then run again:
+To clean up, catch `SIGTERM` and finish in less time than the grace period:
+
+```bash
+#!/bin/bash
+cleanup() { rm -f /tmp/myjob.lock; exit 1; }
+trap cleanup TERM
+touch /tmp/myjob.lock
+long_running_work
+rm -f /tmp/myjob.lock
+```
+
+Also write scripts that you can stop at any point and then run again. Then a `SIGKILL` does no damage:
 - Write to a temporary file. Then rename it to the final name. A rename is complete or it did not occur.
 - At the start, remove the temporary files from an earlier run that did not finish.
 
@@ -439,7 +456,7 @@ These are the usual exit codes that a script can return:
 | 137 | Killed | Something stopped the process with SIGKILL |
 | 143 | Terminated | The process received the signal to stop (SIGTERM) |
 
-Signalbox shows "success" if the exit code is 0, and "failed" for all other codes. When a task stops at its time limit, signalbox records `Return code: -9` in the log.
+Signalbox shows "success" if the exit code is 0, and "failed" for all other codes. When a task stops at its time limit, signalbox records `Return code: -15` in the log if `SIGTERM` stopped it, or `Return code: -9` if `SIGKILL` was necessary. (A script that catches `SIGTERM` and exits records its own exit code.)
 
 ## Related Documentation
 

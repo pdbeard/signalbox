@@ -77,11 +77,10 @@ Taskfile / justfile support (revisit later, discussed 2026-11-17; chose "option 
 
 
 Features to borrow from Task (discussed 2026-11-17, ranked by fit; our own implementation, so no legal issue)
-- env: and env_file: per task
-    - gives secrets a home outside command: (and outside the Command: log line)
-    - fixes the cron PATH problem (env: {PATH: ...})
-- Stop tasks gracefully: SIGTERM to the process group, wait a few seconds, then SIGKILL
-    - lets any script (and Task's defer) clean up; update WRITING_SCRIPTS.md "safe to stop at any time" afterwards
+- DONE 2026-11-17: env: and env_file: per task (prepare_run in executor.py builds command, cwd, env, secrets)
+- DONE 2026-11-17: stop tasks gracefully: SIGTERM, then SIGKILL after execution.stop_grace_seconds (default 5)
+- DONE 2026-11-17: secret masking in logs: variables listed in mask:, plus the task's own variables whose
+  names have TOKEN/SECRET/PASS/KEY/AUTH/CREDENTIAL/SIGNATURE (masking every env_file value hid ordinary settings)
 - Preconditions that skip instead of fail (drive mounted, online, VPN up): field run_if: (a command or a list)
     - new status "skipped: condition not met", grey/neutral in the tray instead of red
 - Overlap protection: field overlap: skip | wait | allow, DEFAULT skip (decided 2026-11-17; changes current behaviour, note it in the changelog)
@@ -94,5 +93,4 @@ Features to borrow from Task (discussed 2026-11-17, ranked by fit; our own imple
 - Dry run: signalbox task run / group run --dry-run prints commands, cwd, time limits, runs nothing (also listed in SECURITY.md future)
 - Machine-readable output: signalbox status --json, task list --json, group list --json (Task's issue #764 shows the demand)
 - platforms: [darwin, linux] on a task, for one config shared across machines
-- Secret masking: values marked secret are replaced with ***** in logs (do after env/env_file, which covers most of the need)
 - Not borrowing: templating/loops, up-to-date checks (sources/generates), watch mode, includes, remote config

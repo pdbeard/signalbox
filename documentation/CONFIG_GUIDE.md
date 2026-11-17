@@ -39,6 +39,7 @@ execution:
   capture_stdout: true           # Capture standard output in logs
   capture_stderr: true           # Capture standard error in logs
   max_parallel_workers: 5        # Maximum parallel workers for group execution
+  stop_grace_seconds: 5          # Seconds between SIGTERM and SIGKILL when a task is stopped
 
 logging:
   max_file_size_mb: 5                   # Maximum size of one log file

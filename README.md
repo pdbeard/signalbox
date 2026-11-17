@@ -172,6 +172,9 @@ These fields are optional:
 
 - `timeout`: the time limit for the task, in seconds. It replaces `execution.default_timeout` for this task. A value of 0 removes the time limit. If the task runs longer than the time limit, signalbox stops the task and all processes that it started.
 - `cwd`: the working directory. Use an absolute path, or a path relative to the signalbox home. If you do not set it, signalbox uses the signalbox home. This is the same for manual runs and scheduled runs.
+- `env`: environment variables for the command, for example `env: {BACKUP_DIR: /mnt/backup, PATH: "/opt/tools/bin:${PATH}"}`. A value can use `$VAR` or `${VAR}` of the variables that the task already has.
+- `env_file`: a file of `KEY=VALUE` lines (relative to the signalbox home). Use it for secrets. Make it readable only by you (`chmod 600`). `env` replaces the values of the same names.
+- `mask`: more variable names whose values signalbox replaces with `*****` in the logs. Signalbox always masks the variables of the task whose names have `TOKEN`, `SECRET`, `PASS`, `KEY`, `AUTH`, `CREDENTIAL` or `SIGNATURE`.
 - `log_limit`: the rule to delete old logs. `type: count` keeps the N newest logs. `type: age` keeps the logs of the last N days. `type: size` keeps the newest logs that fit in N MB.
 - `alerts`: the patterns to find in the output. Refer to "Alerting" below.
 

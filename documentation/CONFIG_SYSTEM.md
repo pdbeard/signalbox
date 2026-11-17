@@ -86,6 +86,7 @@ The validate command does these checks:
 | `execution.capture_stdout` | boolean | true | Write stdout to the logs |
 | `execution.capture_stderr` | boolean | true | Write stderr to the logs |
 | `execution.max_parallel_workers` | number | 5 | The maximum number of tasks that run at the same time in a parallel group |
+| `execution.stop_grace_seconds` | number | 5 | When signalbox stops a task (time limit or Ctrl+C), it sends SIGTERM, and then SIGKILL after this number of seconds. 0 sends SIGKILL at once. |
 | `logging.max_file_size_mb` | number | 5 | The maximum size of one log file, in MB |
 | `logging.include_command` | boolean | true | Write the command in the log |
 | `logging.include_return_code` | boolean | true | Write the exit code in the log |

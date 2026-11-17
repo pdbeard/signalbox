@@ -9,7 +9,9 @@
 import os
 import signal
 import subprocess
+import time
 from datetime import datetime
+from string import Template
 from concurrent.futures import ThreadPoolExecutor
 import click
 
@@ -19,44 +21,102 @@ from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rota
 from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError, ValidationError, ConfigurationError
 from . import notifications
 from . import alerts
-from .helpers import format_timestamp
+from .helpers import format_timestamp, load_env_file, mask_secrets, SECRET_NAME_PATTERN
 from .validator import validate_task_for_run, validate_run_settings
 
-# After a timeout kill, how long to wait for the pipes to close before giving up on the output
+# After the final SIGKILL, how long to wait for the pipes to close before giving up on the output
 KILL_GRACE_SECONDS = 5
 
 # Processes started by run_command that are still running, so an interrupted
-# parallel group can kill them (Ctrl+C reaches only the main thread).
+# parallel group can stop them (Ctrl+C reaches only the main thread).
 _running = set()
 
 
-def _kill_process_group(proc):
-    """SIGKILL every process in the task's process group (the shell and anything it started)."""
+def _signal_group(proc, sig):
+    """Send sig to every process in the task's process group (the shell and anything it started)."""
     try:
-        os.killpg(proc.pid, signal.SIGKILL)
+        os.killpg(proc.pid, sig)
     except ProcessLookupError:
         pass
 
 
-def run_command(command, timeout=None, cwd=None):
+def stop_grace_seconds():
+    """How long a task may take to exit after SIGTERM before it gets SIGKILL (0 = SIGKILL at once).
+
+    Fallback matches the value in the shipped signalbox.yaml.
+    """
+    return get_config_value("execution.stop_grace_seconds", 5)
+
+
+def _stop_and_collect(proc, grace):
+    """Stop the task's process group and return its (stdout, stderr).
+
+    SIGTERM first, so the task can clean up; SIGKILL after `grace` seconds, and
+    always at the end for anything left in the group (a child that ignored
+    SIGTERM, or one that outlived the shell).
+    """
+    output = None
+    if grace > 0:
+        _signal_group(proc, signal.SIGTERM)
+        try:
+            output = proc.communicate(timeout=grace)  # keeps reading, so a busy task cannot block on a full pipe
+        except subprocess.TimeoutExpired:
+            pass
+    _signal_group(proc, signal.SIGKILL)
+    if output is not None:
+        return output
+    try:
+        # Retrying communicate() keeps the output read so far
+        return proc.communicate(timeout=KILL_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        # Something escaped the process group (e.g. daemonized) and still holds the pipes
+        proc.stdout.close()
+        proc.stderr.close()
+        proc.wait()
+        return "", ""
+
+
+def stop_all_running(grace):
+    """Stop every running task, as _stop_and_collect does, from another thread (an interrupted parallel group).
+
+    The threads that started the tasks still collect their output and record the runs.
+    """
+    procs = list(_running)
+    if grace > 0:
+        for proc in procs:
+            _signal_group(proc, signal.SIGTERM)
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline and any(proc.poll() is None for proc in procs):
+            time.sleep(0.05)
+    for proc in procs:
+        _signal_group(proc, signal.SIGKILL)
+
+
+def run_command(command, timeout=None, cwd=None, env=None, grace=None):
     """Run a shell command the way signalbox runs every task.
 
     - The command gets its own session/process group, so a timeout (or Ctrl+C)
-      kills everything it started, not just the shell.
+      stops everything it started, not just the shell: SIGTERM first, then
+      SIGKILL after `grace` seconds (execution.stop_grace_seconds by default).
     - stdin is /dev/null: a command that prompts fails fast instead of hanging
       invisibly (its output is captured) until the timeout.
     - cwd is explicit, so manual and scheduled runs behave the same.
+    - env, if given, is the complete environment of the command.
 
     Returns:
         subprocess.CompletedProcess with text stdout/stderr
 
     Raises:
-        subprocess.TimeoutExpired: With whatever output was captured before the kill
+        subprocess.TimeoutExpired: With whatever output was captured, and the
+            exit status of the stopped shell as its `returncode` attribute
     """
+    if grace is None:
+        grace = stop_grace_seconds()
     proc = subprocess.Popen(
         command,
         shell=True,
         cwd=cwd,
+        env=env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -70,21 +130,17 @@ def run_command(command, timeout=None, cwd=None):
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        _kill_process_group(proc)
-        try:
-            # Retrying communicate() keeps the output read so far
-            stdout, stderr = proc.communicate(timeout=KILL_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            # Something escaped the process group (e.g. daemonized) and still holds the pipes
-            proc.stdout.close()
-            proc.stderr.close()
-            proc.wait()
-            stdout, stderr = "", ""
-        raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr)
+        stdout, stderr = _stop_and_collect(proc, grace)
+        timed_out = subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr)
+        timed_out.returncode = proc.returncode  # -15 if SIGTERM stopped it, -9 if it needed SIGKILL
+        raise timed_out
     except BaseException:
         # The task is in its own session, so Ctrl+C no longer reaches it directly
-        _kill_process_group(proc)
-        proc.wait()
+        try:
+            _stop_and_collect(proc, grace)
+        finally:
+            _signal_group(proc, signal.SIGKILL)  # a second Ctrl+C during the grace period still stops it
+            proc.wait()
         raise
     finally:
         _running.discard(proc)
@@ -95,6 +151,35 @@ def resolve_task_cwd(task):
     """Working directory for a task: its 'cwd' (relative to the signalbox home), or the home itself."""
     cwd = task.get("cwd")
     return resolve_path(cwd) if cwd else find_config_home()
+
+
+def prepare_run(task):
+    """What exactly runs for a task: {'command', 'cwd', 'env', 'secrets'}.
+
+    The one place that turns a task entry into a run, so a run and any preview of it agree.
+    The environment is signalbox's own, then the env_file, then 'env' (whose values can use
+    $VAR from the two before). 'secrets' are the values to mask in logs: the variables listed
+    in 'mask', and the task's own variables (env_file or env) whose names look secret.
+
+    Raises:
+        ConfigurationError: if the working directory or the env_file does not exist,
+            or the env_file has a line that is not KEY=VALUE
+    """
+    cwd = resolve_task_cwd(task)
+    if not os.path.isdir(cwd):
+        raise ConfigurationError(f"Working directory for task '{task.get('name')}' does not exist: {cwd}")
+    env = dict(os.environ)
+    own = []  # the variables this task sets
+    if task.get("env_file"):
+        from_file = load_env_file(resolve_path(task["env_file"]))
+        env.update(from_file)
+        own.extend(from_file)
+    for key, value in (task.get("env") or {}).items():
+        env[key] = Template(str(value)).safe_substitute(env)
+        own.append(key)
+    to_mask = set(task.get("mask") or []) | {key for key in own if SECRET_NAME_PATTERN.search(key)}
+    secrets = [env[key] for key in to_mask if key in env]
+    return {"command": task["command"], "cwd": cwd, "env": env, "secrets": secrets}
 
 
 def find_task(name, config):
@@ -119,7 +204,7 @@ def last_log_name(name, config):
     return os.path.basename(task.get("last_log", ""))
 
 
-def _execute(task, name, config):
+def _execute(task, name, config, run):
     """Run the task subprocess and return (result, log_file, timestamp).
 
     Handles timeout resolution and log path preparation. A task may override
@@ -146,14 +231,16 @@ def _execute(task, name, config):
     log_file = get_log_path(name, timestamp)
 
     try:
-        result = run_command(task["command"], timeout=timeout, cwd=resolve_task_cwd(task))
+        result = run_command(run["command"], timeout=timeout, cwd=run["cwd"], env=run["env"])
     except subprocess.TimeoutExpired as e:
         # Log, check alerts on the partial output and record the failure like
-        # any other run. run_command kills the process group with SIGKILL, so
-        # -9 is the honest return code.
+        # any other run. The return code is how the stop ended it: -15 (SIGTERM) or -9 (SIGKILL).
         stderr = _as_text(e.stderr) + f"\n[TIMED OUT after {e.timeout}s]"
-        timed_out = subprocess.CompletedProcess(task["command"], -9, _as_text(e.stdout), stderr)
-        _post_execution(name, task, timed_out, log_file, timestamp, config)
+        returncode = getattr(e, "returncode", None)
+        timed_out = subprocess.CompletedProcess(
+            run["command"], -9 if returncode is None else returncode, _as_text(e.stdout), stderr
+        )
+        _post_execution(name, task, timed_out, log_file, timestamp, config, run)
         raise ExecutionTimeoutError(name, timeout)
 
     return result, log_file, timestamp
@@ -193,9 +280,17 @@ def _should_notify(name, alert):
     return not (cooldown and alerts.notified_within(name, alert["pattern"], cooldown))
 
 
-def _post_execution(name, task, result, log_file, timestamp, config):
+def _post_execution(name, task, result, log_file, timestamp, config, run):
     """Handle all post-execution concerns: logging, alerts, notifications, log rotation, runtime state."""
-    write_execution_log(log_file, task["command"], result.returncode, result.stdout, result.stderr)
+    # Secrets are masked in what is written; alerts below still match the real output
+    secrets = run["secrets"]
+    write_execution_log(
+        log_file,
+        mask_secrets(run["command"], secrets),
+        result.returncode,
+        mask_secrets(result.stdout, secrets),
+        mask_secrets(result.stderr, secrets),
+    )
 
     # Check for alert patterns in output
     combined_output = result.stdout + "\n" + result.stderr
@@ -250,7 +345,7 @@ def run_task(name, config):
     Raises:
         TaskNotFoundError: If task not found in configuration
         ValidationError: If the task can't be run (e.g. missing 'command')
-        ConfigurationError: If the task's working directory does not exist
+        ConfigurationError: If the task's working directory or env_file does not exist
         ExecutionTimeoutError: If task execution times out
         ExecutionError: If task execution fails for any other reason
     """
@@ -258,12 +353,10 @@ def run_task(name, config):
     errors = validate_task_for_run(task) + validate_run_settings()
     if errors:
         raise ValidationError("; ".join(errors))
-    cwd = resolve_task_cwd(task)
-    if not os.path.isdir(cwd):
-        raise ConfigurationError(f"Working directory for task '{name}' does not exist: {cwd}")
+    run = prepare_run(task)
     try:
-        result, log_file, timestamp = _execute(task, name, config)
-        _post_execution(name, task, result, log_file, timestamp, config)
+        result, log_file, timestamp = _execute(task, name, config, run)
+        _post_execution(name, task, result, log_file, timestamp, config, run)
         return result.returncode == 0
     except (ExecutionTimeoutError, TaskNotFoundError):
         raise
@@ -318,10 +411,9 @@ def run_group_parallel(task_names, config):
         results = [future.result() for future in futures]
     except KeyboardInterrupt:
         # Tasks run in their own sessions, so Ctrl+C never reaches them: stop
-        # queued tasks from starting, then kill the ones already running.
+        # queued tasks from starting, then stop the ones already running.
         executor.shutdown(wait=False, cancel_futures=True)
-        for proc in _running.copy():
-            _kill_process_group(proc)
+        stop_all_running(stop_grace_seconds())
         raise
     executor.shutdown()
 

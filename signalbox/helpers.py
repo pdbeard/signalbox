@@ -164,3 +164,51 @@ def check_name(name, kind="task"):
     if not is_valid_name(name):
         raise ConfigurationError(f"Invalid {kind} name {name!r}: {NAME_RULE}")
     return name
+
+
+# A valid environment variable name (POSIX shells accept only these)
+ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+# Shorter values are not masked: masking "1" or "on" would hide ordinary output
+MIN_SECRET_LENGTH = 4
+
+# Variables whose names look like this are masked without being listed in 'mask' (the same idea as Django's
+# settings filter); ordinary settings such as BACKUP_DIR stay readable in the logs
+SECRET_NAME_PATTERN = re.compile(r"TOKEN|SECRET|PASS|KEY|AUTH|CREDENTIAL|SIGNATURE", re.IGNORECASE)
+
+
+def load_env_file(path):
+    """Read KEY=VALUE lines from an env file into a dict.
+
+    Blank lines and lines that start with '#' are skipped, an 'export ' prefix
+    is allowed, and one pair of matching quotes around a value is removed.
+    Values are used as written: no variable expansion and no escapes.
+
+    Raises:
+        ConfigurationError: if the file does not exist or a line is not KEY=VALUE
+    """
+    if not os.path.isfile(path):
+        raise ConfigurationError(f"env_file not found: {path}")
+    values = {}
+    with open(path, "r", encoding="utf-8") as f:
+        for number, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :].lstrip()
+            key, sep, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if not sep or not ENV_NAME_PATTERN.match(key):
+                raise ConfigurationError(f"{path}, line {number}: expected KEY=VALUE")
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            values[key] = value
+    return values
+
+
+def mask_secrets(text, secrets):
+    """Replace each secret value in text with *****. Longest first, so a secret inside another is not half-masked."""
+    for secret in sorted({s for s in secrets if len(s) >= MIN_SECRET_LENGTH}, key=len, reverse=True):
+        text = text.replace(secret, "*****")
+    return text

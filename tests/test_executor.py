@@ -60,7 +60,7 @@ class TestRunTask:
         # Verify
         assert result is True
         mock_ensure_dir.assert_called_once_with("test_task")
-        mock_subprocess.assert_called_once_with("echo 'hello'", timeout=300, cwd=ANY)
+        mock_subprocess.assert_called_once_with("echo 'hello'", timeout=300, cwd=ANY, env=ANY)
         mock_write_log.assert_called_once()
         mock_rotate.assert_called_once()
         mock_save_state.assert_called_once()

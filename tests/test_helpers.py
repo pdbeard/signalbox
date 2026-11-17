@@ -3,6 +3,7 @@ import tempfile
 import pytest
 import yaml
 from signalbox import helpers
+from signalbox.exceptions import ConfigurationError
 
 
 def test_load_yaml_files_from_dir(tmp_path):
@@ -29,3 +30,31 @@ def test_format_timestamp():
 
     ts = helpers.format_timestamp(datetime(2026, 1, 26, 12, 0, 0))
     assert "20260126" in ts
+
+
+def test_load_env_file_formats(tmp_path):
+    f = tmp_path / "a.env"
+    f.write_text(
+        "# comment\n\nexport A=1\nB = two words \nC=\"quoted value\"\nD='single'\nE=has=equals\nF=$NOT_EXPANDED\n"
+    )
+    assert helpers.load_env_file(str(f)) == {
+        "A": "1",
+        "B": "two words",
+        "C": "quoted value",
+        "D": "single",
+        "E": "has=equals",
+        "F": "$NOT_EXPANDED",
+    }
+
+
+@pytest.mark.parametrize("line", ["NOEQUALS", "1BAD=x", "with space=x"])
+def test_load_env_file_rejects_bad_lines(tmp_path, line):
+    f = tmp_path / "bad.env"
+    f.write_text(f"OK=1\n{line}\n")
+    with pytest.raises(ConfigurationError, match="line 2"):
+        helpers.load_env_file(str(f))
+
+
+def test_mask_secrets_longest_first_and_ignores_short_values():
+    text = "token abcd1234 and abcd and on"
+    assert helpers.mask_secrets(text, ["abcd", "abcd1234", "on"]) == "token ***** and ***** and on"
