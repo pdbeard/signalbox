@@ -43,17 +43,56 @@ Signalbox Alerts:
 - Design extensible pattern matching for future alert types.
 
 
-Taskfile / justfile support (revisit later, discussed 2026-11-17)
+Taskfile / justfile support (revisit later, discussed 2026-11-17; chose "option A")
 - Goal: signalbox watches jobs whose logic lives in a Taskfile.yml or justfile (schedule, logs, alerts, tray), without becoming a task runner itself.
-- Never parse their formats: ask their CLIs for the list (task --list-all --json, just --dump --dump-format json). Check these flags first; neither tool was installed when this was written.
-- Level 1 (docs only): README section showing command: task -x backup / just --justfile PATH backup, with cwd.
-    - task needs -x (--exit-code) so the real exit code reaches signalbox (check this)
-- Level 2: signalbox import taskfile|justfile PATH --only a,b
-    - writes normal task entries (command, cwd, description) to tasks/<name>.yaml, so alerts/timeouts can be added and it stays in git
-    - --only matters: most recipes are dev commands (build, test, fmt) and would just add noise to the tray
-    - recipe names like db:backup must pass NAME_PATTERN: map ':' to '-' and say what was renamed
-    - validate warns when an imported recipe no longer exists in its Taskfile/justfile
-    - tests: fake task/just scripts on PATH, same as the crontab --install test
-- Not doing: live linking (taskfiles: in signalbox.yaml). The tray would run the CLIs every poll, and renamed recipes would silently vanish from monitoring.
-- Document the limit: only runs that go through signalbox are recorded, not a manual "task backup" in a terminal.
-- Legal: go-task is MIT, just is CC0. Calling their CLIs or borrowing ideas is fine; copied code keeps the MIT notice. Say "works with Task", no logos or implied endorsement.
+- Option A: a signalbox task points at a Task task instead of having a command:
+      - name: infra-backup
+        description: Nightly database backup
+        taskfile: ~/infra/Taskfile.yml
+        task: backup
+        alerts: [...]          # signalbox settings stay next to the reference
+    - signalbox builds the command at run time: task --taskfile <abs path> -x --silent <task>, cwd = the Taskfile's folder, shlex-quoted
+        - -x (--exit-code): pass on the real exit code (without it a failure is always Task's 201)
+        - --silent: Task does not print each command, so unmarked secrets do not end up in signalbox logs
+    - a task has either command or taskfile+task, never both (validator)
+    - validate: run task --taskfile F --list-all --json once per Taskfile; warn if the file, the task or the task binary is missing
+      (only in validate; at run time a missing task exits 200 and shows as failed/red anyway)
+    - check-permissions: also check each referenced Taskfile (whoever writes it decides what runs)
+    - justfile: same with justfile: + recipe:, command just --justfile F --working-directory D RECIPE (just already passes exit codes)
+        - recipes with parameters that have no default cannot run unattended: validate warns
+    - tests: fake task/just scripts on PATH that print fixed JSON and record their arguments (like the crontab --install test)
+    - about 20-30 lines plus tests
+- Docs to write with it:
+    - Task's own per-command timeout: should be shorter than signalbox's, so Task can stop the command and run its defer cleanup (signalbox's SIGKILL skips defer)
+    - tasks with prompt: fail at once (stdin is /dev/null); never add --yes, those prompts protect something
+    - parallel deps: suggest --output prefixed in a hand-written command if logs get mixed
+    - remote includes change what runs without a signalbox config change: recommend checksum: pinning; SECURITY.md paragraph
+    - one Task task = one signalbox job: a Task deps chain runs inside one signalbox run, with one log and one status
+    - only runs that go through signalbox are recorded, not a manual "task backup" in a terminal
+- Not doing:
+    - signalbox import taskfile (copying entries): option A makes it unnecessary
+    - live loading of whole Taskfiles (taskfiles: in signalbox.yaml): noise from dev tasks, no place for alerts/timeouts,
+      renamed tasks vanish quietly, every config load depends on task, weaker review model
+- Legal: go-task is MIT, just is CC0. Calling their CLIs and borrowing ideas is fine; copied code keeps the MIT notice. Say "works with Task", no logos or implied endorsement.
+
+
+Features to borrow from Task (discussed 2026-11-17, ranked by fit; our own implementation, so no legal issue)
+- env: and env_file: per task
+    - gives secrets a home outside command: (and outside the Command: log line)
+    - fixes the cron PATH problem (env: {PATH: ...})
+- Stop tasks gracefully: SIGTERM to the process group, wait a few seconds, then SIGKILL
+    - lets any script (and Task's defer) clean up; update WRITING_SCRIPTS.md "safe to stop at any time" afterwards
+- Preconditions that skip instead of fail (drive mounted, online, VPN up): field run_if: (a command or a list)
+    - new status "skipped: condition not met", grey/neutral in the tray instead of red
+- Overlap protection: field overlap: skip | wait | allow, DEFAULT skip (decided 2026-11-17; changes current behaviour, note it in the changelog)
+    - lock: fcntl.flock on logs/<task>/.run.lock for the whole run; skip = non-blocking, wait = up to the task's time limit
+- Warning on repeated skips (decided 2026-11-17): count-based, one global setting
+    - e.g. execution.skip_warn_after: 3 (0 = never warn); the tray turns yellow and status exits 1 after that many skips in a row
+    - runtime keeps a consecutive skip count per task; any real run (success or failure) resets it
+    - run_if and overlap skips count; platform skips do not (the task is hidden on that machine)
+    - reasoning: well-planned tasks rarely skip, so repeated skips mean something is wrong
+- Dry run: signalbox task run / group run --dry-run prints commands, cwd, time limits, runs nothing (also listed in SECURITY.md future)
+- Machine-readable output: signalbox status --json, task list --json, group list --json (Task's issue #764 shows the demand)
+- platforms: [darwin, linux] on a task, for one config shared across machines
+- Secret masking: values marked secret are replaced with ***** in logs (do after env/env_file, which covers most of the need)
+- Not borrowing: templating/loops, up-to-date checks (sources/generates), watch mode, includes, remote config
