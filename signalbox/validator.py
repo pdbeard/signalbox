@@ -7,10 +7,11 @@ import yaml
 
 from .config import load_config, get_config_value, load_global_config, resolve_path, config_sources, CONFIG_FILE
 from .cron import schedule_error
-from .helpers import is_valid_name, yaml_files, NAME_RULE, ENV_NAME_PATTERN
+from .helpers import is_valid_name, yaml_files, NAME_RULE, ENV_NAME_PATTERN, PLATFORMS, on_this_platform
 
 SEVERITIES = ("info", "warning", "critical")
 EXECUTION_MODES = ("serial", "parallel")
+OVERLAP_MODES = ("skip", "wait", "allow")
 LOG_LIMIT_TYPES = ("count", "age", "size")
 
 
@@ -89,6 +90,7 @@ def validate_run_settings():
             errors.append(f"{key} must be a number >= 0, got {value!r}")
     for key, default, minimum in (
         ("execution.max_parallel_workers", 5, 1),  # 0 would crash every parallel group
+        ("execution.skip_warn_after", 3, 0),  # 0 = never warn
         ("alerts.retention.max_entries", 1000, 0),
     ):
         value = get_config_value(key, default)
@@ -143,6 +145,7 @@ def validate_task_for_run(task):
         errors.append(f"{label} 'cwd' must be a path string")
 
     errors.extend(_environment_errors(task, label))
+    errors.extend(_run_condition_errors(task, label))
 
     # Alerts are checked after the command has run, so a malformed list would
     # fail every run after its side effects, without saving state or rotating logs.
@@ -181,6 +184,23 @@ def _environment_errors(task, label):
     return errors
 
 
+def _run_condition_errors(task, label):
+    """Check run_if (a command or a list of commands), overlap and platforms."""
+    errors = []
+    if "run_if" in task:
+        checks = task["run_if"]
+        checks = [checks] if isinstance(checks, str) else checks
+        if not isinstance(checks, list) or not checks or not all(isinstance(c, str) and c.strip() for c in checks):
+            errors.append(f"{label} 'run_if' must be a command or a list of commands")
+    if "overlap" in task and task["overlap"] not in OVERLAP_MODES:
+        errors.append(f"{label} 'overlap' must be one of {', '.join(OVERLAP_MODES)}, got {task['overlap']!r}")
+    if "platforms" in task:
+        platforms = task["platforms"]
+        if not isinstance(platforms, list) or not platforms or any(p not in PLATFORMS for p in platforms):
+            errors.append(f"{label} 'platforms' must be a list of {', '.join(PLATFORMS)}, got {platforms!r}")
+    return errors
+
+
 def validate_log_limit(log_limit, label):
     """Check a log_limit mapping ({type: count|age|size, value: N})."""
     if not isinstance(log_limit, dict):
@@ -211,7 +231,9 @@ def validate_task(task):
         errors.append(f"{label} missing 'description' field")
     if "log_limit" in task:
         errors.extend(validate_log_limit(task["log_limit"], label))
-    if isinstance(task.get("env_file"), str) and not os.path.isfile(resolve_path(task["env_file"])):
+    # Only on the machines the task is for: a shared config can name a file that exists only there
+    env_file = task.get("env_file")
+    if isinstance(env_file, str) and on_this_platform(task) and not os.path.isfile(resolve_path(env_file)):
         errors.append(f"{label} env_file not found: {resolve_path(task['env_file'])}")
 
     alerts_list = task.get("alerts")

@@ -8,7 +8,7 @@ from ..config import load_config
 from ..executor import run_task, find_task, last_log_name
 from ..runtime import load_runtime_state, merge_config_with_runtime_state
 from .. import log_manager
-from ..exceptions import ValidationError
+from ..exceptions import ValidationError, TaskSkipped
 from ..helpers import display_time
 from ..validator import validate_task_for_run
 from .utils import handle_exceptions, print_run_output_preview
@@ -95,6 +95,9 @@ def task_run(name, run_all_tasks, quiet):
                     raise ValidationError("; ".join(validate_task_for_run(task_item)))
                 success = run_task(name, config)
                 status = "success" if success else "failed"
+            except TaskSkipped as e:
+                status = "skipped"
+                error = e.reason
             except Exception as e:
                 status = "failed"
                 error = str(e)
@@ -112,7 +115,7 @@ def task_run(name, run_all_tasks, quiet):
             for path, message in config.get("_load_errors", {}).items()
         ]
         print_run_table(results)
-        failed_tasks = [r["name"] for r in results if r["status"] != "success"]
+        failed_tasks = [r["name"] for r in results if r["status"] == "failed"]  # a skip is not a failure
         if failed_tasks:
             click.echo(f"\n{len(failed_tasks)} task(s) failed: {', '.join(failed_tasks)}", err=True)
             sys.exit(1)
@@ -122,7 +125,10 @@ def task_run(name, run_all_tasks, quiet):
     elif name:
         # Warnings on: a task in a file that does not load would otherwise just be "not found"
         config = load_config()
-        success = run_task(name, config)
+        try:
+            success = run_task(name, config)
+        except TaskSkipped:
+            return  # run_task has said why; a skip is not a failure (exit 0)
         # The log this run wrote, not the newest file: a scheduled run of the same task may have finished since
         log_path = find_task(name, config).get("last_log")
         if not quiet and log_path:

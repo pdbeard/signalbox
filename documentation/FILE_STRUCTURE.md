@@ -51,6 +51,11 @@ One file that has the global settings, for example time limits, log limits and p
 - `env` (optional): environment variables for the command (a mapping of names to text or numbers). A value can use `$VAR` or `${VAR}`.
 - `env_file` (optional): a file of `KEY=VALUE` lines, relative to the signalbox home. Lines that start with `#` are comments. `export` at the start of a line is allowed. Signalbox uses the values as written, without `$VAR` expansion.
 - `mask` (optional): variable names whose values signalbox replaces with `*****` in the logs. Variables of the task whose names have `TOKEN`, `SECRET`, `PASS`, `KEY`, `AUTH`, `CREDENTIAL` or `SIGNATURE` are always masked.
+- `run_if` (optional): a command or a list of commands that must exit with 0 before the task runs. If one fails, signalbox skips the task. Each check has a time limit of 30 seconds and uses the `cwd` and `env` of the task. A check that cannot run at all (exit 126 or 127, for example a typing error) is a configuration error, not a skip.
+- `overlap` (optional): `skip` (the default), `wait` or `allow`. It tells signalbox what to do when the task must start while its last run is still running. `skip` does not start it. `wait` waits for the last run to end, but not longer than the time limit of the task; if the last run does not end in that time, signalbox skips this run. `allow` starts a second copy.
+- `platforms` (optional): a list of `darwin` and `linux`. On other systems, signalbox skips the task, does not record it, and does not show it in the tray or in `signalbox status`.
+
+A skipped task (run_if, overlap or platform) is not a failure. `signalbox run` exits with 0, and in a group it does not count for or against the group. Signalbox does not write a log file for a skip. It records the reason in the run status. If a task skips `execution.skip_warn_after` runs in a row (3 by default), the tray turns yellow.
 - `log_limit` (optional): the rule to delete old logs: `{type: count|age|size, value: N}`
 - `alerts` (optional): the regular expressions to find in the output
 

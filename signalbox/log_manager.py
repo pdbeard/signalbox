@@ -383,10 +383,11 @@ def clear_task_logs(task_name):
     if not os.path.exists(task_log_dir):
         return False
 
-    # Delete files but keep directory
+    # Delete files but keep the directory, and the lock files (.run.lock, .rotate.lock): a run
+    # that holds one must keep it, or a second run could start next to it
     for filename in os.listdir(task_log_dir):
         filepath = os.path.join(task_log_dir, filename)
-        if os.path.isfile(filepath):
+        if os.path.isfile(filepath) and not filename.startswith("."):
             os.remove(filepath)
     alerts.clear_alerts(task_name)
 

@@ -6,6 +6,7 @@
 #
 # Configuration files MUST be trusted. See documentation/SECURITY.md for details.
 #
+import fcntl
 import os
 import signal
 import subprocess
@@ -13,19 +14,39 @@ import time
 from datetime import datetime
 from string import Template
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import click
 
 from .config import get_config_value, find_config_home, find_entry, resolve_path
 from .runtime import save_task_runtime_state, setting_with_tray_override
-from .log_manager import ensure_log_dir, get_log_path, write_execution_log, rotate_logs
-from .exceptions import TaskNotFoundError, ExecutionError, ExecutionTimeoutError, ValidationError, ConfigurationError
+from .log_manager import ensure_log_dir, get_log_path, get_task_log_dir, write_execution_log, rotate_logs
+from .exceptions import (
+    TaskNotFoundError,
+    ExecutionError,
+    ExecutionTimeoutError,
+    ValidationError,
+    ConfigurationError,
+    TaskSkipped,
+)
 from . import notifications
 from . import alerts
-from .helpers import format_timestamp, load_env_file, mask_secrets, SECRET_NAME_PATTERN
+from .helpers import (
+    format_timestamp,
+    load_env_file,
+    mask_secrets,
+    SECRET_NAME_PATTERN,
+    on_this_platform,
+    current_platform,
+)
 from .validator import validate_task_for_run, validate_run_settings
 
 # After the final SIGKILL, how long to wait for the pipes to close before giving up on the output
 KILL_GRACE_SECONDS = 5
+
+# The time limit of each run_if check (a check is quick: is a drive mounted, is a host up)
+RUN_IF_TIMEOUT = 30
+# Exit codes of a shell that could not run the command at all: a typo, not a reason to skip
+CANNOT_RUN_CODES = (126, 127)
 
 # Processes started by run_command that are still running, so an interrupted
 # parallel group can stop them (Ctrl+C reaches only the main thread).
@@ -204,6 +225,92 @@ def last_log_name(name, config):
     return os.path.basename(task.get("last_log", ""))
 
 
+def task_timeout(task, warn=False):
+    """The task's time limit in seconds, or None for no limit.
+
+    Its own 'timeout', else execution.default_timeout; 0 means no limit, and a
+    smaller non-zero value is raised to execution.min_timeout.
+    """
+    timeout = task.get("timeout", get_config_value("execution.default_timeout", 300))
+    # Security: Enforce minimum timeout to prevent DOS via infinite hangs
+    min_timeout = get_config_value("execution.min_timeout", 1)
+    if timeout == 0:
+        return None
+    if timeout < min_timeout:
+        if warn:
+            click.echo(
+                f"Warning: Timeout {timeout}s is less than the minimum {min_timeout}s. Signalbox uses the minimum.",
+                err=True,
+            )
+        return min_timeout
+    return timeout
+
+
+@contextmanager
+def _run_lock(name, overlap, wait_limit):
+    """Yield True if this run may start, False if it must skip (overlap: skip | wait | allow).
+
+    The lock is a flock on logs/<task>/.run.lock, held for the whole run. The
+    system releases it when the process ends, so a crash cannot leave a stale
+    lock. Each open() has its own lock, so it also works between the threads of
+    a parallel group.
+    """
+    if overlap == "allow":
+        yield True
+        return
+    lock_dir = get_task_log_dir(name)
+    os.makedirs(lock_dir, exist_ok=True)
+    with open(os.path.join(lock_dir, ".run.lock"), "w") as lock:
+        deadline = None if wait_limit is None else time.monotonic() + wait_limit
+        while True:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if overlap == "skip" or (deadline is not None and time.monotonic() >= deadline):
+                    yield False
+                    return
+                time.sleep(0.2)
+        yield True
+
+
+def _run_if_failure(task, run):
+    """The reason to skip the task, or None if every run_if check exits 0.
+
+    Raises:
+        ConfigurationError: if a check cannot run at all (exit 126/127: not found or not executable)
+    """
+    checks = task.get("run_if") or []
+    for check in [checks] if isinstance(checks, str) else checks:
+        try:
+            result = run_command(check, timeout=RUN_IF_TIMEOUT, cwd=run["cwd"], env=run["env"])
+        except subprocess.TimeoutExpired:
+            return f"run_if timed out after {RUN_IF_TIMEOUT}s: {check}"
+        if result.returncode in CANNOT_RUN_CODES:
+            raise ConfigurationError(f"run_if check cannot run (exit {result.returncode}): {check}")
+        if result.returncode != 0:
+            return f"run_if failed: {check}"
+    return None
+
+
+def _skip(name, task, config, reason, record=True):
+    """Report and record a skipped run, then raise TaskSkipped.
+
+    A skip writes no log file: a task skipped every minute would push its real
+    logs out of rotation. It is recorded in the runtime state instead.
+    """
+    click.echo(f"Task {name} skipped: {reason}")
+    if record:
+        timestamp = format_timestamp(datetime.now())
+        source = config["_task_sources"].get(name)
+        if source:
+            save_task_runtime_state(name, source, timestamp, "skipped", skip_reason=reason)
+        task["last_status"] = "skipped"
+        task["last_run"] = timestamp
+    task["last_log"] = ""
+    raise TaskSkipped(name, reason)
+
+
 def _execute(task, name, config, run):
     """Run the task subprocess and return (result, log_file, timestamp).
 
@@ -214,18 +321,7 @@ def _execute(task, name, config, run):
     Raises:
         ExecutionTimeoutError: If the subprocess exceeds the configured timeout.
     """
-    timeout = task.get("timeout", get_config_value("execution.default_timeout", 300))
-    # Security: Enforce minimum timeout to prevent DOS via infinite hangs
-    min_timeout = get_config_value("execution.min_timeout", 1)
-    if timeout == 0:
-        timeout = None
-    elif timeout < min_timeout:
-        click.echo(
-            f"Warning: Timeout {timeout}s is less than the minimum {min_timeout}s. Signalbox uses the minimum.",
-            err=True,
-        )
-        timeout = min_timeout
-
+    timeout = task_timeout(task, warn=True)
     ensure_log_dir(name)
     timestamp = format_timestamp(datetime.now())
     log_file = get_log_path(name, timestamp)
@@ -343,6 +439,8 @@ def run_task(name, config):
         bool: True if task executed successfully (exit code 0), False otherwise
 
     Raises:
+        TaskSkipped: If the task did not run on purpose: not for this platform,
+            already running (overlap), or a run_if check failed
         TaskNotFoundError: If task not found in configuration
         ValidationError: If the task can't be run (e.g. missing 'command')
         ConfigurationError: If the task's working directory or env_file does not exist
@@ -353,34 +451,49 @@ def run_task(name, config):
     errors = validate_task_for_run(task) + validate_run_settings()
     if errors:
         raise ValidationError("; ".join(errors))
+    if not on_this_platform(task):
+        # Not recorded: on this machine the task does not exist (it is hidden from the tray and status)
+        _skip(name, task, config, f"not for this platform ({current_platform()})", record=False)
     run = prepare_run(task)
-    try:
-        result, log_file, timestamp = _execute(task, name, config, run)
-        _post_execution(name, task, result, log_file, timestamp, config, run)
-        return result.returncode == 0
-    except (ExecutionTimeoutError, TaskNotFoundError):
-        raise
-    except Exception as e:
-        raise ExecutionError(name, str(e))
+    with _run_lock(name, task.get("overlap", "skip"), task_timeout(task)) as may_run:
+        if not may_run:
+            _skip(name, task, config, "already running")
+        reason = _run_if_failure(task, run)
+        if reason:
+            _skip(name, task, config, reason)
+        try:
+            result, log_file, timestamp = _execute(task, name, config, run)
+            _post_execution(name, task, result, log_file, timestamp, config, run)
+            return result.returncode == 0
+        except (ExecutionTimeoutError, TaskNotFoundError):
+            raise
+        except Exception as e:
+            raise ExecutionError(name, str(e))
 
 
 def _run_group_task(task_name, config):
-    """Run one task of a group, converting exceptions into a failed result."""
+    """Run one task of a group, converting exceptions into a failed (or skipped) result."""
     click.echo("")  # Add a blank line before each group task execution output
     click.echo(f"Running {task_name}...")
+    result = {"name": task_name, "status": "success", "error": ""}
     try:
-        status = "success" if run_task(task_name, config) else "failed"
-        error = ""
+        if not run_task(task_name, config):
+            result["status"] = "failed"
+    except TaskSkipped as e:
+        # Skipped on purpose (run_if, overlap, platform): it does not count against the group
+        result.update(status="skipped", error=e.reason, skip="condition")
     except Exception as e:
-        status = "failed"
-        error = e.message if hasattr(e, "message") else str(e)
-        click.echo(f"Error: {error}")
-    return {"name": task_name, "status": status, "error": error, "log_file": last_log_name(task_name, config)}
+        result.update(status="failed", error=e.message if hasattr(e, "message") else str(e))
+        click.echo(f"Error: {result['error']}")
+    result["log_file"] = last_log_name(task_name, config)
+    return result
 
 
 def _notify_group_result(results):
     """Send the group summary notification for a list of task results."""
     ran = [r for r in results if r["status"] != "skipped"]
+    if not ran:
+        return  # nothing ran: there is no result to report
     failed_names = [r["name"] for r in ran if r["status"] != "success"]
     passed = len(ran) - len(failed_names)
     notifications.notify_execution_result(
@@ -400,8 +513,9 @@ def run_group_parallel(task_names, config):
             config: Full configuration dict
 
     Returns:
-            list: One dict per task, in task_names order, with keys
-                  'name', 'status' ('success' or 'failed'), 'error' and 'log_file'
+            list: One dict per task, in task_names order, with keys 'name',
+                  'status' ('success', 'failed' or 'skipped'), 'error' and 'log_file'
+                  (and 'skip': 'condition' for a skipped task)
     """
     max_workers = get_config_value("execution.max_parallel_workers", 5)
 
@@ -422,9 +536,10 @@ def run_group_parallel(task_names, config):
     success_count = sum(1 for r in results if r["status"] == "success")
     click.echo(f"  Completed: {len(results)}/{len(task_names)}")
     click.echo(f"  Successful: {success_count}/{len(results)}")
-    if success_count < len(results):
-        failed_names = [r["name"] for r in results if r["status"] != "success"]
-        click.echo(f"  Failed: {', '.join(failed_names)}")
+    for label, status in (("Failed", "failed"), ("Skipped", "skipped")):
+        names = [r["name"] for r in results if r["status"] == status]
+        if names:
+            click.echo(f"  {label}: {', '.join(names)}")
 
     _notify_group_result(results)
     return results
@@ -440,17 +555,23 @@ def run_group_serial(task_names, config, stop_on_error):
 
     Returns:
             list: One dict per task, in task_names order, with keys 'name',
-                  'status' ('success', 'failed', or 'skipped' for tasks not run
-                  because of stop_on_error), 'error' and 'log_file'
+                  'status' ('success', 'failed' or 'skipped'), 'error' and 'log_file'.
+                  'skip' tells why a task was skipped: 'condition' (run_if, overlap,
+                  platform; neutral) or 'stop_on_error' (an earlier task failed)
     """
     results = []
+    stopped = False
     for task_name in task_names:
-        if results and results[-1]["status"] != "success" and stop_on_error:
-            results.append({"name": task_name, "status": "skipped", "error": "", "log_file": ""})
+        if stopped:
+            results.append(
+                {"name": task_name, "status": "skipped", "error": "", "log_file": "", "skip": "stop_on_error"}
+            )
             continue
         result = _run_group_task(task_name, config)
         results.append(result)
-        if result["status"] != "success" and stop_on_error:
+        # A skipped task is not a failure, so it does not stop the group
+        if result["status"] == "failed" and stop_on_error:
+            stopped = True
             click.echo(f"Task {task_name} failed. The remaining tasks do not run (stop_on_error: true)")
 
     _notify_group_result(results)

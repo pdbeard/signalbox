@@ -243,7 +243,7 @@ def alerts_cmd(task_name, severity, days):
 
 # Monitoring-plugin convention (Nagios and similar): 0 OK, 1 warning, 2 critical
 STATUS_EXIT_CODES = {"green": 0, "yellow": 1, "red": 2}
-ROW_COLOURS = {"success": "green", "failed": "red", "partial": "red", "overdue": "yellow"}
+ROW_COLOURS = {"success": "green", "failed": "red", "partial": "red", "overdue": "yellow", "skipped": "bright_black"}
 
 
 @click.command()

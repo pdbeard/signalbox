@@ -40,6 +40,7 @@ execution:
   capture_stderr: true           # Capture standard error in logs
   max_parallel_workers: 5        # Maximum parallel workers for group execution
   stop_grace_seconds: 5          # Seconds between SIGTERM and SIGKILL when a task is stopped
+  skip_warn_after: 3             # Skipped runs in a row before the tray warns (0 = never)
 
 logging:
   max_file_size_mb: 5                   # Maximum size of one log file

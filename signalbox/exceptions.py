@@ -60,3 +60,12 @@ class ValidationError(SignalboxError):
 
     def __init__(self, message):
         super().__init__(message, exit_code=2)
+
+
+class TaskSkipped(SignalboxError):
+    """A task did not run on purpose (run_if, overlap or platform). Not a failure: exit code 0."""
+
+    def __init__(self, task_name, reason):
+        self.task_name = task_name
+        self.reason = reason
+        super().__init__(f"Task '{task_name}' skipped: {reason}", exit_code=0)

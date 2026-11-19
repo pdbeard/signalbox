@@ -97,3 +97,30 @@ def test_malformed_config_entries_are_skipped():
     config = {"tasks": ["oops", {"command": "x"}, {"name": "a"}], "groups": [5]}
     result = compute_status(config, {"tasks": {}, "groups": {}}, 0, NOW)
     assert [row[1] for row in result["tasks"]] == ["a"]
+
+
+def test_skips_are_neutral_until_they_repeat():
+    state = lambda n: {
+        "t": {
+            "last_run": ts(timedelta(minutes=1)),
+            "last_status": "skipped",  # noqa: E731
+            "skip_reason": "run_if failed: mounted",
+            "consecutive_skips": n,
+        }
+    }
+    once = status(tasks=["t"], task_state=state(1))
+    assert once["colour"] == "green"
+    assert "skipped: run_if failed: mounted" in once["tasks"][0][2]
+
+    config = {"tasks": [{"name": "t"}], "groups": []}
+    repeated = compute_status(config, {"tasks": state(3), "groups": {}}, 0, NOW, skip_warn_after=3)
+    assert repeated["colour"] == "yellow" and "skipped repeatedly: t" in repeated["tooltip"]
+
+
+def test_tasks_for_another_platform_are_hidden():
+    from signalbox.helpers import current_platform
+
+    other = "linux" if current_platform() == "darwin" else "darwin"
+    config = {"tasks": [{"name": "here"}, {"name": "there", "platforms": [other]}], "groups": []}
+    result = compute_status(config, {"tasks": {}, "groups": {}}, 0, NOW)
+    assert [row[1] for row in result["tasks"]] == ["here"]

@@ -41,6 +41,11 @@ execution:
   # 0 = SIGKILL at once.
   stop_grace_seconds: 5
 
+  # A task that skips this many runs in a row (run_if failed, or the last run
+  # was still going) turns the tray yellow, and `signalbox status` exits 1.
+  # 0 = never warn.
+  skip_warn_after: 3
+
 # Logging settings
 logging:
   # Security: Maximum log file size in MB to prevent disk filling

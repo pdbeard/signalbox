@@ -123,7 +123,7 @@ signalbox --config /path/to/config/signalbox.yaml list
 
 ### Status
 
-- `signalbox status`: show what the tray shows (failed tasks and groups, and scheduled groups that did not run when due). It exits with 0 when all is OK, 1 when a group is overdue, and 2 when something failed (the convention of Nagios and similar monitoring tools). Use it on a machine without a tray.
+- `signalbox status`: show what the tray shows (failed tasks and groups, and scheduled groups that did not run when due). It exits with 0 when all is OK, 1 when a group is overdue or a task skipped too many runs in a row (`execution.skip_warn_after`), and 2 when something failed (the convention of Nagios and similar monitoring tools). Use it on a machine without a tray.
 
 ### Alerts & Notifications
 
@@ -175,6 +175,9 @@ These fields are optional:
 - `env`: environment variables for the command, for example `env: {BACKUP_DIR: /mnt/backup, PATH: "/opt/tools/bin:${PATH}"}`. A value can use `$VAR` or `${VAR}` of the variables that the task already has.
 - `env_file`: a file of `KEY=VALUE` lines (relative to the signalbox home). Use it for secrets. Make it readable only by you (`chmod 600`). `env` replaces the values of the same names.
 - `mask`: more variable names whose values signalbox replaces with `*****` in the logs. Signalbox always masks the variables of the task whose names have `TOKEN`, `SECRET`, `PASS`, `KEY`, `AUTH`, `CREDENTIAL` or `SIGNATURE`.
+- `run_if`: a command, or a list of commands, that signalbox runs first. If one of them fails, signalbox skips the task, for example `run_if: mountpoint -q /mnt/backup`. A skip is not a failure.
+- `overlap`: what to do when the task must start while its last run is still running. `skip` (the default) does not start it. `wait` waits for the last run to end, but not longer than the time limit of the task. If the last run does not end in that time, signalbox skips this run. `allow` starts a second copy.
+- `platforms`: the systems on which the task runs, `darwin` (macOS) or `linux`, for example `platforms: [linux]`. On other systems, signalbox skips the task and does not show it.
 - `log_limit`: the rule to delete old logs. `type: count` keeps the N newest logs. `type: age` keeps the logs of the last N days. `type: size` keeps the newest logs that fit in N MB.
 - `alerts`: the patterns to find in the output. Refer to "Alerting" below.
 

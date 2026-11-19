@@ -68,11 +68,21 @@ def _update_runtime_file(runtime_dir, source_file, section, update):
             raise
 
 
-def save_task_runtime_state(task_name, source_file, last_run, last_status):
-    """Save runtime state for a task to the appropriate runtime file."""
+def save_task_runtime_state(task_name, source_file, last_run, last_status, skip_reason=None):
+    """Save runtime state for a task to the appropriate runtime file.
+
+    A skipped run also records why, and how many runs in a row were skipped
+    (the tray warns after execution.skip_warn_after); any real run resets that count.
+    """
 
     def update(tasks):
-        tasks[task_name] = {"last_run": last_run, "last_status": last_status}
+        entry = {"last_run": last_run, "last_status": last_status}
+        if last_status == "skipped":
+            previous = tasks.get(task_name)
+            previous_count = previous.get("consecutive_skips", 0) if isinstance(previous, dict) else 0
+            entry["skip_reason"] = skip_reason or ""
+            entry["consecutive_skips"] = (previous_count if isinstance(previous_count, int) else 0) + 1
+        tasks[task_name] = entry
 
     _update_runtime_file("runtime/tasks", source_file, "tasks", update)
 

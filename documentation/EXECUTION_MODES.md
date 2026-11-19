@@ -71,8 +71,11 @@ After each run, signalbox records the status of the group:
 - `success`: all tasks were successful.
 - `partial`: some tasks were successful, and some failed or did not run.
 - `failed`: no task was successful.
+- `skipped`: signalbox skipped all the tasks on purpose (`run_if`, `overlap` or `platforms`).
 
-If the status is not `success`, `signalbox group run` exits with code 1. Thus, cron and systemd see the failure.
+A task that signalbox skips on purpose does not count for or against the group, and it does not stop a group with `stop_on_error: true`. A task that `stop_on_error` stops does count: an earlier task failed.
+
+If the status is not `success` or `skipped`, `signalbox group run` exits with code 1. Thus, cron and systemd see the failure.
 
 ## Parallel Execution
 

@@ -5,10 +5,12 @@ The signalbox tray icon shows the status of your scheduled groups and your tasks
 
 The color of the icon shows the results:
 - **Red**: a task or a group failed, or a task or group file does not load (for example, a YAML syntax error). The tooltip names the file.
-- **Yellow**: nothing failed, but a scheduled group is overdue. Its last due time went by, and it did not run. Possible causes: the cron or systemd job is not installed, the export is out of date, or the computer was asleep.
+- **Yellow**: nothing failed, but a scheduled group is overdue, or a task skipped too many runs in a row. A group is overdue when its last due time went by, and it did not run. Possible causes: the cron or systemd job is not installed, the export is out of date, or the computer was asleep. A task warns after `execution.skip_warn_after` skipped runs in a row (3 by default).
 - **Green**: all tasks and groups were successful.
 
 A task or group that never ran shows in the menu as "never run". It does not change the color of the icon.
+
+A task that signalbox skipped on purpose (its `run_if` check failed, or its last run was still running) shows as "skipped" with the reason. One skip does not change the color of the icon. A task for a different platform (`platforms`) does not show.
 
 When a group becomes overdue, the tray also sends a desktop notification (once, unless `group_notifications.enabled` is false). On a machine without a tray, `signalbox status` shows the same information.
 

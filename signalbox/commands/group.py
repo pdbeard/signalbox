@@ -71,7 +71,12 @@ def group_run(name):
     execution_time = (end_time - start_time).total_seconds()
     tasks_total = len(task_names)
     tasks_successful = sum(1 for r in results if r["status"] == "success")
-    if tasks_successful == tasks_total:
+    # Tasks skipped on purpose (run_if, overlap, platform) do not count for or against the group;
+    # tasks skipped by stop_on_error do, since an earlier task failed
+    counted = tasks_total - sum(1 for r in results if r.get("skip") == "condition")
+    if tasks_total and not counted:
+        group_status = "skipped"
+    elif tasks_successful == counted:
         group_status = "success"
     elif tasks_successful > 0:
         group_status = "partial"
@@ -93,7 +98,7 @@ def group_run(name):
 
     print_run_table(results)
     click.echo(f"Group {name} executed.")
-    if group_status != "success":
+    if group_status not in ("success", "skipped"):
         sys.exit(1)
 
 

@@ -8,15 +8,15 @@ so a scheduled group that missed its last due time counts as overdue.
 import os
 from datetime import datetime, timedelta
 
-from .config import load_config
+from .config import load_config, get_config_value
 from .cron import last_due_time
 from .exporters import get_schedule_string
-from .helpers import parse_timestamp
+from .helpers import parse_timestamp, on_this_platform
 from .runtime import filter_runtime_to_config, load_runtime_state, load_tray_state
 
 # How late a scheduled group may be before it is overdue, on top of its last run time
 OVERDUE_GRACE = timedelta(minutes=5)
-ICONS = {"success": "✓", "failed": "✗", "partial": "✗", "overdue": "⚠", "never": "–"}
+ICONS = {"success": "✓", "failed": "✗", "partial": "✗", "overdue": "⚠", "never": "–", "skipped": "○"}
 
 
 def _when(value):
@@ -54,23 +54,26 @@ def _group_row(group, state, last_run, now):
     return state.get("last_status", "never"), ago(last_run, now)
 
 
-def compute_status(config, runtime_state, ignore_failures_before=0, now=None):
+def compute_status(config, runtime_state, ignore_failures_before=0, now=None, skip_warn_after=0):
     """Work out the icon colour, tooltip and menu rows.
 
     Red: a task or group failed (and the user did not clear it with "Clear error state"),
     or a config file does not load (its tasks and groups would otherwise just vanish).
-    Yellow: nothing failed, but a scheduled group is overdue.
-    Green: everything else. A task or group that never ran is shown but does not count.
+    Yellow: nothing failed, but a scheduled group is overdue, or a task skipped
+    skip_warn_after runs in a row (0 = never warn).
+    Green: everything else. A task or group that never ran, or that was skipped on
+    purpose, is shown but does not count. Tasks for another platform are not shown.
 
     Returns:
         dict with 'colour', 'tooltip', 'groups' and 'tasks'; each row is (icon, name, detail, status)
     """
     now = now or datetime.now()
     ignore_before = datetime.fromtimestamp(ignore_failures_before or 0)
-    failed, overdue, rows = [], [], {"groups": [], "tasks": []}
+    failed, overdue, skipping, rows = [], [], [], {"groups": [], "tasks": []}
 
     for kind in ("groups", "tasks"):
         entries = [e for e in config.get(kind, []) if isinstance(e, dict) and isinstance(e.get("name"), str)]
+        entries = [e for e in entries if on_this_platform(e)]
         for entry in sorted(entries, key=lambda e: e["name"]):
             name = entry["name"]
             state = runtime_state.get(kind, {}).get(name) or {}
@@ -81,6 +84,12 @@ def compute_status(config, runtime_state, ignore_failures_before=0, now=None):
                 status, detail = state.get("last_status", "never"), ago(last_run, now)
             else:
                 status, detail = "never", "never run"
+            if status == "skipped" and kind == "tasks":
+                skips = state.get("consecutive_skips") or 0
+                detail = f"skipped: {state.get('skip_reason') or 'no reason recorded'}, {detail}"
+                if skip_warn_after and isinstance(skips, int) and skips >= skip_warn_after:
+                    skipping.append(name)
+                    detail += f" ({skips} times in a row)"
             if status in ("failed", "partial") and last_run and last_run > ignore_before:
                 failed.append(name)
             elif status == "overdue":
@@ -91,12 +100,13 @@ def compute_status(config, runtime_state, ignore_failures_before=0, now=None):
     failed += [f"cannot load {os.path.basename(path)}" for path in config.get("_load_errors", {})]
     if failed:
         colour = "red"
-    elif overdue:
+    elif overdue or skipping:
         colour = "yellow"
     else:
         colour = "green"
     problems = [f"{len(failed)} failed: {', '.join(failed)}"] if failed else []
     problems += [f"{len(overdue)} overdue: {', '.join(overdue)}"] if overdue else []
+    problems += [f"{len(skipping)} skipped repeatedly: {', '.join(skipping)}"] if skipping else []
     if problems:
         tooltip = "signalbox: " + "; ".join(problems)
     elif any(row[3] != "never" for kind_rows in rows.values() for row in kind_rows):
@@ -111,4 +121,6 @@ def read_status(now=None):
     config = load_config(suppress_warnings=True)
     runtime_state = filter_runtime_to_config(load_runtime_state(), config)
     ignore_before = load_tray_state().get("ignore_failures_before", 0)
-    return compute_status(config, runtime_state, ignore_before, now)
+    # Fallback matches the value in the shipped signalbox.yaml
+    skip_warn_after = get_config_value("execution.skip_warn_after", 3)
+    return compute_status(config, runtime_state, ignore_before, now, skip_warn_after)

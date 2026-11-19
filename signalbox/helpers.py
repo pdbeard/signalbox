@@ -212,3 +212,19 @@ def mask_secrets(text, secrets):
     for secret in sorted({s for s in secrets if len(s) >= MIN_SECRET_LENGTH}, key=len, reverse=True):
         text = text.replace(secret, "*****")
     return text
+
+
+# The platforms signalbox runs on, as platform.system().lower() names them
+PLATFORMS = ("darwin", "linux")
+
+
+def current_platform():
+    import platform
+
+    return platform.system().lower()
+
+
+def on_this_platform(entry):
+    """True unless the task has 'platforms' and this machine is not one of them."""
+    platforms = entry.get("platforms") if isinstance(entry, dict) else None
+    return not platforms or current_platform() in platforms

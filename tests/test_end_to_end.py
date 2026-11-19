@@ -1029,3 +1029,192 @@ class TestGracefulStop:
         result = run("task", "run", "t")
 
         assert result.exit_code == 2 and "execution.stop_grace_seconds must be a number" in result.output
+
+
+def _other_platform():
+    from signalbox.helpers import current_platform
+
+    return "linux" if current_platform() == "darwin" else "darwin"
+
+
+def _start_in_background(name, ready_file):
+    """Start `signalbox task run NAME` in another process and wait until its command has started."""
+    proc = subprocess.Popen([sys.executable, "-m", "signalbox", "task", "run", name], stdout=subprocess.DEVNULL)
+    deadline = time.time() + 10
+    while not ready_file.exists():
+        assert time.time() < deadline, "background task did not start"
+        time.sleep(0.05)
+    return proc
+
+
+def _stop(proc):
+    proc.send_signal(signal.SIGINT)
+    proc.wait(timeout=15)
+
+
+class TestRunIf:
+    def test_failing_check_skips_counts_and_a_real_run_resets(self, sb_home, run):
+        marker, flag = sb_home.path / "ran", sb_home.path / "ready"
+        sb_home.write_tasks([task("cond", f"touch {marker}", run_if=f"test -e {flag}")])
+
+        result = run("task", "run", "cond")
+        assert result.exit_code == 0 and "skipped: run_if failed" in result.output
+        assert not marker.exists()
+        state = runtime(sb_home, "tasks")["cond"]
+        assert state["last_status"] == "skipped" and state["consecutive_skips"] == 1
+        assert sb_home.logs("cond") == []  # a skip writes no log file
+
+        run("task", "run", "cond")
+        assert runtime(sb_home, "tasks")["cond"]["consecutive_skips"] == 2
+
+        flag.touch()
+        assert run("task", "run", "cond").exit_code == 0 and marker.exists()
+        assert "consecutive_skips" not in runtime(sb_home, "tasks")["cond"]
+
+    def test_every_check_in_a_list_must_pass(self, sb_home, run):
+        sb_home.write_tasks([task("two", "echo ran", run_if=["true", "false"])])
+
+        result = run("task", "run", "two")
+
+        assert result.exit_code == 0 and "run_if failed: false" in result.output
+
+    def test_a_check_that_cannot_run_is_an_error_not_a_skip(self, sb_home, run):
+        sb_home.write_tasks([task("typo", "echo ran", run_if="no_such_command_xyz")])
+
+        result = run("task", "run", "typo")
+
+        assert result.exit_code == 2 and "run_if check cannot run (exit 127)" in result.output
+
+    def test_repeated_skips_turn_status_yellow(self, sb_home, run):
+        sb_home.write_settings({"execution": {"skip_warn_after": 2}})
+        sb_home.write_tasks([task("cond", "true", run_if="false")])
+
+        run("task", "run", "cond")
+        assert run("status").exit_code == 0  # one skip is fine
+
+        run("task", "run", "cond")
+        result = run("status")
+        assert result.exit_code == 1 and "1 skipped repeatedly: cond" in result.output
+
+    def test_skipped_task_does_not_fail_or_stop_a_group(self, sb_home, run):
+        marker = sb_home.path / "second_ran"
+        sb_home.write_tasks([task("cond", "true", run_if="false"), task("after", f"touch {marker}")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["cond", "after"], "stop_on_error": True}])
+
+        result = run("group", "run", "g")
+
+        assert result.exit_code == 0, result.output
+        assert marker.exists()
+        assert runtime(sb_home, "groups")["g"]["last_status"] == "success"
+
+    def test_group_of_only_skipped_tasks_is_skipped_not_failed(self, sb_home, run):
+        sb_home.write_tasks([task("cond", "true", run_if="false")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["cond"], "execution": "parallel"}])
+
+        result = run("group", "run", "g")
+
+        assert result.exit_code == 0 and "Skipped: cond" in result.output
+        assert runtime(sb_home, "groups")["g"]["last_status"] == "skipped"
+
+    def test_run_all_with_a_skip_succeeds(self, sb_home, run):
+        sb_home.write_tasks([task("cond", "true", run_if="false"), task("ok")])
+
+        result = run("task", "run", "--all")
+
+        assert result.exit_code == 0 and "skipped" in result.output
+
+
+class TestOverlap:
+    def _long_task(self, sb_home, **extra):
+        started = sb_home.path / "started"
+        second = sb_home.path / "second"
+        # The first run marks itself and sleeps; a run that starts while it sleeps only marks "second"
+        command = f"if [ -e {started} ]; then touch {second}; else touch {started}; sleep 2; fi"
+        sb_home.write_tasks([task("long", command, **extra)])
+        return started, second
+
+    def test_default_skips_a_run_while_the_last_one_is_still_going(self, sb_home, run):
+        started, second = self._long_task(sb_home)
+        proc = _start_in_background("long", started)
+        try:
+            result = run("task", "run", "long")
+        finally:
+            _stop(proc)
+
+        assert result.exit_code == 0 and "skipped: already running" in result.output
+        assert not second.exists()
+
+    def test_allow_starts_a_second_copy(self, sb_home, run):
+        started, second = self._long_task(sb_home, overlap="allow")
+        proc = _start_in_background("long", started)
+        try:
+            result = run("task", "run", "long")
+        finally:
+            _stop(proc)
+
+        assert result.exit_code == 0 and second.exists()
+
+    def test_wait_runs_after_the_first_run_ends(self, sb_home, run):
+        started, second = self._long_task(sb_home, overlap="wait")
+        proc = _start_in_background("long", started)
+        try:
+            begin = time.monotonic()
+            result = run("task", "run", "long")
+            waited = time.monotonic() - begin
+        finally:
+            proc.wait(timeout=15)
+
+        assert result.exit_code == 0 and second.exists()
+        assert waited > 0.5  # it waited for the first run's sleep
+
+
+class TestPlatforms:
+    def test_task_for_another_platform_is_skipped_unrecorded_and_hidden(self, sb_home, run):
+        sb_home.write_tasks([task("elsewhere", "touch ran", platforms=[_other_platform()]), task("here")])
+
+        result = run("task", "run", "elsewhere")
+
+        assert result.exit_code == 0 and "not for this platform" in result.output
+        assert "elsewhere" not in runtime(sb_home, "tasks")
+        run("task", "run", "here")
+        assert "elsewhere" not in run("status").output
+
+
+class TestRunConditionValidation:
+    def test_bad_overlap_platforms_and_run_if_are_rejected(self, sb_home, run):
+        sb_home.write_tasks([task("bad", "true", overlap="sometimes", platforms=["macos"], run_if=[])])
+
+        result = run("task", "run", "bad")
+
+        assert result.exit_code == 2
+        for message in ("'overlap' must be one of", "'platforms' must be a list of", "'run_if' must be a command"):
+            assert message in result.output
+
+
+class TestSkipReviewFixes:
+    def test_validate_ignores_the_env_file_of_a_task_for_another_platform(self, sb_home, run):
+        sb_home.write_tasks([task("there", "true", platforms=[_other_platform()], env_file="/etc/nowhere/app.env")])
+
+        assert run("validate").exit_code == 0
+
+    def test_clearing_a_tasks_logs_keeps_its_lock_files(self, sb_home, run):
+        sb_home.write_tasks([task("t")])
+        run("task", "run", "t")
+        lock = sb_home.path / "logs" / "t" / ".run.lock"
+        assert lock.exists()
+
+        assert run("log", "clear", "--task", "t").exit_code == 0
+
+        assert lock.exists() and sb_home.logs("t") == []
+
+    def test_group_where_nothing_ran_sends_no_notification(self, sb_home, run, monkeypatch):
+        from signalbox import notifications
+
+        sent = []
+        monkeypatch.setattr(notifications, "send_notification", lambda *a, **k: sent.append(a) or True)
+        sb_home.write_settings({"group_notifications": {"enabled": True, "on_failure_only": False}})
+        sb_home.write_tasks([task("cond", "true", run_if="false")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["cond"]}])
+
+        assert run("group", "run", "g").exit_code == 0
+        assert sent == []
