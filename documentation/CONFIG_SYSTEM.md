@@ -87,6 +87,7 @@ The validate command does these checks:
 | `execution.capture_stderr` | boolean | true | Write stderr to the logs |
 | `execution.max_parallel_workers` | number | 5 | The maximum number of tasks that run at the same time in a parallel group |
 | `execution.skip_warn_after` | number | 3 | After this number of skipped runs in a row (run_if or overlap), a task turns the tray yellow and `signalbox status` exits with 1. 0 never warns. |
+| `scheduling.catch_up_minutes` | number | 0 | Every this number of minutes, cron runs `signalbox run-overdue`, which runs the scheduled groups that missed their time. `signalbox export-cron --install` adds or removes the cron line. 0 = off. From 0 to 59. |
 | `execution.stop_grace_seconds` | number | 5 | When signalbox stops a task (time limit or Ctrl+C), it sends SIGTERM, and then SIGKILL after this number of seconds. 0 sends SIGKILL at once. |
 | `logging.max_file_size_mb` | number | 5 | The maximum size of one log file, in MB |
 | `logging.include_command` | boolean | true | Write the command in the log |

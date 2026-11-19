@@ -308,7 +308,8 @@ ls -l ~/.config/signalbox/logs/*/
 - Signalbox puts the paths in shell quotes.
 - Signalbox writes each description on one line. Thus, a description cannot add a systemd setting or a cron line.
 - A system unit (`export-systemd` without `--user`) has `User=<you>`. Thus, the tasks run as your user, never as root.
-- `export-cron --install` changes only the crontab line of that group and signalbox home. Your other cron jobs do not change. If signalbox cannot read your crontab, it does not write it.
+- `export-cron --install` changes only the crontab lines of signalbox for that signalbox home. Your other cron jobs do not change. If signalbox cannot read your crontab, it does not write it.
+- Before each change, signalbox saves your old crontab in `backups/crontab-<time>.txt` in the signalbox home (permissions 0o600, the newest 20). To go back, use `crontab backups/crontab-<time>.txt`.
 
 ### 6. Safe Notifications
 

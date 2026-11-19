@@ -46,6 +46,14 @@ execution:
   # 0 = never warn.
   skip_warn_after: 3
 
+# Scheduling settings
+scheduling:
+  # cron does not run a job while the computer is asleep. With a value here,
+  # cron also runs `signalbox run-overdue` every N minutes, which runs each
+  # scheduled group that missed its time. `signalbox export-cron --install`
+  # adds or removes that cron line. 0 = off.
+  catch_up_minutes: 0
+
 # Logging settings
 logging:
   # Security: Maximum log file size in MB to prevent disk filling

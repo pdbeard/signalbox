@@ -11,6 +11,8 @@ from .. import exporters
 from .. import notifications
 from .. import alerts
 from ..helpers import format_timestamp, display_time
+from ..exceptions import ValidationError
+from ..validator import validate_run_settings
 from .utils import handle_exceptions
 
 
@@ -142,34 +144,68 @@ def export_systemd(group_name, user):
 
 
 @click.command()
-@click.argument("group_name")
+@click.argument("group_name", required=False)
+@click.option("--all", "export_all", is_flag=True, help="Every group that has a schedule")
 @click.option(
-    "--install", is_flag=True, help="Also add the entry to your crontab (replaces an older one for this group)"
+    "--install",
+    is_flag=True,
+    help="Also put the entries in your crontab (replaces older ones; makes a backup first)",
 )
 @handle_exceptions
-def export_cron(group_name, install):
-    """Generate crontab entry for a scheduled group."""
-    group = find_entry(load_config(), "groups", group_name)
+def export_cron(group_name, export_all, install):
+    """Generate crontab entries for one scheduled group, or for all of them (--all).
 
-    result = exporters.export_cron(group, group_name)
+    With --install, signalbox also changes your crontab: it replaces the earlier
+    lines of these groups, adds or removes the catch-up line (scheduling.catch_up_minutes),
+    and keeps all other lines. It saves the old crontab in backups/ first.
+    """
+    if bool(group_name) == export_all:
+        click.echo("Error: Give a group name or --all", err=True)
+        sys.exit(2)
+    config = load_config()
+    if export_all:
+        names = [g["name"] for g in config.get("groups", []) if isinstance(g, dict) and "schedule" in g]
+        if not names:
+            click.echo("No scheduled groups defined.")
+    else:
+        names = [group_name]
 
-    if not result.success:
-        click.echo(f"Error: {result.error}", err=True)
-        sys.exit(1)
+    results = []
+    for name in names:
+        result = exporters.export_cron(find_entry(config, "groups", name), name)
+        if not result.success:
+            click.echo(f"Error: {result.error}", err=True)
+            sys.exit(1)
+        click.echo(f"✓ Generated {result.files[0]}")
+        results.append(result)
 
-    # Show generated file
-    click.echo(f"✓ Generated {result.files[0]}")
     if install:
-        replaced = exporters.install_cron_entry(result.cron_entry, group_name)
-        click.echo(f"✓ {'Updated' if replaced else 'Added'} the entry in your crontab:")
-        click.echo(result.cron_entry)
+        # The catch-up line goes in with the entries: an invalid setting must not reach the crontab
+        errors = validate_run_settings()
+        if errors:
+            raise ValidationError("; ".join(errors))
+        entries = [r.cron_entry for r in results]
+        removed, backup = exporters.install_cron_entries(entries, None if export_all else names)
+        if backup is None:
+            click.echo("Your crontab already has these entries. Nothing changed.")
+        else:
+            click.echo(f"✓ Updated your crontab ({removed} old line(s) replaced). Old crontab saved to: {backup}")
+        for entry in entries:
+            click.echo(entry)
+        minutes = exporters.catch_up_minutes()
+        click.echo(
+            f"Catch-up: {'every %d minutes (run-overdue)' % minutes if minutes else 'off'} (scheduling.catch_up_minutes)"
+        )
         return
-    click.echo("")
 
-    # Show installation instructions
-    instructions = exporters.get_cron_install_instructions(result.files[0], result.cron_entry, group)
-    for instruction in instructions:
-        click.echo(instruction)
+    if len(results) == 1:
+        click.echo("")
+        group = find_entry(config, "groups", names[0])
+        for instruction in exporters.get_cron_install_instructions(results[0].files[0], results[0].cron_entry, group):
+            click.echo(instruction)
+    else:
+        for result in results:
+            click.echo(result.cron_entry)
 
 
 @click.command()
@@ -265,3 +301,51 @@ def status():
         for icon, name, detail, row_status in result[kind]:
             click.echo(f"  {click.style(icon, fg=ROW_COLOURS.get(row_status))} {name}  {detail}")
     sys.exit(STATUS_EXIT_CODES[result["colour"]])
+
+
+@click.command(name="run-overdue")
+@handle_exceptions
+def run_overdue():
+    """Run each scheduled group that did not run when it was due.
+
+    For example, cron does not run a job while the computer is asleep. Set
+    scheduling.catch_up_minutes and run `signalbox export-cron --all --install`
+    to let cron run this command regularly. A group counts as overdue by the same
+    rule as in the tray and `signalbox status`, so a group that cron just ran is
+    not run again.
+    """
+    import fcntl
+
+    from ..config import resolve_path
+    from ..tray_status import read_status
+    from .group import run_group
+    from ..exceptions import SignalboxError
+
+    # One catch-up at a time: a group is recorded only when it ends, so a second catch-up
+    # that starts while a slow group still runs would see it as overdue and start it again
+    os.makedirs(resolve_path("runtime"), exist_ok=True)
+    lock = open(resolve_path("runtime/.run-overdue.lock"), "w")
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        click.echo("A catch-up is already running.")
+        return
+
+    overdue = [name for _icon, name, _detail, status in read_status()["groups"] if status == "overdue"]
+    if not overdue:
+        click.echo("No group is overdue.")
+        return
+    failed = []
+    for name in overdue:
+        click.echo(f"\nCatching up: {name}")
+        try:
+            status = run_group(name)
+        except SignalboxError as e:
+            click.echo(f"Error: {e.message}", err=True)
+            status = "failed"
+        if status not in ("success", "skipped"):
+            failed.append(name)
+    if failed:
+        click.echo(f"\n{len(failed)} group(s) failed: {', '.join(failed)}", err=True)
+        sys.exit(1)

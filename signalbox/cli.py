@@ -9,7 +9,16 @@ from .commands.task import task, task_list, task_run
 from .commands.group import group
 from .commands.log import log
 from .commands.config import config, config_validate
-from .commands.misc import init, list_schedules, export_systemd, export_cron, notify_test, alerts_cmd, status
+from .commands.misc import (
+    init,
+    list_schedules,
+    export_systemd,
+    export_cron,
+    notify_test,
+    alerts_cmd,
+    status,
+    run_overdue,
+)
 
 
 @click.group(help="""
@@ -22,6 +31,7 @@ PRIMARY COMMANDS:
   log             View and manage execution logs
   config          Configuration management
   status          Show failures and overdue groups (exit 0 OK, 1 overdue, 2 failed)
+  run-overdue     Run the scheduled groups that missed their time
 
 \b
 QUICK COMMANDS (shortcuts):
@@ -69,6 +79,7 @@ cli.add_command(export_cron)
 cli.add_command(notify_test)
 cli.add_command(alerts_cmd, name="alerts")
 cli.add_command(status)
+cli.add_command(run_overdue)
 
 
 # Root-level shortcuts for frequently used commands

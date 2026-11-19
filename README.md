@@ -13,6 +13,8 @@ Signalbox is a command-line tool that runs and monitors shell tasks. It keeps a 
 - Make systemd and cron files for scheduled groups
 - Show the status in the system tray: red when something failed, yellow when a scheduled group did not run (optional)
 
+**New to signalbox?** The [Quickstart](documentation/QUICKSTART.md) takes you step by step from installation to a scheduled website check with the tray, in about 15 minutes.
+
 ## Installation
 
 ### Recommended: Global Install with pipx
@@ -133,7 +135,9 @@ signalbox --config /path/to/config/signalbox.yaml list
 ### Scheduling Exports
 
 - `signalbox export-systemd GROUP [--user]`: make the systemd service file and timer file
-- `signalbox export-cron GROUP [--install]`: make a crontab line. With `--install`, also add it to your crontab (an older line for the same group and signalbox home is replaced; your other jobs are kept).
+- `signalbox export-cron GROUP [--install]`: make a crontab line. With `--install`, also add it to your crontab (an older line for the same group and signalbox home is replaced; your other jobs are kept). Before each change, signalbox saves your old crontab in `backups/` in the signalbox home.
+- `signalbox export-cron --all [--install]`: the same for every group that has a `schedule`. With `--install`, it also removes the lines of groups that no longer have a schedule.
+- `signalbox run-overdue`: run each scheduled group that did not run when it was due (for example, because the computer was asleep). To let cron run it regularly, set `scheduling.catch_up_minutes` (for example, 10) and run `signalbox export-cron --all --install`.
 
 ### Tray App
 
@@ -332,6 +336,7 @@ This command finds these problems:
 
 The `documentation/` directory has these guides:
 
+- **[Quickstart](documentation/QUICKSTART.md)**: a tutorial from installation to a scheduled check
 - **[Configuration Guide](documentation/CONFIG_GUIDE.md)**: global settings, tasks and groups
 - **[Writing Scripts Guide](documentation/WRITING_SCRIPTS.md)**: how to write scripts that work well with signalbox
 - **[File Structure](documentation/FILE_STRUCTURE.md)**: the directories, and how to use more than one file

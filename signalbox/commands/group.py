@@ -32,6 +32,20 @@ def group():
 @handle_exceptions
 def group_run(name):
     """Run a group of tasks."""
+    if run_group(name) not in ("success", "skipped"):
+        sys.exit(1)
+
+
+def run_group(name):
+    """Run a group, record its result and print the run table. Used by `group run` and `run-overdue`.
+
+    Returns:
+        str: the group status: 'success', 'partial', 'failed' or 'skipped'
+
+    Raises:
+        GroupNotFoundError: if there is no group with this name
+        ValidationError: if the group or a task it refers to is not valid (recorded as failed)
+    """
     config = load_config()
     group_item = find_entry(config, "groups", name)
     if not group_item:
@@ -98,8 +112,7 @@ def group_run(name):
 
     print_run_table(results)
     click.echo(f"Group {name} executed.")
-    if group_status not in ("success", "skipped"):
-        sys.exit(1)
+    return group_status
 
 
 @group.command(name="list")

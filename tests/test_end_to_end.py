@@ -901,7 +901,9 @@ class TestCronInstall:
 
         assert result.exit_code == 0 and "Updated" in result.output
         lines = crontab.read_text().splitlines()
-        assert len(lines) == 2 and "/usr/bin/other-job" in lines[0] and lines[1].startswith("0 3 * * * ")
+        # The group's line is replaced where it was; the other job is kept
+        assert lines[1] == "5 4 * * * /usr/bin/other-job"
+        assert len(lines) == 2 and lines[0].startswith("0 3 * * * ") and lines[0].endswith(" group run g")
 
     def test_unreadable_crontab_is_never_overwritten(self, sb_home, run, crontab, tmp_path):
         (tmp_path / "bin" / "crontab").write_text(
@@ -1218,3 +1220,137 @@ class TestSkipReviewFixes:
 
         assert run("group", "run", "g").exit_code == 0
         assert sent == []
+
+
+class TestCrontabSafetyAndCatchUp(TestCronInstall):
+    """Uses the fake crontab of TestCronInstall."""
+
+    def _groups(self, sb_home):
+        sb_home.write_tasks([task("t")])
+        sb_home.write_groups(
+            [
+                {"name": "a", "description": "d", "tasks": ["t"], "schedule": "0 * * * *"},
+                {"name": "b", "description": "d", "tasks": ["t"], "schedule": "0 12 * * *"},
+                {"name": "manual", "description": "d", "tasks": ["t"]},
+            ]
+        )
+
+    def test_every_change_saves_a_backup_first_and_no_change_writes_nothing(self, sb_home, run, crontab):
+        self._groups(sb_home)
+        crontab.write_text("5 4 * * * /usr/bin/other-job\n")
+
+        assert run("export-cron", "a", "--install").exit_code == 0
+        backups = sorted((sb_home.path / "backups").glob("crontab-*.txt"))
+        assert len(backups) == 1 and backups[0].read_text() == "5 4 * * * /usr/bin/other-job\n"
+        assert oct(backups[0].stat().st_mode & 0o777) == "0o600"
+
+        result = run("export-cron", "a", "--install")  # the same again: nothing to change
+        assert "Nothing changed" in result.output
+        assert len(list((sb_home.path / "backups").glob("crontab-*.txt"))) == 1
+
+    def test_catch_up_line_follows_the_setting(self, sb_home, run, crontab):
+        self._groups(sb_home)
+        sb_home.write_settings({"scheduling": {"catch_up_minutes": 10}})
+        assert run("export-cron", "a", "--install").exit_code == 0
+        lines = crontab.read_text().splitlines()
+        assert any(line.startswith("*/10 * * * * ") and line.endswith(" run-overdue") for line in lines)
+
+        sb_home.write_settings({"scheduling": {"catch_up_minutes": 0}})
+        result = run("export-cron", "a", "--install")
+        assert result.exit_code == 0 and "Catch-up: off" in result.output
+        assert not any("run-overdue" in line for line in crontab.read_text().splitlines())
+
+    def test_all_installs_every_scheduled_group_and_drops_stale_ones(self, sb_home, run, crontab):
+        self._groups(sb_home)
+        home = sb_home.path
+        crontab.write_text(
+            "5 4 * * * /usr/bin/other-job\n"
+            f"0 1 * * * cd {home} && SIGNALBOX_HOME={home} signalbox group run removed_group\n"
+        )
+
+        result = run("export-cron", "--all", "--install")
+
+        assert result.exit_code == 0, result.output
+        text = crontab.read_text()
+        assert "/usr/bin/other-job" in text and "removed_group" not in text
+        assert text.count(" group run a") == 1 and text.count(" group run b") == 1 and "group run manual" not in text
+
+    def test_group_name_or_all_is_required(self, sb_home, run, crontab):
+        self._groups(sb_home)
+        assert run("export-cron").exit_code == 2
+        assert run("export-cron", "a", "--all").exit_code == 2
+
+
+class TestRunOverdue:
+    def _set_last_run(self, sb_home, group, when):
+        path = next((sb_home.path / "runtime" / "groups").glob("runtime_*.yaml"))
+        state = yaml.safe_load(path.read_text())
+        state["groups"][group]["last_run"] = format_timestamp(when)
+        path.write_text(yaml.dump(state))
+
+    def test_runs_only_the_groups_that_missed_their_time(self, sb_home, run):
+        marker_late, marker_ok = sb_home.path / "late_ran", sb_home.path / "ok_ran"
+        sb_home.write_tasks([task("late_task", f"touch {marker_late}"), task("ok_task", f"touch {marker_ok}")])
+        sb_home.write_groups(
+            [
+                {"name": "late", "description": "d", "tasks": ["late_task"], "schedule": "*/15 * * * *"},
+                {"name": "ontime", "description": "d", "tasks": ["ok_task"], "schedule": "0 0 1 1 *"},
+                {"name": "never", "description": "d", "tasks": ["ok_task"], "schedule": "*/15 * * * *"},
+            ]
+        )
+        run("group", "run", "late")
+        run("group", "run", "ontime")
+        marker_late.unlink()
+        marker_ok.unlink()
+        self._set_last_run(sb_home, "late", datetime(2020, 1, 1))  # missed many runs
+
+        result = run("run-overdue")
+
+        assert result.exit_code == 0, result.output
+        assert "Catching up: late" in result.output and marker_late.exists()
+        assert not marker_ok.exists()  # "ontime" is not due again; "never" has never run (not overdue)
+        assert run("run-overdue").output.strip() == "No group is overdue."
+
+    def test_exit_code_is_1_when_a_caught_up_group_fails(self, sb_home, run):
+        sb_home.write_tasks([task("bad", "exit 1")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["bad"], "schedule": "*/15 * * * *"}])
+        run("group", "run", "g")
+        self._set_last_run(sb_home, "g", datetime(2020, 1, 1))
+
+        result = run("run-overdue")
+
+        assert result.exit_code == 1 and "1 group(s) failed: g" in result.output
+
+    def test_invalid_catch_up_setting_is_rejected(self, sb_home, run):
+        sb_home.write_settings({"scheduling": {"catch_up_minutes": 90}})
+        sb_home.write_tasks([task("t")])
+
+        assert run("validate").exit_code == 2
+
+
+class TestCatchUpReviewFixes:
+    def test_a_second_catch_up_waits_for_the_first(self, sb_home, run):
+        import fcntl
+
+        (sb_home.path / "runtime").mkdir(exist_ok=True)
+        with open(sb_home.path / "runtime" / ".run-overdue.lock", "w") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)  # a catch-up "still running"
+            result = run("run-overdue")
+
+        assert result.exit_code == 0 and "A catch-up is already running." in result.output
+
+    def test_backups_keep_the_newest_20_and_nothing_else_is_deleted(self, sb_home):
+        from signalbox import exporters
+
+        backups = sb_home.path / "backups"
+        backups.mkdir()
+        for day in range(1, 26):
+            (backups / f"crontab-202601{day:02d}_000000_000000.txt").write_text("old\n")
+        (backups / "notes.txt").write_text("mine\n")
+
+        newest = exporters.backup_crontab(["0 * * * * job"])
+
+        kept = sorted(p.name for p in backups.glob("crontab-*.txt"))
+        assert len(kept) == 20 and kept[-1] == os.path.basename(newest)
+        assert kept[0] == "crontab-20260107_000000_000000.txt"  # the 6 oldest were deleted
+        assert (backups / "notes.txt").exists()

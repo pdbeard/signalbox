@@ -1,6 +1,7 @@
 # Export functionality for systemd and cron
 
 import getpass
+from datetime import datetime
 import os
 import shlex
 import shutil
@@ -10,7 +11,7 @@ import sys
 from .config import get_config_value, find_config_home, resolve_path
 from .cron import schedule_error
 from .exceptions import SignalboxError
-from .helpers import is_valid_name
+from .helpers import is_valid_name, format_timestamp
 
 CRON_MACROS = {
     "@hourly": "hourly",
@@ -418,33 +419,123 @@ def export_cron(group, group_name):
     return result
 
 
-def install_cron_entry(cron_entry, group_name):
-    """Add cron_entry to the user's crontab, replacing an earlier entry for this group and signalbox home.
+# Each crontab change first saves the old crontab here (in the signalbox home); the newest ones are kept
+CRONTAB_BACKUP_DIR = "backups"
+CRONTAB_BACKUPS_KEPT = 20
+
+
+def read_crontab():
+    """The current crontab as a list of lines ([] if the user has none).
+
+    Raises:
+        SignalboxError: if the crontab cannot be read. Never write a crontab built from a
+            listing that failed: it would delete the user's other jobs.
+    """
+    listed = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+    if listed.returncode == 0:
+        return listed.stdout.splitlines()
+    if "no crontab" in listed.stderr.lower():
+        return []
+    raise SignalboxError(f"Cannot read your crontab: {listed.stderr.strip()}")
+
+
+def backup_crontab(lines):
+    """Save lines to backups/crontab-<timestamp>.txt (0o600) and keep only the newest backups. Returns the path."""
+    directory = resolve_path(CRONTAB_BACKUP_DIR)
+    os.makedirs(directory, exist_ok=True)
+    os.chmod(directory, 0o700)  # a crontab can hold paths and tokens
+    path = os.path.join(directory, f"crontab-{format_timestamp(datetime.now())}.txt")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write("".join(line + "\n" for line in lines))
+    backups = sorted(f for f in os.listdir(directory) if f.startswith("crontab-") and f.endswith(".txt"))
+    for old in backups[:-CRONTAB_BACKUPS_KEPT]:
+        os.remove(os.path.join(directory, old))
+    return path
+
+
+def change_crontab(is_replaced, new_lines):
+    """Remove the lines for which is_replaced(line) is true and put new_lines where the first of them was.
+
+    Saves the old crontab with backup_crontab() before it writes. When the result is the
+    same as now, it writes nothing and makes no backup.
 
     Returns:
-        int: the number of old entries replaced (0 for a new install)
+        tuple: (number of lines removed, backup path or None if nothing changed)
 
     Raises:
         SignalboxError: if the crontab cannot be read or written (it is left unchanged)
     """
-    listed = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-    if listed.returncode == 0:
-        lines = listed.stdout.splitlines()
-    elif "no crontab" in listed.stderr.lower():
-        lines = []
-    else:
-        # Never write a crontab built from a listing that failed: it would delete the user's other jobs
-        raise SignalboxError(f"Cannot read your crontab: {listed.stderr.strip()}")
-
-    home_part = f"SIGNALBOX_HOME={shlex.quote(get_task_dir())} "
-    suffix = f" group run {group_name}"
-    kept = [line for line in lines if not (line.rstrip().endswith(suffix) and home_part in line)]
+    lines = read_crontab()
+    result, placed = [], False
+    for line in lines:
+        if is_replaced(line):
+            if not placed:
+                result.extend(new_lines)
+                placed = True
+            continue
+        result.append(line)
+    if not placed:
+        result.extend(new_lines)
+    if result == lines:
+        return 0, None
+    backup = backup_crontab(lines)
     written = subprocess.run(
-        ["crontab", "-"], input="\n".join(kept + [cron_entry]) + "\n", capture_output=True, text=True
+        ["crontab", "-"], input="".join(line + "\n" for line in result), capture_output=True, text=True
     )
     if written.returncode != 0:
-        raise SignalboxError(f"Cannot write your crontab: {written.stderr.strip()}")
-    return len(lines) - len(kept)
+        raise SignalboxError(f"Cannot write your crontab: {written.stderr.strip()} (the old one is in {backup})")
+    return len(lines) - (len(result) - len(new_lines)), backup
+
+
+def _ours(line):
+    """True for a crontab line that signalbox wrote for this signalbox home."""
+    return f"SIGNALBOX_HOME={shlex.quote(get_task_dir())} " in line
+
+
+def is_group_line(line, group_name=None):
+    """A line that runs group_name (or any group, if None) for this signalbox home."""
+    tail = line.rstrip()
+    if not _ours(line):
+        return False
+    return tail.endswith(f" group run {group_name}") if group_name else " group run " in tail
+
+
+def is_catch_up_line(line):
+    return _ours(line) and line.rstrip().endswith(" run-overdue")
+
+
+def catch_up_minutes():
+    """scheduling.catch_up_minutes: how often cron runs `signalbox run-overdue` (0 = no catch-up).
+
+    Fallback matches the value in the shipped signalbox.yaml.
+    """
+    return get_config_value("scheduling.catch_up_minutes", 0)
+
+
+def catch_up_entry(minutes):
+    home = shlex.quote(get_task_dir())
+    return f"*/{minutes} * * * * cd {home} && SIGNALBOX_HOME={home} {get_signalbox_command()} run-overdue"
+
+
+def install_cron_entries(entries, group_names=None):
+    """Put the group entries in the crontab and add or remove the catch-up line to match the setting.
+
+    group_names: the groups whose old lines are replaced; None replaces every signalbox
+    group line of this home (so groups that lost their schedule lose their line too).
+
+    Returns:
+        tuple: (number of old lines removed, backup path or None if nothing changed)
+    """
+    minutes = catch_up_minutes()
+    new_lines = list(entries) + ([catch_up_entry(minutes)] if minutes else [])
+
+    def replaced(line):
+        if is_catch_up_line(line):
+            return True
+        return is_group_line(line) if group_names is None else any(is_group_line(line, n) for n in group_names)
+
+    return change_crontab(replaced, new_lines)
 
 
 def get_cron_install_instructions(cron_file, cron_entry, group):

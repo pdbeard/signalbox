@@ -20,7 +20,8 @@ This document gives the directories and files that signalbox uses.
 │   ├── groups/
 │   └── tray_state.json
 ├── systemd/                  # Output of `signalbox export-systemd`
-└── cron/                     # Output of `signalbox export-cron`
+├── cron/                     # Output of `signalbox export-cron`
+└── backups/                  # Your crontab before each change that signalbox made (the newest 20)
 ```
 
 ## Configuration System

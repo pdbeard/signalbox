@@ -97,6 +97,11 @@ def validate_run_settings():
         if _invalid_whole_number(value, minimum):
             errors.append(f"{key} must be a whole number >= {minimum}, got {value!r}")
 
+    # A cron minute step: */1 to */59 (0 = no catch-up line)
+    catch_up = get_config_value("scheduling.catch_up_minutes", 0)
+    if _invalid_whole_number(catch_up) or catch_up > 59:
+        errors.append(f"scheduling.catch_up_minutes must be a whole number from 0 to 59, got {catch_up!r}")
+
     retention = get_config_value("alerts.retention", {})
     per_severity = retention.get("per_severity", {}) if isinstance(retention, dict) else {}
     if not isinstance(retention, dict):

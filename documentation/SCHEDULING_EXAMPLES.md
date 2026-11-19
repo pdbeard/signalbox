@@ -92,6 +92,34 @@ signalbox export-systemd critical-backup-15min
 signalbox export-cron monitoring --install
 signalbox export-cron daily-maintenance --install
 
+# Or do all scheduled groups at once. This also removes the lines of groups without a schedule.
+signalbox export-cron --all --install
+
 # Check that every scheduled group ran when it was due (exit 0 OK, 1 overdue, 2 failed)
 signalbox status
 ```
+
+Before each change to your crontab, signalbox saves the old crontab in `backups/` in the signalbox home. To go back to it, use `crontab ~/.config/signalbox/backups/crontab-<time>.txt`.
+
+## Catch Up After Sleep
+
+cron does not run a job when the computer is asleep or off at that time. It also does not run the job later. A laptop thus misses runs, and the tray shows the group as overdue.
+
+To run missed groups soon after the computer wakes, set this in `signalbox.yaml`:
+
+```yaml
+scheduling:
+  catch_up_minutes: 10   # 0 = off
+```
+
+Then apply it to your crontab:
+
+```bash
+signalbox export-cron --all --install
+```
+
+Signalbox adds one more cron line. Every 10 minutes, it runs `signalbox run-overdue`. This command runs each scheduled group that did not run when it was due. It uses the same rule as the tray, so it does not run a group again that cron ran a short time ago. To remove the line, set `catch_up_minutes: 0`, and run the export command again.
+
+A group that missed many runs (for example, during a week of holiday) runs one time, not one time for each missed run.
+
+On Linux with systemd timers, you do not need this: the exported timers have `Persistent=true`.
