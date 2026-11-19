@@ -57,7 +57,8 @@ def _signal_group(proc, sig):
     """Send sig to every process in the task's process group (the shell and anything it started)."""
     try:
         os.killpg(proc.pid, sig)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
+        # The group is gone. macOS can report EPERM instead of ESRCH when only zombies were left.
         pass
 
 

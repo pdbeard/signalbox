@@ -769,3 +769,21 @@ class TestRunCommand:
         result = run_command("pwd -P", timeout=5, cwd=str(tmp_path))
         assert result.stdout.strip() == os.path.realpath(tmp_path)
         assert result.returncode == 0
+
+
+def test_signalling_a_group_that_is_gone_is_not_an_error(monkeypatch):
+    """macOS can answer EPERM instead of ESRCH for a process group with only zombies left."""
+    import signal as signal_module
+
+    from signalbox import executor
+
+    class Proc:
+        pid = 12345
+
+    for error in (ProcessLookupError, PermissionError):
+
+        def gone(pid, sig, error=error):
+            raise error()
+
+        monkeypatch.setattr(executor.os, "killpg", gone)
+        executor._signal_group(Proc(), signal_module.SIGKILL)  # must not raise
