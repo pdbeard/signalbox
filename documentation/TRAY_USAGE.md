@@ -6,9 +6,10 @@ The signalbox tray icon shows the status of your scheduled groups and your tasks
 The color of the icon shows the results:
 - **Red**: a task or a group failed, the latest run of a task raised a `critical` alert, or a task or group file does not load (for example, a YAML syntax error). The tooltip names the file.
 
-A `warning` alert does not change the color. The menu and the tooltip show which tasks have warnings from their latest run. The menu also shows when each scheduled group runs next.
-- **Yellow**: nothing failed, but a scheduled group is overdue, or a task skipped too many runs in a row. A group is overdue when its last due time went by, and it did not run. Possible causes: the cron or systemd job is not installed, the export is out of date, or the computer was asleep. For a computer that sleeps, set `scheduling.catch_up_minutes`: then signalbox runs the missed groups soon after the computer wakes (refer to [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md#catch-up-after-sleep)). A task warns after `execution.skip_warn_after` skipped runs in a row (3 by default).
-- **Green**: all tasks and groups were successful.
+- **Yellow**: nothing failed, but a scheduled group is overdue, the latest run of a task raised a `warning` alert, or a task skipped too many runs in a row. The menu and the tooltip show which tasks have warnings. A group is overdue when its last due time went by, and it did not run. Possible causes: the cron or systemd job is not installed, the export is out of date, or the computer was asleep. For a computer that sleeps, set `scheduling.catch_up_minutes`: then signalbox runs the missed groups soon after the computer wakes (refer to [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md#catch-up-after-sleep)). A task warns after `execution.skip_warn_after` skipped runs in a row (3 by default).
+- **Green**: all tasks and groups were successful, and there is nothing new to look at.
+
+The menu also shows when each scheduled group runs next. To turn the icon green after you looked at the failures and warnings, use **Mark all as seen**.
 
 A task or group that never ran shows in the menu as "never run". It does not change the color of the icon.
 
@@ -54,11 +55,13 @@ On a server or a system without a display, set `enabled: false`.
 The tray reads the configuration and the run status again at each poll. The tray reads `enabled` and `poll_interval` only when it starts. After you change them, start the tray again.
 
 ## Tray Menu Options
-Right-click the tray icon to open the menu. The menu has these items:
-- **Groups**: each group, with the time of its last run, or "overdue" with the time it was due.
-- **Tasks**: each task, with the time of its last run. Click a task to open its latest log.
+Click the tray icon to open the menu. The menu has these items:
+- **Summary**: the first line tells you the result, for example "All OK" or "1 failed, 2 warnings".
+- **Needs attention**: each item that makes the icon red or yellow, with the reason. For an alert, the reason is the `message` of the alert. Signalbox shows this section only when there is something to look at. Click a task to open its latest log.
+- **Groups**: each group, with the time of its last run and the time of its next run, or "overdue" with the time it was due. The color of a group also shows the worst result of its tasks. Point to a group to see its tasks. Click a task to open its latest log.
+- **Other tasks**: the tasks that are not in a group.
+- **Mark all as seen**: the icon ignores failures and alerts from runs before now. A later run that fails or raises an alert changes the icon again. Overdue groups still show. You can click this item only when there is something to mark. After you click it, the item changes to **Mark all as unseen**, which undoes it.
 - **Notifications**: turns on or off the desktop notifications that signalbox sends (alerts and group summaries). This replaces `alerts.notifications.enabled` and `group_notifications.enabled` for the CLI too. The tray stores this switch in `runtime/tray_state.json`, not in `signalbox.yaml`. To use the values from `signalbox.yaml` again, delete their keys from `runtime/tray_state.json`.
-- **Clear error state**: the icon ignores failures that occurred before now. Overdue groups still show.
 - **Open config folder**: opens the `config/` folder of your signalbox home.
 - **Quit**: closes the tray app.
 
@@ -127,9 +130,9 @@ launchctl load ~/Library/LaunchAgents/com.signalbox.tray.plist
 
 ## Customization
 ### Custom Icons
-The tray shows a single bar in the colour of the status. The icons are in the `signalbox/icons/` directory of the package:
+The tray shows the signalbox box with one tile in the colour of the status. The icons are in the `signalbox/icons/` directory of the package:
 - `green.png`: all OK
-- `yellow.png`: a scheduled group is overdue
+- `yellow.png`: a scheduled group is overdue, or a task has a warning
 - `red.png`: a task or a group failed
 
 They are made from the SVG files in `logo/` (`tray-icon-ok.svg`, `tray-icon-overdue.svg`, `tray-icon-failed.svg`). To change them, edit the SVG files and run `python3 generate_icons.py` from the repository root (it needs `rsvg-convert`, from librsvg). You can also replace the PNG files directly: use square PNG files of 128x128 pixels with a transparent background.

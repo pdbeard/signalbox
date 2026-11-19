@@ -205,11 +205,11 @@ signalbox status
 
 `signalbox status` shows each group and task, and exits with:
 - 0: all is OK
-- 1: a group did not run when it was due, or a task skipped too many runs
+- 1: a group did not run when it was due, the latest run of a task raised a warning alert, or a task skipped too many runs
 - 2: something failed, or the latest run of a task raised a critical alert (for example, the disk check above)
 - 3: there is no configuration yet
 
-A `warning` alert does not change the result, but `signalbox status` lists the tasks that have one.
+A `warning` alert gives exit code 1, and the tray turns yellow. Use a warning for results that need attention but are not broken, for example updates that are available. In the tray, **Mark all as seen** turns the icon green again until a later run raises a new alert.
 
 To show the status in the menu bar, start the tray:
 
@@ -217,7 +217,7 @@ To show the status in the menu bar, start the tray:
 signalbox-tray &
 ```
 
-The tray shows a bar: green when all is OK, yellow when a group is late, red when something failed. Click it to see each group and task. Click a task to open its latest log. To start the tray when you log in, refer to [TRAY_USAGE.md](TRAY_USAGE.md#autostart).
+The tray shows the signalbox box with one coloured tile: green when all is OK, yellow when a group is late or a task raised a warning, red when something failed. Click it to see each group and task. Click a task to open its latest log. To start the tray when you log in, refer to [TRAY_USAGE.md](TRAY_USAGE.md#autostart).
 
 To test desktop notifications:
 

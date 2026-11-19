@@ -48,21 +48,29 @@ def test_shows_failures_overdue_groups_and_opens_logs(home):
     assert tray.status["colour"] == "red"
     assert "1 failed: bad" in tray.tray.toolTip() and "1 overdue: every15" in tray.tray.toolTip()
     texts = menu_texts(tray)
-    assert any(t.startswith("✗ bad") for t in texts)
-    assert any(t.startswith("⚠ every15") and "overdue" in t for t in texts)
-    bad = next(a for a in tray.menu.actions() if a.text().startswith("✗ bad"))
+    assert texts[0] == "signalbox: 1 failed, 1 late"
+    assert any(t.startswith("bad  ·  failed") for t in texts)  # under "Needs attention"
+    group = next(a for a in tray.menu.actions() if a.menu() and a.text().startswith("every15"))
+    assert "overdue" in group.text()
+    assert [a.text().split("  ·  ")[0] for a in group.menu().actions()] == ["ok"]  # its tasks, in a submenu
+    others = next(a for a in tray.menu.actions() if a.text() == "Other tasks")
+    assert [a.text().split("  ·  ")[0] for a in others.menu().actions()] == ["bad"]
+    bad = next(a for a in tray.menu.actions() if a.text().startswith("bad"))
     bad.trigger()
     assert home.opened == [str(log_dir / f"{recent}.log")]
 
 
-def test_clear_errors_turns_failures_green_and_switch_mutes_both_notification_kinds(home):
+def test_mark_seen_turns_failures_green_and_switch_mutes_both_notification_kinds(home):
     source = str(home.config_dir / "tasks" / "tasks.yaml")
     save_task_runtime_state("bad", source, format_timestamp(datetime.now() - timedelta(minutes=1)), "failed")
     tray = tray_app.SignalboxTray()
     assert tray.status["colour"] == "red"
 
-    tray._clear_errors()
+    seen = next(a for a in tray.menu.actions() if a.text() == "Mark all as seen")
+    assert seen.isEnabled()
+    seen.trigger()
     assert tray.status["colour"] == "green"
+    assert any(a.text() == "Mark all as unseen" for a in tray.menu.actions())  # the item now undoes it
     assert load_tray_state()["ignore_failures_before"] > 0
 
     next(a for a in tray.menu.actions() if a.text() == "Notifications").setChecked(False)
@@ -105,3 +113,30 @@ def test_notifies_once_when_a_group_becomes_overdue(home, monkeypatch):
     tray.refresh()  # still overdue: no second notification
 
     assert sent == ["Did not run when due: every15"]
+
+
+def tile_colour(action):
+    return action.icon().pixmap(32, 32).toImage().pixelColor(16, 16).name()
+
+
+def test_group_shows_the_worst_colour_of_its_tasks(home):
+    now = format_timestamp(datetime.now() - timedelta(minutes=1))
+    save_group_runtime_state("every15", str(home.config_dir / "groups" / "groups.yaml"), now, "success", 1, 1, 1)
+    save_task_runtime_state("ok", str(home.config_dir / "tasks" / "tasks.yaml"), now, "failed")  # a later run failed
+
+    tray = tray_app.SignalboxTray()
+
+    group = next(a for a in tray.menu.actions() if a.text().startswith("every15"))
+    assert tile_colour(group) == tray_app.TILE_COLOURS["red"].lower()
+
+
+def test_mark_all_as_unseen_undoes_mark_all_as_seen(home):
+    source = str(home.config_dir / "tasks" / "tasks.yaml")
+    save_task_runtime_state("bad", source, format_timestamp(datetime.now() - timedelta(minutes=1)), "failed")
+    tray = tray_app.SignalboxTray()
+
+    next(a for a in tray.menu.actions() if a.text() == "Mark all as seen").trigger()
+    assert tray.status["colour"] == "green"
+    next(a for a in tray.menu.actions() if a.text() == "Mark all as unseen").trigger()
+    assert tray.status["colour"] == "red"
+    assert any(a.text() == "Mark all as seen" and a.isEnabled() for a in tray.menu.actions())

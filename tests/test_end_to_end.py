@@ -20,6 +20,7 @@ from click.testing import CliRunner
 
 from signalbox.cli import cli
 from signalbox.helpers import format_timestamp
+from signalbox.runtime import set_tray_setting
 
 
 @pytest.fixture
@@ -857,7 +858,7 @@ class TestStatus:
         sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["ok"], "schedule": "*/15 * * * *"}])
 
         result = run("status")
-        assert result.exit_code == 0 and "nothing has run yet" in result.output
+        assert result.exit_code == 0 and "signalbox: Nothing has run yet" in result.output
 
         run("group", "run", "g")
         assert run("status").exit_code == 0
@@ -871,7 +872,7 @@ class TestStatus:
 
         run("task", "run", "bad")
         result = run("status")
-        assert result.exit_code == 2 and "1 failed: bad" in result.output
+        assert result.exit_code == 2 and "signalbox: 1 failed" in result.output and "bad  failed" in result.output
 
 
 class TestCronInstall:
@@ -1096,7 +1097,7 @@ class TestRunIf:
 
         run("task", "run", "cond")
         result = run("status")
-        assert result.exit_code == 1 and "1 skipped repeatedly: cond" in result.output
+        assert result.exit_code == 1 and "1 skipping" in result.output and "cond  skipped:" in result.output
 
     def test_skipped_task_does_not_fail_or_stop_a_group(self, sb_home, run):
         marker = sb_home.path / "second_ran"
@@ -1408,18 +1409,26 @@ class TestFriendlierOutput:
         assert "daily at 02:00" in result.output and "0 2 * * *" in result.output
         assert " 02:00" in result.output.split("daily at 02:00")[1]  # the NEXT RUN column
 
-    def test_critical_alert_on_a_successful_run_turns_status_red_and_warnings_are_listed(self, sb_home, run):
+    def test_critical_alert_turns_status_red_and_warning_alert_turns_it_yellow(self, sb_home, run):
         crit = {"pattern": "9[0-9]%", "message": "Disk almost full", "severity": "critical"}
         warn = {"pattern": "DIRTY: [1-9]", "message": "Unsaved work", "severity": "warning"}
         sb_home.write_tasks([task("disk", "echo 95%", alerts=[crit]), task("repos", "echo DIRTY: 3", alerts=[warn])])
         run("task", "run", "repos")
         result = run("status")
-        assert result.exit_code == 0  # a warning does not change the colour...
-        assert "Warnings from the latest run of: repos" in result.output  # ...but it is shown
+        assert result.exit_code == 1 and "signalbox: 1 warning" in result.output
+        assert "repos  Unsaved work" in result.output.split("Needs attention:")[1]  # the alert's own message
 
         run("task", "run", "disk")
         result = run("status")
-        assert result.exit_code == 2 and "1 failed: disk" in result.output and "1 critical alert" in result.output
+        assert (
+            result.exit_code == 2
+            and "1 failed, 1 warning" in result.output
+            and "disk  Disk almost full" in result.output
+        )
+
+        set_tray_setting("ignore_failures_before", int(time.time()) + 1)  # "Mark all as seen" in the tray
+        result = run("status")
+        assert result.exit_code == 0 and "1 warning alert" in result.output  # still shown on the row
 
     def test_config_show_prints_yaml(self, sb_home, run):
         sb_home.write_settings({"tray": {"enabled": True, "poll_interval": 30}})

@@ -294,7 +294,8 @@ def status():
     \b
     Exit codes (for scripts and monitoring tools such as Nagios):
       0  all OK
-      1  a scheduled group is overdue, or a task skipped too many runs
+      1  a scheduled group is overdue, a task raised a warning alert,
+         or a task skipped too many runs
       2  something failed, or raised a critical alert
       3  no configuration (run: signalbox init)
     """
@@ -305,14 +306,26 @@ def status():
         click.echo(missing)
         sys.exit(3)
     result = read_status()
-    click.echo(result["tooltip"])
-    for title, kind in (("Groups", "groups"), ("Tasks", "tasks")):
-        if result[kind]:
-            click.echo(f"\n{title}:")
-        for icon, name, detail, row_status in result[kind]:
-            click.echo(f"  {click.style(icon, fg=ROW_COLOURS.get(row_status))} {name}  {detail}")
-    if result["warnings"]:
-        click.echo(f"\nWarnings from the latest run of: {', '.join(result['warnings'])}. To see them: signalbox alerts")
+    click.echo(f"signalbox: {result['summary']}")
+    if result["attention"]:
+        click.echo("\nNeeds attention:")
+        for colour, name, reason in result["attention"]:
+            click.echo(f"  {click.style('■', fg=colour)} {name}  {reason}")
+        click.echo("  Details: signalbox log show TASK, signalbox alerts")
+
+    def row(icon, name, detail, row_status, indent="  "):
+        click.echo(f"{indent}{click.style(icon, fg=ROW_COLOURS.get(row_status))} {name}  {detail}")
+
+    if result["groups"]:
+        click.echo("\nGroups:")
+    for group_row in result["groups"]:
+        row(*group_row)
+        for task_row in result["group_tasks"].get(group_row[1], []):
+            row(*task_row, indent="      ")
+    if result["other_tasks"]:
+        click.echo("\nOther tasks:" if result["groups"] else "\nTasks:")
+    for task_row in result["other_tasks"]:
+        row(*task_row)
     sys.exit(STATUS_EXIT_CODES[result["colour"]])
 
 

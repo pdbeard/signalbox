@@ -11,7 +11,7 @@ Signalbox is a command-line tool that runs and monitors shell tasks. It keeps a 
 - Keep one log for each run, and delete old logs by count, age or size
 - Record alerts when task output matches a pattern, and send desktop notifications
 - Make systemd and cron files for scheduled groups
-- Show the status in the system tray: red when something failed, yellow when a scheduled group did not run (optional)
+- Show the status in the system tray: red when something failed, yellow when a scheduled group did not run or a task raised a warning (optional)
 
 **New to signalbox?** The [Quickstart](documentation/QUICKSTART.md) takes you step by step from installation to a scheduled website check with the tray, in about 15 minutes.
 

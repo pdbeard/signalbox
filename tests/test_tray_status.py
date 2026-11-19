@@ -56,7 +56,7 @@ def test_scheduled_group_that_missed_its_run_is_yellow():
 def test_overdue_from_an_earlier_day_names_the_day():
     group = {"name": "g", "tasks": [], "schedule": "0 12 * * *"}  # due Sunday 12:00; NOW is Monday 10:07
     state = {"g": {"last_run": ts(timedelta(days=3)), "last_status": "success"}}
-    assert "was due Sun 01 Nov 12:00" in status(groups=[group], group_state=state)["groups"][0][2]
+    assert "was due Sun 12:00" in status(groups=[group], group_state=state)["groups"][0][2]
 
 
 def test_long_running_group_gets_grace_for_its_run_time():
@@ -124,3 +124,18 @@ def test_tasks_for_another_platform_are_hidden():
     config = {"tasks": [{"name": "here"}, {"name": "there", "platforms": [other]}], "groups": []}
     result = compute_status(config, {"tasks": {}, "groups": {}}, 0, NOW)
     assert [row[1] for row in result["tasks"]] == ["here"]
+
+
+def test_a_failed_run_with_a_warning_counts_once_as_failed():
+    config = {"tasks": [{"name": "repos", "command": "false"}], "groups": []}
+    runtime = {"tasks": {"repos": {"last_run": ts(timedelta(minutes=5)), "last_status": "failed"}}, "groups": {}}
+    warning = {"task_name": "repos", "severity": "warning", "message": "Unsaved work", "timestamp": ts(timedelta(0))}
+    result = compute_status(config, runtime, 0, NOW, alerts=[warning])
+    assert result["summary"] == "1 failed" and result["warnings"] == []
+    assert result["attention"] == [("red", "repos", "failed 5 min ago")]
+
+
+def test_a_file_that_does_not_load_cannot_be_marked_as_seen():
+    config = {"tasks": [], "groups": [], "_load_errors": {"/x/tasks/broken.yaml": "bad YAML"}}
+    result = compute_status(config, {"tasks": {}, "groups": {}}, 0, NOW)
+    assert result["colour"] == "red" and result["can_mark_seen"] is False
