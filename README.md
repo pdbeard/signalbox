@@ -111,7 +111,7 @@ signalbox --config /path/to/config/signalbox.yaml list
 ### Logs
 
 - `signalbox log show TASK`: show the newest log of a task
-- `signalbox log history TASK`: show all the logs of a task
+- `signalbox log history TASK`: show every run of a task, with its status and output preview
 - `signalbox log list [--task NAME] [--failed] [--today] [--since DATE] [--last N] [-v]`: show the runs of all tasks
 - `signalbox log tail TASK`: show the newest log of a task. Then show the log of each new run when that run is complete.
 - `signalbox log clear --task NAME` / `signalbox log clear --all`: delete the logs and the alert history
@@ -125,7 +125,7 @@ signalbox --config /path/to/config/signalbox.yaml list
 
 ### Status
 
-- `signalbox status`: show what the tray shows (failed tasks and groups, and scheduled groups that did not run when due). It exits with 0 when all is OK, 1 when a group is overdue or a task skipped too many runs in a row (`execution.skip_warn_after`), and 2 when something failed (the convention of Nagios and similar monitoring tools). Use it on a machine without a tray.
+- `signalbox status`: show whether everything ran and passed: each group (with its next run) and each task, failures, groups that did not run when due, and the alerts of the latest runs. It exits with 0 when all is OK, 1 when a group is overdue or a task skipped too many runs in a row (`execution.skip_warn_after`), 2 when something failed or a task raised a critical alert, and 3 when there is no configuration (the convention of Nagios and similar monitoring tools). Use it on a machine without a tray too.
 
 ### Alerts & Notifications
 

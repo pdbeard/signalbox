@@ -4,7 +4,9 @@
 The signalbox tray icon shows the status of your scheduled groups and your tasks. The tray does not run tasks. cron or systemd run them (see `signalbox export-cron` and `signalbox export-systemd`), and the tray shows the result of each run.
 
 The color of the icon shows the results:
-- **Red**: a task or a group failed, or a task or group file does not load (for example, a YAML syntax error). The tooltip names the file.
+- **Red**: a task or a group failed, the latest run of a task raised a `critical` alert, or a task or group file does not load (for example, a YAML syntax error). The tooltip names the file.
+
+A `warning` alert does not change the color. The menu and the tooltip show which tasks have warnings from their latest run. The menu also shows when each scheduled group runs next.
 - **Yellow**: nothing failed, but a scheduled group is overdue, or a task skipped too many runs in a row. A group is overdue when its last due time went by, and it did not run. Possible causes: the cron or systemd job is not installed, the export is out of date, or the computer was asleep. For a computer that sleeps, set `scheduling.catch_up_minutes`: then signalbox runs the missed groups soon after the computer wakes (refer to [SCHEDULING_EXAMPLES.md](SCHEDULING_EXAMPLES.md#catch-up-after-sleep)). A task warns after `execution.skip_warn_after` skipped runs in a row (3 by default).
 - **Green**: all tasks and groups were successful.
 

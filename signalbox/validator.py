@@ -7,7 +7,16 @@ import yaml
 
 from .config import load_config, get_config_value, load_global_config, resolve_path, config_sources, CONFIG_FILE
 from .cron import schedule_error
-from .helpers import is_valid_name, yaml_files, NAME_RULE, ENV_NAME_PATTERN, PLATFORMS, on_this_platform
+from .helpers import (
+    is_valid_name,
+    yaml_files,
+    NAME_RULE,
+    ENV_NAME_PATTERN,
+    PLATFORMS,
+    on_this_platform,
+    did_you_mean,
+    yaml_error_text,
+)
 
 SEVERITIES = ("info", "warning", "critical")
 EXECUTION_MODES = ("serial", "parallel")
@@ -315,7 +324,7 @@ def _validate_file(fpath, kind):
         with open(fpath, "r") as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        return [f"YAML syntax error: {e}"]
+        return [f"YAML syntax error: {yaml_error_text(e)}"]
     except Exception as e:
         return [f"Error loading: {e}"]
 
@@ -434,7 +443,10 @@ def _validate_groups(result):
         if isinstance(group.get("tasks"), list):
             for task_name in group["tasks"]:
                 if isinstance(task_name, str) and task_name not in task_names:
-                    result.errors.append(f"Group '{group_name}' references non-existent task '{task_name}'")
+                    hint = did_you_mean(task_name, task_names)
+                    result.errors.append(
+                        f"Group '{group_name}' references non-existent task '{task_name}'.{hint}".rstrip(".")
+                    )
 
         schedule = group.get("schedule")
         if isinstance(schedule, dict):

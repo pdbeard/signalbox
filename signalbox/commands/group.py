@@ -6,23 +6,23 @@ import click
 
 from ..config import load_config, find_entry
 from ..executor import run_group_parallel, run_group_serial
+from ..cron import describe
 from ..exporters import get_schedule_string
 from ..runtime import save_group_runtime_state
 from ..exceptions import GroupNotFoundError, ValidationError
 from ..validator import validate_group, validate_run_settings
-from ..helpers import format_timestamp
-from .utils import handle_exceptions
+from ..helpers import format_timestamp, did_you_mean
+from .utils import handle_exceptions, no_config_message
 
 
 @click.group()
 def group():
-    """
-    Manage and run task groups.
+    """Run groups of tasks and list them.
 
     \b
-    Commands:
-      run NAME    Run a group of tasks
-      list        List all configured groups
+    Examples:
+      signalbox group run nightly   run the tasks of a group
+      signalbox group list          each group, its schedule and tasks
     """
     pass
 
@@ -49,12 +49,13 @@ def run_group(name):
     config = load_config()
     group_item = find_entry(config, "groups", name)
     if not group_item:
-        raise GroupNotFoundError(name)
+        groups = [g.get("name") for g in config.get("groups", []) if isinstance(g, dict)]
+        raise GroupNotFoundError(name, did_you_mean(name, groups))
     errors = validate_group(group_item) + validate_run_settings()
     known_tasks = {t.get("name") for t in config.get("tasks", []) if isinstance(t, dict)}
     task_refs = group_item.get("tasks") if isinstance(group_item.get("tasks"), list) else []
     errors += [
-        f"Group '{name}' references non-existent task '{t}'"
+        f"Group '{name}' references non-existent task '{t}'.{did_you_mean(t, known_tasks)}".rstrip(".")
         for t in task_refs
         if isinstance(t, str) and t not in known_tasks
     ]
@@ -111,7 +112,9 @@ def run_group(name):
         )
 
     print_run_table(results)
-    click.echo(f"Group {name} executed.")
+    skipped = sum(1 for r in results if r.get("skip") == "condition")
+    summary = f"{tasks_successful} of {counted} tasks succeeded" + (f", {skipped} skipped" if skipped else "")
+    click.echo(f"Group {name}: {group_status} ({summary})")
     return group_status
 
 
@@ -121,7 +124,7 @@ def group_list():
     config = load_config()
     groups = config.get("groups", [])
     if not groups:
-        click.echo("No groups defined.")
+        click.echo(no_config_message(config) or "No groups defined.")
         return
     from ..cli_output import print_group_list_table
 
@@ -132,7 +135,7 @@ def group_list():
                 {
                     "name": group_item.get("name", ""),
                     "description": group_item.get("description", ""),
-                    "schedule": get_schedule_string(group_item),
+                    "schedule": describe(get_schedule_string(group_item)) if "schedule" in group_item else "",
                     "execution": group_item.get("execution", "serial"),
                     "stop_on_error": group_item.get("stop_on_error", False),
                     "tasks": group_item.get("tasks", []),

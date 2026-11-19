@@ -464,7 +464,7 @@ class TestMergeConfigWithRuntimeState:
 
         # task2 should have defaults
         assert result["tasks"][1]["last_run"] == ""
-        assert result["tasks"][1]["last_status"] == "no logs"
+        assert result["tasks"][1]["last_status"] == "never run"
 
     def test_merge_all_scripts_without_runtime_state(self):
         """Test merging when no runtime state exists."""
@@ -483,7 +483,7 @@ class TestMergeConfigWithRuntimeState:
         # All tasks should have defaults
         for task in result["tasks"]:
             assert task["last_run"] == ""
-            assert task["last_status"] == "no logs"
+            assert task["last_status"] == "never run"
 
     def test_merge_preserves_other_script_fields(self):
         """Test that merging preserves other fields in script config."""

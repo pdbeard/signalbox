@@ -8,6 +8,15 @@ import click
 from ..exceptions import SignalboxError
 
 
+def no_config_message(config):
+    """A hint when there is nothing to show because signalbox has no configuration yet, else None."""
+    from ..config import resolve_path, find_config_home, CONFIG_FILE
+
+    if config.get("tasks") or config.get("groups") or os.path.exists(resolve_path(CONFIG_FILE)):
+        return None
+    return f"No configuration found in {find_config_home()}. To make one, run: signalbox init"
+
+
 def handle_exceptions(func):
     """Decorator to handle exceptions consistently across CLI commands with proper exit codes."""
 

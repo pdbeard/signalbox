@@ -20,28 +20,50 @@ from .commands.misc import (
     run_overdue,
 )
 
+# The commands in the help, by what people want to do (click lists them alphabetically otherwise)
+HELP_SECTIONS = (
+    ("Get started", ("init", "validate")),
+    ("Run", ("run", "task", "group", "run-overdue")),
+    ("Check", ("status", "list", "log", "alerts")),
+    ("Schedule", ("list-schedules", "export-cron", "export-systemd")),
+    ("Configure", ("config", "notify-test")),
+)
 
-@click.group(help="""
-Signalbox - Task automation and monitoring.
+
+class SectionedGroup(click.Group):
+    """A click group whose help lists the commands in HELP_SECTIONS, not alphabetically."""
+
+    def format_commands(self, ctx, formatter):
+        listed = set()
+        for title, names in HELP_SECTIONS + (("Other", tuple(sorted(self.commands))),):
+            rows = []
+            for name in names:
+                command = self.commands.get(name)
+                if command is None or command.hidden or name in listed:
+                    continue
+                listed.add(name)
+                rows.append((name, command.get_short_help_str(limit=formatter.width)))
+            if rows:
+                with formatter.section(title):
+                    formatter.write_dl(rows)
+
+
+@click.group(
+    cls=SectionedGroup,
+    help="Signalbox runs your shell tasks, keeps a log of each run, and tells you when one fails or does not run.",
+    epilog="""\b
+Examples:
+  signalbox init                           make the configuration
+  signalbox run hello                      run a task and see its output
+  signalbox status                         is everything OK?
+  signalbox log show hello                 the output of the latest run
+  signalbox export-cron --all --install    schedule all groups with cron
 
 \b
-PRIMARY COMMANDS:
-  task            Manage and run tasks (run, list)
-  group           Manage and run task groups
-  log             View and manage execution logs
-  config          Configuration management
-  status          Show failures and overdue groups (exit 0 OK, 1 overdue, 2 failed)
-  run-overdue     Run the scheduled groups that missed their time
-
-\b
-QUICK COMMANDS (shortcuts):
-  run NAME        Run a task
-  list            List all tasks
-  validate        Validate configuration
-
-\b
-Run 'signalbox COMMAND --help' for more information on a command.
-""")
+Run 'signalbox COMMAND --help' for the options of a command.
+Tutorial: https://github.com/pdbeard/signalbox/blob/main/documentation/QUICKSTART.md
+""",
+)
 @click.option(
     "--config",
     "-c",
@@ -83,24 +105,24 @@ cli.add_command(run_overdue)
 
 
 # Root-level shortcuts for frequently used commands
-@cli.command(name="run")
+@cli.command(name="run", short_help="Run a task and show its output.")
 @click.argument("name")
 @click.option("--quiet", "-q", is_flag=True, help="Do not show the output preview")
 @click.pass_context
 def run_shortcut(ctx, name, quiet):
-    """Run a task (shortcut for 'task run NAME')."""
+    """Run a task and show its output (same as: signalbox task run NAME)."""
     ctx.invoke(task_run, name=name, run_all_tasks=False, quiet=quiet)
 
 
-@cli.command(name="list")
+@cli.command(name="list", short_help="List the tasks, their status and last run.")
 @click.pass_context
 def list_shortcut(ctx):
-    """List all tasks (shortcut for 'task list')."""
+    """List the tasks: status and last run (same as: signalbox task list)."""
     ctx.invoke(task_list)
 
 
-@cli.command(name="validate")
+@cli.command(name="validate", short_help="Find errors in the configuration.")
 @click.pass_context
 def validate_shortcut(ctx):
-    """Validate configuration (shortcut for 'config validate')."""
+    """Find errors in the configuration (same as: signalbox config validate)."""
     ctx.invoke(config_validate)

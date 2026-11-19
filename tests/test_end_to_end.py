@@ -223,7 +223,7 @@ class TestGroupRun:
 
         result = run("group", "list")
 
-        assert "0 2 * * *" in result.output and "cron" not in result.output
+        assert "daily at 02:00" in result.output and "cron" not in result.output
 
     def test_missing_task_reference_runs_nothing(self, sb_home, run):
         sb_home.write_tasks([task("a")])
@@ -1354,3 +1354,93 @@ class TestCatchUpReviewFixes:
         assert len(kept) == 20 and kept[-1] == os.path.basename(newest)
         assert kept[0] == "crontab-20260107_000000_000000.txt"  # the 6 oldest were deleted
         assert (backups / "notes.txt").exists()
+
+
+class TestFriendlierOutput:
+    def test_history_lists_each_run_with_its_status(self, sb_home, run):
+        sb_home.write_tasks([task("t", "echo fine"), task("bad", 'echo working; echo "boom: disk gone" >&2; exit 1')])
+        run("task", "run", "t")
+        run("task", "run", "bad")
+
+        result = run("log", "history", "bad")
+
+        assert result.exit_code == 0 and "failed" in result.output
+        assert "boom: disk gone" in result.output  # a failed run's preview is its error line
+        assert "Total: 1 log(s)" in result.output
+
+    def test_typos_get_a_suggestion(self, sb_home, run):
+        sb_home.write_tasks([task("hello")])
+        sb_home.write_groups([{"name": "nightly", "description": "d", "tasks": ["helo"]}])
+
+        assert "Did you mean 'hello'?" in run("task", "run", "helo").output
+        assert "Did you mean 'nightly'?" in run("group", "run", "nightlly").output
+        flat = " ".join(run("validate").output.replace("│", " ").split())  # ignore the panel's line wrapping
+        assert "Did you mean 'hello'?" in flat
+
+    def test_group_run_ends_with_its_result(self, sb_home, run):
+        sb_home.write_tasks([task("ok"), task("bad", "exit 1")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["ok", "bad"]}])
+
+        result = run("group", "run", "g")
+
+        assert "Group g: partial (1 of 2 tasks succeeded)" in result.output
+        assert "Task ok succeeded." in result.output and "Task bad failed." in result.output
+
+    def test_yaml_mistake_gets_a_plain_tip(self, sb_home, run):
+        (sb_home.config_dir / "tasks" / "bad.yaml").write_text(
+            'tasks:\n  - name: x\n    command: echo "a: b"; exit 1\n'
+        )
+
+        assert "Tip: put the value in quotes" in " ".join(run("validate").output.replace("│", " ").split())
+
+    def test_nothing_configured_points_to_init(self, isolate_signalbox_home, run):
+        for args in (("list",), ("status",), ("group", "list"), ("list-schedules",)):
+            result = run(*args)
+            assert "No configuration found" in result.output and "signalbox init" in result.output, args
+        assert run("status").exit_code == 3
+
+    def test_list_schedules_says_when_in_words_and_when_next(self, sb_home, run):
+        sb_home.write_tasks([task("t")])
+        sb_home.write_groups([{"name": "g", "description": "d", "tasks": ["t"], "schedule": "0 2 * * *"}])
+
+        result = run("list-schedules")
+
+        assert "daily at 02:00" in result.output and "0 2 * * *" in result.output
+        assert " 02:00" in result.output.split("daily at 02:00")[1]  # the NEXT RUN column
+
+    def test_critical_alert_on_a_successful_run_turns_status_red_and_warnings_are_listed(self, sb_home, run):
+        crit = {"pattern": "9[0-9]%", "message": "Disk almost full", "severity": "critical"}
+        warn = {"pattern": "DIRTY: [1-9]", "message": "Unsaved work", "severity": "warning"}
+        sb_home.write_tasks([task("disk", "echo 95%", alerts=[crit]), task("repos", "echo DIRTY: 3", alerts=[warn])])
+        run("task", "run", "repos")
+        result = run("status")
+        assert result.exit_code == 0  # a warning does not change the colour...
+        assert "Warnings from the latest run of: repos" in result.output  # ...but it is shown
+
+        run("task", "run", "disk")
+        result = run("status")
+        assert result.exit_code == 2 and "1 failed: disk" in result.output and "1 critical alert" in result.output
+
+    def test_config_show_prints_yaml(self, sb_home, run):
+        sb_home.write_settings({"tray": {"enabled": True, "poll_interval": 30}})
+
+        result = run("config", "show", "tray")
+
+        assert "tray:\n  enabled: true\n  poll_interval: 30" in result.output
+
+
+class TestListOutput:
+    def test_piped_list_keeps_full_descriptions(self, sb_home, run):
+        long = "Check that every backup of the database finished and its copy is on the NAS"
+        sb_home.write_tasks([task("backup-check", "true", description=long)])
+
+        output = run("list").output  # CliRunner output is not a terminal
+
+        # Wrapped over several rows (other cells sit between the pieces), but nothing is cut off
+        assert "…" not in output and all(word in output for word in long.split())
+
+    def test_status_colours_keep_never_run_and_skipped_neutral(self):
+        from signalbox.cli_output import status_colour
+
+        assert status_colour("never run") == "dim" and status_colour("skipped") == "dim"
+        assert status_colour("failed") == "red" and status_colour("something odd") == "yellow"

@@ -95,6 +95,9 @@ signalbox export-cron daily-maintenance --install
 # Or do all scheduled groups at once. This also removes the lines of groups without a schedule.
 signalbox export-cron --all --install
 
+# When each scheduled group runs, and when it runs next
+signalbox list-schedules
+
 # Check that every scheduled group ran when it was due (exit 0 OK, 1 overdue, 2 failed)
 signalbox status
 ```

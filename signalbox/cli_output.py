@@ -10,6 +10,9 @@ STATUS_COLOURS = {
     "failed": "red",
     "fail": "red",
     "error": "red",
+    # Neutral, not a warning: nothing is wrong yet
+    "never run": "dim",
+    "skipped": "dim",
 }
 
 
@@ -43,15 +46,27 @@ def _table(*columns, **kwargs):
 
 def print_task_list_table(task_rows):
     """
-    Print a table of tasks using rich.
+    Print a table of tasks using rich, one line per task.
     task_rows: list of dicts with keys: name, status, last_run, description, source
     """
+    columns = [("TASK", "name"), ("STATUS", "status"), ("LAST RUN", "last_run"), ("SOURCE", "source")]
+    widths = {key: max([len(title)] + [len(str(row[key])) for row in task_rows]) for title, key in columns}
+    console = Console()
+    # In a terminal: one line per task. The other columns keep their full width; the description gets the
+    # rest of the line and is cut with "..." (3 characters of border and padding for each of the 5 columns,
+    # plus the closing border). Written to a file or a pipe, the description is kept in full.
+    room = console.width - sum(widths.values()) - 16
+    description = (
+        {"no_wrap": True, "overflow": "ellipsis", "max_width": max(room, 12)}
+        if console.is_terminal
+        else {"overflow": "fold"}
+    )
     table = _table(
-        ("TASK", {"style": "bold", "overflow": "fold"}),
-        ("STATUS", {"style": "bold", "justify": "center"}),
-        ("LAST RUN", {"style": "dim", "justify": "center"}),
-        ("DESCRIPTION", {"overflow": "fold"}),
-        ("SOURCE", {"style": "dim", "overflow": "fold"}),
+        ("TASK", {"style": "bold", "no_wrap": True, "width": widths["name"]}),
+        ("STATUS", {"style": "bold", "no_wrap": True, "width": widths["status"]}),
+        ("LAST RUN", {"style": "dim", "no_wrap": True, "width": widths["last_run"]}),
+        ("DESCRIPTION", description),
+        ("SOURCE", {"style": "dim", "no_wrap": True, "width": widths["source"]}),
     )
     for row in task_rows:
         table.add_row(
@@ -61,7 +76,7 @@ def print_task_list_table(task_rows):
             _text(row["description"]),
             _text(row["source"]),
         )
-    Console().print(table)
+    console.print(table)
 
 
 def print_run_table(results):
@@ -116,22 +131,18 @@ def print_group_list_table(group_rows):
 def print_schedule_list_table(schedule_rows):
     """
     Print a table of scheduled groups using rich.
-    schedule_rows: list of dicts with keys: group, schedule, description, task_count, tasks
+    schedule_rows: list of dicts with keys: group, when (in words), schedule (cron), next, tasks
     """
     table = _table(
         ("GROUP", {"style": "bold", "overflow": "fold"}),
-        ("SCHEDULE", {"overflow": "fold"}),
-        ("DESCRIPTION", {"overflow": "fold"}),
-        ("TASKS", {"style": "dim", "justify": "center"}),
-        ("TASK NAMES", {"overflow": "fold"}),
+        ("WHEN", {"overflow": "fold"}),
+        ("CRON", {"style": "dim", "no_wrap": True}),
+        ("NEXT RUN", {"no_wrap": True}),
+        ("TASKS", {"overflow": "fold"}),
     )
     for row in schedule_rows:
         table.add_row(
-            _text(row["group"]),
-            _text(row["schedule"]),
-            _text(row["description"]),
-            str(row["task_count"]),
-            _text(row["tasks"]),
+            _text(row["group"]), _text(row["when"]), _text(row["schedule"]), _text(row["next"]), _text(row["tasks"])
         )
     Console().print(table)
 

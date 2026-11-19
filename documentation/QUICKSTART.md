@@ -206,7 +206,10 @@ signalbox status
 `signalbox status` shows each group and task, and exits with:
 - 0: all is OK
 - 1: a group did not run when it was due, or a task skipped too many runs
-- 2: something failed
+- 2: something failed, or the latest run of a task raised a critical alert (for example, the disk check above)
+- 3: there is no configuration yet
+
+A `warning` alert does not change the result, but `signalbox status` lists the tasks that have one.
 
 To show the status in the menu bar, start the tray:
 

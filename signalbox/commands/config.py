@@ -21,20 +21,19 @@ from .utils import handle_exceptions
 
 @click.group()
 def config():
-    """
-    Configuration management.
+    """Show, check and find the configuration.
 
     \b
-    Commands:
-      show [KEY]          Show configuration (all or specific setting)
-      validate            Validate configuration files
-      path                Show configuration directory path
-      check-permissions   Check config and log directory permissions
+    Examples:
+      signalbox config path                     where the configuration is
+      signalbox config show execution           one section of signalbox.yaml
+      signalbox config validate                 find errors (same as: signalbox validate)
+      signalbox config check-permissions        files that other users can read or change
     """
     pass
 
 
-@config.command(name="show")
+@config.command(name="show", short_help="Show all settings, or one (for example: execution).")
 @click.argument("key", required=False)
 def config_show(key):
     """Show global configuration or specific setting (use dot notation)."""
@@ -44,7 +43,8 @@ def config_show(key):
         if value is None:
             click.echo(f"Setting '{key}' not found")
         else:
-            click.echo(f"{key}: {value}")
+            # The same YAML as signalbox.yaml (a section is shown as its keys, not as a Python dict)
+            click.echo(yaml.dump({key: value}, default_flow_style=False, sort_keys=False).rstrip())
     else:
         # Show all config
         global_config = load_global_config()
@@ -63,7 +63,7 @@ def config_path():
     click.echo(find_config_home())
 
 
-@config.command(name="check-permissions")
+@config.command(name="check-permissions", short_help="Find files that other users can read or change.")
 def config_check_permissions():
     """Check that config and log directories have secure permissions.
 
@@ -143,13 +143,14 @@ def config_validate():
     console = Console()
     result = validator.validate_configuration()
 
-    # Show which files are being validated
+    # Show which files are being validated, relative to the signalbox home (full paths wrap and hide the errors)
     if result.files_used:
-        files_text = "\n".join([f"  • {escape(f)}" for f in result.files_used])
+        home = find_config_home().rstrip(os.sep) + os.sep
+        files_text = "\n".join([f"  • {escape(f.replace(home, '', 1))}" for f in result.files_used])
         console.print(
             Panel(
                 files_text,
-                title="[bold cyan]Validating Configuration Files[/bold cyan]",
+                title=f"[bold cyan]Files checked in {escape(find_config_home())}[/bold cyan]",
                 border_style="cyan",
                 box=box.ROUNDED,
             )

@@ -345,33 +345,6 @@ def format_log_with_colors(content, show_colors=True):
     return formatted_lines
 
 
-def get_log_history(task_name):
-    """Get a list of all log files for a task with their timestamps.
-
-    Returns:
-            tuple: (log_files_info, history_exists) where log_files_info is a list of
-                   tuples (filename, timestamp) sorted newest first
-    """
-    task_log_dir = get_task_log_dir(task_name)
-
-    if not os.path.exists(task_log_dir):
-        return [], False
-
-    log_files = _list_log_files(task_log_dir)
-    if not log_files:
-        return [], False
-
-    # Sort by time, newest first
-    log_files.sort(key=lambda x: os.path.getmtime(os.path.join(task_log_dir, x)), reverse=True)
-
-    log_info = []
-    for filename in log_files:
-        mtime = os.path.getmtime(os.path.join(task_log_dir, filename))
-        log_info.append((filename, mtime))
-
-    return log_info, True
-
-
 def clear_task_logs(task_name):
     """Clear all log files and the alert history for a specific task.
 
@@ -513,13 +486,14 @@ def parse_log_metadata(log_path):
         log_path: Path to log file
 
     Returns:
-        dict: Metadata including status, return_code, stdout_preview
+        dict: Metadata including status, return_code, preview (the last error line of a failed run,
+            else the first output line)
     """
     metadata = {
         "status": "unknown",
         "return_code": None,
         "command": None,
-        "stdout_preview": "",
+        "preview": "",
     }
 
     if not os.path.exists(log_path):
@@ -543,7 +517,12 @@ def parse_log_metadata(log_path):
                 metadata["command"] = line.split(": ", 1)[1]
                 break
 
-        metadata["stdout_preview"] = get_stdout_preview(content)
+        # For a failed run the useful line is usually the last error line, not the first output line
+        errors = [line.strip() for line in parse_stderr_from_log(content).splitlines() if line.strip()]
+        if metadata["status"] == "failed" and errors:
+            metadata["preview"] = errors[-1][:70] + ("…" if len(errors[-1]) > 70 else "")
+        else:
+            metadata["preview"] = get_stdout_preview(content)
 
     except Exception:
         pass

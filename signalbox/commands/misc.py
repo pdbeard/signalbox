@@ -13,10 +13,10 @@ from .. import alerts
 from ..helpers import format_timestamp, display_time
 from ..exceptions import ValidationError
 from ..validator import validate_run_settings
-from .utils import handle_exceptions
+from .utils import handle_exceptions, no_config_message
 
 
-@click.command()
+@click.command(short_help="Make the configuration (do this first).")
 def init():
     """Make the signalbox configuration directory (in SIGNALBOX_HOME or XDG_CONFIG_HOME, if set)."""
     # Never the current directory: reinitializing replaces what is there.
@@ -69,57 +69,53 @@ def init():
     click.echo(f"✓ Created logs directory: {config_dir}/logs")
     click.echo(f"✓ Created runtime directory: {config_dir}/runtime")
     click.echo()
-    click.echo("Signalbox initialized successfully!")
+    click.echo("Signalbox initialized successfully! You can now use signalbox in all directories.")
     click.echo()
     click.echo("Next steps:")
-    click.echo(f"  1. Review configuration: {config_dir}/config/signalbox.yaml")
-    click.echo(f"  2. Add your tasks: {config_dir}/config/tasks/")
-    click.echo("     (example tasks are in config/catalog/; set include_catalog: true to load them)")
-    click.echo("  3. Run: signalbox list")
-    click.echo("SECURITY: Signalbox runs commands in a shell, with all your permissions.")
-    click.echo("   Use only YAML files that you trust. Refer to:")
-    click.echo("   https://github.com/pdbeard/signalbox/blob/main/documentation/SECURITY.md")
-    click.echo("   You can now use signalbox in all directories.")
+    click.echo("  1. Try the example task:   signalbox run hello")
+    click.echo("  2. See all tasks:          signalbox list")
+    click.echo(f"  3. Add your own tasks in:  {config_dir}/config/tasks/")
+    click.echo("     (more examples are in config/catalog/; set include_catalog: true to load them)")
+    click.echo(
+        "  4. Step-by-step tutorial:  https://github.com/pdbeard/signalbox/blob/main/documentation/QUICKSTART.md"
+    )
+    click.echo()
+    click.echo("Security: signalbox runs commands in a shell, with all your permissions.")
+    click.echo("Use only YAML files that you trust. Refer to:")
+    click.echo("  https://github.com/pdbeard/signalbox/blob/main/documentation/SECURITY.md")
 
 
-@click.command()
+@click.command(short_help="Scheduled groups: when they run, and when next.")
 def list_schedules():
-    """List all scheduled groups with their cron schedules."""
-    config = load_config()
-    groups = config.get("groups", [])
-    scheduled = [g for g in groups if isinstance(g, dict) and "schedule" in g]
+    """List the scheduled groups: when they run, and when they run next."""
+    from ..cli_output import print_schedule_list_table
+    from ..cron import describe, next_due_time
 
+    config = load_config()
+    scheduled = [g for g in config.get("groups", []) if isinstance(g, dict) and "schedule" in g]
     if not scheduled:
-        click.echo("No scheduled groups defined.")
+        click.echo(no_config_message(config) or "No scheduled groups defined.")
         return
 
-    from ..cli_output import print_schedule_list_table
-
+    now = datetime.now()
     schedule_rows = []
     for group in scheduled:
-        # Ensure all values are strings for rich table rendering
-        group_name = str(group.get("name", ""))
         schedule = str(exporters.get_schedule_string(group))
-        description = str(group.get("description", "N/A"))
-        tasks_list = group.get("tasks", [])
-        if isinstance(tasks_list, (list, tuple)):
-            tasks_str = ", ".join([str(t) for t in tasks_list])
-        else:
-            tasks_str = str(tasks_list)
-        task_count = str(len(tasks_list)) if isinstance(tasks_list, (list, tuple)) else "1"
+        upcoming = next_due_time(schedule, now)
+        tasks = group.get("tasks", [])
         schedule_rows.append(
             {
-                "group": group_name,
+                "group": str(group.get("name", "")),
+                "when": describe(schedule),
                 "schedule": schedule,
-                "description": description,
-                "task_count": task_count,
-                "tasks": tasks_str,
+                "next": f"{upcoming:%a %d %b %H:%M}" if upcoming else "",
+                "tasks": ", ".join(str(t) for t in tasks) if isinstance(tasks, list) else str(tasks),
             }
         )
     print_schedule_list_table(schedule_rows)
 
 
-@click.command()
+@click.command(short_help="Make systemd timer files for a scheduled group.")
 @click.argument("group_name")
 @click.option("--user", is_flag=True, help="Make a user unit (not a system unit)")
 def export_systemd(group_name, user):
@@ -143,7 +139,7 @@ def export_systemd(group_name, user):
         click.echo(instruction)
 
 
-@click.command()
+@click.command(short_help="Make (and --install) crontab lines for scheduled groups.")
 @click.argument("group_name", required=False)
 @click.option("--all", "export_all", is_flag=True, help="Every group that has a schedule")
 @click.option(
@@ -208,7 +204,7 @@ def export_cron(group_name, export_all, install):
             click.echo(result.cron_entry)
 
 
-@click.command()
+@click.command(short_help="Send a test desktop notification.")
 @click.option("--title", default="Signalbox Test", help="Notification title")
 @click.option("--message", default="This is a test notification from Signalbox", help="Notification message")
 @click.option(
@@ -238,7 +234,7 @@ def notify_test(title, message, urgency):
         sys.exit(1)
 
 
-@click.command()
+@click.command(short_help="Show the recent alerts.")
 @click.argument("task_name", required=False)
 @click.option("--severity", type=click.Choice(["info", "warning", "critical"]), help="Filter by severity")
 @click.option("--days", type=int, help="Show alerts from last N days")
@@ -279,20 +275,35 @@ def alerts_cmd(task_name, severity, days):
 
 # Monitoring-plugin convention (Nagios and similar): 0 OK, 1 warning, 2 critical
 STATUS_EXIT_CODES = {"green": 0, "yellow": 1, "red": 2}
-ROW_COLOURS = {"success": "green", "failed": "red", "partial": "red", "overdue": "yellow", "skipped": "bright_black"}
+ROW_COLOURS = {
+    "success": "green",
+    "failed": "red",
+    "partial": "red",
+    "alert": "red",
+    "overdue": "yellow",
+    "skipped": "bright_black",
+}
 
 
-@click.command()
+@click.command(short_help="Show whether everything ran and passed.")
 @handle_exceptions
 def status():
-    """Show what the tray shows: failures and overdue groups.
+    """Show whether everything ran and passed: each group and task, failures,
+    groups that did not run when due, and alerts from the latest runs.
 
-    Exits 0 when all is OK, 1 when a scheduled group is overdue and 2 when
-    something failed, so cron, systemd or a monitoring tool can check it on a
-    machine without a tray.
+    \b
+    Exit codes (for scripts and monitoring tools such as Nagios):
+      0  all OK
+      1  a scheduled group is overdue, or a task skipped too many runs
+      2  something failed, or raised a critical alert
+      3  no configuration (run: signalbox init)
     """
     from ..tray_status import read_status
 
+    missing = no_config_message(load_config(suppress_warnings=True))
+    if missing:
+        click.echo(missing)
+        sys.exit(3)
     result = read_status()
     click.echo(result["tooltip"])
     for title, kind in (("Groups", "groups"), ("Tasks", "tasks")):
@@ -300,10 +311,12 @@ def status():
             click.echo(f"\n{title}:")
         for icon, name, detail, row_status in result[kind]:
             click.echo(f"  {click.style(icon, fg=ROW_COLOURS.get(row_status))} {name}  {detail}")
+    if result["warnings"]:
+        click.echo(f"\nWarnings from the latest run of: {', '.join(result['warnings'])}. To see them: signalbox alerts")
     sys.exit(STATUS_EXIT_CODES[result["colour"]])
 
 
-@click.command(name="run-overdue")
+@click.command(name="run-overdue", short_help="Run the scheduled groups that missed their time.")
 @handle_exceptions
 def run_overdue():
     """Run each scheduled group that did not run when it was due.

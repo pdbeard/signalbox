@@ -9,29 +9,46 @@ from ..executor import run_task, find_task, last_log_name
 from ..runtime import load_runtime_state, merge_config_with_runtime_state
 from .. import log_manager
 from ..exceptions import ValidationError, TaskSkipped
-from ..helpers import display_time
+from ..helpers import parse_timestamp
 from ..validator import validate_task_for_run
-from .utils import handle_exceptions, print_run_output_preview
+from .utils import handle_exceptions, print_run_output_preview, no_config_message
 
 
 @click.group()
 def task():
-    """
-    Manage and run tasks.
+    """Run tasks and list them.
 
     \b
-    Commands:
-      run [NAME|--all]   Run a single task or all tasks
-      list               List all configured tasks with status
+    Examples:
+      signalbox task run backup     run one task (same as: signalbox run backup)
+      signalbox task run --all      run every task
+      signalbox task list           each task, its status and last run
     """
     pass
+
+
+def _ago(last_run):
+    """When a task last ran, the same way as `signalbox status` and the tray ('5 min ago')."""
+    from datetime import datetime
+
+    from ..tray_status import ago
+
+    when = parse_timestamp(str(last_run)) if last_run else None
+    return ago(when, datetime.now()) if when else ""
 
 
 @task.command(name="list")
 @handle_exceptions
 def task_list():
-    """List all tasks and their status, grouped by config file."""
+    """List all tasks: their status, when they last ran, and the file they are in."""
     config = load_config()
+    missing = no_config_message(config)
+    if missing:
+        click.echo(missing)
+        return
+    if not config["tasks"]:
+        click.echo("No tasks defined. Add them in config/tasks/ (see: signalbox config path).")
+        return
     runtime_state = load_runtime_state()
     config = merge_config_with_runtime_state(config, runtime_state)
 
@@ -53,13 +70,13 @@ def task_list():
         for task_item in tasks:
             try:
                 name = task_item.get("name", "")
-                status = task_item.get("last_status", "not run")
+                status = task_item.get("last_status", "never run")
                 description = task_item.get("description", "")
                 all_rows.append(
                     {
                         "name": name,
                         "status": status,
-                        "last_run": display_time(task_item.get("last_run", "")),
+                        "last_run": _ago(task_item.get("last_run", "")),
                         "description": description,
                         "source": file_name,
                     }

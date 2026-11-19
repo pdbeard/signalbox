@@ -116,10 +116,10 @@ def merge_config_with_runtime_state(config, runtime_state):
         if task_name in runtime_state["tasks"]:
             runtime_info = runtime_state["tasks"][task_name]
             task["last_run"] = runtime_info.get("last_run", "")
-            task["last_status"] = runtime_info.get("last_status", "no logs")
+            task["last_status"] = runtime_info.get("last_status", "never run")
         else:
             task["last_run"] = ""
-            task["last_status"] = "no logs"
+            task["last_status"] = "never run"
     return config
 
 

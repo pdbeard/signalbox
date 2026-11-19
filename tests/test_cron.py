@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from signalbox.cron import last_due_time, schedule_error
+from signalbox.cron import describe, last_due_time, next_due_time, schedule_error
 
 NOW = datetime(2026, 11, 2, 10, 7)  # a Monday
 
@@ -49,3 +49,39 @@ def test_last_due_time(schedule, expected):
 def test_schedule_error(schedule, error):
     result = schedule_error(schedule)
     assert result is None if error is None else error in result
+
+
+@pytest.mark.parametrize(
+    "schedule, expected",
+    [
+        ("*/15 * * * *", datetime(2026, 11, 2, 10, 15)),
+        ("0 * * * *", datetime(2026, 11, 2, 11, 0)),
+        ("0 2 * * *", datetime(2026, 11, 3, 2, 0)),
+        ("0 12 * * 1", datetime(2026, 11, 2, 12, 0)),  # today, Monday
+        ("0 9 * * 0", datetime(2026, 11, 8, 9, 0)),  # next Sunday
+        ("@reboot", None),
+    ],
+)
+def test_next_due_time(schedule, expected):
+    assert next_due_time(schedule, NOW) == expected
+
+
+@pytest.mark.parametrize(
+    "schedule, words",
+    [
+        ("* * * * *", "every minute"),
+        ("*/10 * * * *", "every 10 minutes"),
+        ("0 * * * *", "every hour"),
+        ("@hourly", "every hour"),
+        ("30 * * * *", "every hour at :30"),
+        ("0 2 * * *", "daily at 02:00"),
+        ("@daily", "daily at 00:00"),
+        ("0 12 * * 1", "Mondays at 12:00"),
+        ("0 9 * * 1-5", "weekdays at 09:00"),
+        ("0 4 1 * *", "monthly on day 1 at 04:00"),
+        ("0 9-17 * * 1-5", "0 9-17 * * 1-5"),  # not a common form: shown as written
+        ("@reboot", "at startup"),
+    ],
+)
+def test_describe(schedule, words):
+    assert describe(schedule) == words

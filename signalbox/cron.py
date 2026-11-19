@@ -92,28 +92,40 @@ def schedule_error(schedule):
     return None
 
 
-def last_due_time(schedule, at):
-    """The latest time at or before `at` when cron would start this schedule, or None.
-
-    None also means "no expectation": @reboot, or a schedule that schedule_error rejects.
-    """
+def _matcher(schedule):
+    """(minutes, hours, day_matches(date)) for a schedule, or None for @reboot or an invalid schedule."""
     if schedule_error(schedule) or schedule.strip() == "@reboot":
         return None
     minutes, hours, days, months, weekdays = parse(schedule)
-    minutes, hours = sorted(minutes, reverse=True), sorted(hours, reverse=True)
     day, weekday = MACROS.get(schedule.strip(), schedule).split()[2::2]
 
     def day_matches(date):
+        if date.month not in months:
+            return False
         cron_weekday = (date.weekday() + 1) % 7  # Python: Monday=0; cron: Sunday=0
         # cron runs when EITHER day field matches, unless one starts with '*' (as in '*/2'): then BOTH must
         if not day.startswith("*") and not weekday.startswith("*"):
             return date.day in days or cron_weekday in weekdays
         return date.day in days and cron_weekday in weekdays
 
+    return minutes, hours, day_matches
+
+
+def last_due_time(schedule, at):
+    """The latest time at or before `at` when cron would start this schedule, or None.
+
+    None also means "no expectation": @reboot, or a schedule that schedule_error rejects.
+    """
+    matcher = _matcher(schedule)
+    if matcher is None:
+        return None
+    minutes, hours, day_matches = matcher
+    minutes, hours = sorted(minutes, reverse=True), sorted(hours, reverse=True)
+
     at = at.replace(second=0, microsecond=0)
     for back in range(SEARCH_DAYS + 1):
         date = at.date() - timedelta(days=back)
-        if date.month not in months or not day_matches(date):
+        if not day_matches(date):
             continue
         for h in hours:
             for m in minutes:
@@ -121,3 +133,57 @@ def last_due_time(schedule, at):
                 if due <= at:
                     return due
     return None
+
+
+def next_due_time(schedule, after):
+    """The first time after `after` when cron would start this schedule, or None (@reboot, invalid)."""
+    matcher = _matcher(schedule)
+    if matcher is None:
+        return None
+    minutes, hours, day_matches = matcher
+    minutes, hours = sorted(minutes), sorted(hours)
+
+    after = after.replace(second=0, microsecond=0)
+    for ahead in range(SEARCH_DAYS + 1):
+        date = after.date() + timedelta(days=ahead)
+        if not day_matches(date):
+            continue
+        for h in hours:
+            for m in minutes:
+                due = datetime.combine(date, time(h, m))
+                if due > after:
+                    return due
+    return None
+
+
+_WEEKDAY_WORDS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"]
+
+
+def describe(schedule):
+    """A schedule in plain words for the common forms ("every hour", "daily at 02:00"); else the schedule itself."""
+    if not isinstance(schedule, str) or schedule_error(schedule):
+        return str(schedule)
+    if schedule.strip() == "@reboot":
+        return "at startup"
+    fields = MACROS.get(schedule.strip(), schedule).split()
+    minute, hour, day, month, weekday = fields
+    if fields == ["*"] * 5:
+        return "every minute"
+    if minute.startswith("*/") and minute[2:].isdigit() and fields[1:] == ["*"] * 4:
+        return f"every {minute[2:]} minutes"
+    if not minute.isdigit() or month != "*":
+        return schedule
+    if hour == "*" and day == "*" and weekday == "*":
+        return "every hour" if minute == "0" else f"every hour at :{int(minute):02d}"
+    if not hour.isdigit():
+        return schedule
+    at = f"{int(hour):02d}:{int(minute):02d}"
+    if day == "*" and weekday == "*":
+        return f"daily at {at}"
+    if day == "*" and weekday.isdigit() and int(weekday) <= 7:
+        return f"{_WEEKDAY_WORDS[int(weekday) % 7]} at {at}"
+    if day == "*" and weekday == "1-5":
+        return f"weekdays at {at}"
+    if weekday == "*" and day.isdigit():
+        return f"monthly on day {int(day)} at {at}"
+    return schedule

@@ -37,6 +37,7 @@ from .helpers import (
     SECRET_NAME_PATTERN,
     on_this_platform,
     current_platform,
+    did_you_mean,
 )
 from .validator import validate_task_for_run, validate_run_settings
 
@@ -204,6 +205,10 @@ def prepare_run(task):
     return {"command": task["command"], "cwd": cwd, "env": env, "secrets": secrets}
 
 
+def _names(config, kind):
+    return [e.get("name") for e in config.get(kind, []) if isinstance(e, dict)]
+
+
 def find_task(name, config):
     """Find a task in the config by name.
 
@@ -212,7 +217,7 @@ def find_task(name, config):
     """
     task = find_entry(config, "tasks", name)
     if not task:
-        raise TaskNotFoundError(name)
+        raise TaskNotFoundError(name, did_you_mean(name, _names(config, "tasks")))
     return task
 
 
@@ -418,7 +423,7 @@ def _post_execution(name, task, result, log_file, timestamp, config, run):
     )
 
     status = "success" if result.returncode == 0 else "failed"
-    click.echo(f"Task {name} {status}. Log: {log_file}")
+    click.echo(f"Task {name} {'succeeded' if status == 'success' else 'failed'}. Log: {log_file}")
 
     task_source_file = config["_task_sources"].get(name)
     if task_source_file:

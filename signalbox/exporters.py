@@ -544,15 +544,13 @@ def get_cron_install_instructions(cron_file, cron_entry, group):
     Returns:
             list: List of instruction strings
     """
+    name = group.get("name", "GROUP")
     return [
         "Crontab entry:",
         f"# {_unit_description(group, '')}",
         cron_entry,
         "",
-        "To install:",
-        "  crontab -e",
-        "Then add the line above to your crontab, or:",
-        "  crontab -l > /tmp/mycron",
-        f"  cat {cron_file} >> /tmp/mycron",
-        "  crontab /tmp/mycron",
+        "To install it (signalbox saves a backup of your crontab first):",
+        f"  signalbox export-cron {name} --install",
+        "Or add the line above yourself with: crontab -e",
     ]

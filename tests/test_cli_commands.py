@@ -38,7 +38,7 @@ def sample_config():
                 "command": "echo another",
                 "description": "Another task",
                 "last_run": "",
-                "last_status": "no logs",
+                "last_status": "never run",
             },
         ],
         "groups": [
@@ -173,7 +173,7 @@ class TestListCommand:
         assert "test_task" in result.output
         assert "another_task" in result.output
         assert "success" in result.output
-        assert "no logs" in result.output
+        assert "never run" in result.output
 
     @patch("signalbox.commands.task.load_config")
     @patch("signalbox.commands.task.load_runtime_state")
@@ -443,13 +443,22 @@ class TestListGroupsCommand:
 
     @patch("signalbox.commands.group.load_config")
     def test_list_groups_handles_no_groups(self, mock_load, runner):
-        """Test group list handles no groups defined."""
-        mock_load.return_value = {"tasks": [], "groups": []}
+        """Test group list handles no groups defined (with a configuration present)."""
+        mock_load.return_value = {"tasks": [{"name": "t"}], "groups": []}
 
         result = runner.invoke(cli, ["group", "list"])
 
         assert result.exit_code == 0
         assert "No groups defined" in result.output
+
+    @patch("signalbox.commands.group.load_config")
+    def test_list_groups_without_configuration_points_to_init(self, mock_load, runner):
+        mock_load.return_value = {"tasks": [], "groups": []}
+
+        result = runner.invoke(cli, ["group", "list"])
+
+        assert result.exit_code == 0
+        assert "No configuration found" in result.output and "signalbox init" in result.output
 
     @patch("signalbox.commands.group.load_config")
     def test_list_groups_shows_scheduled_info(self, mock_load, runner, sample_config):
@@ -460,7 +469,7 @@ class TestListGroupsCommand:
         result = runner.invoke(cli, ["group", "list"])
 
         assert result.exit_code == 0
-        assert "0 2 * * *" in result.output
+        assert "daily at 02:00" in result.output
 
 
 class TestShowConfigCommand:

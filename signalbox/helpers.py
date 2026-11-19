@@ -27,6 +27,25 @@ def yaml_files(directory):
     return [f for f in sorted(os.listdir(directory)) if not f.startswith(".") and f.endswith((".yaml", ".yml"))]
 
 
+# Plain advice for the YAML errors that people make most often
+_YAML_HINTS = (
+    ("mapping values are not allowed", "put the value in quotes when it contains ': ' (a command often does)"),
+    ("found character '\\t'", "indent with spaces, not tabs"),
+    ("could not find expected ':'", "check that each key ends with ':' and the indentation is the same"),
+    ("expected <block end>", "check the indentation of this line and of the line before it"),
+    ("found unexpected end of stream", "a quote or bracket is not closed"),
+)
+
+
+def yaml_error_text(error):
+    """The YAML error message, with a plain tip for the common mistakes."""
+    text = str(error)
+    for clue, tip in _YAML_HINTS:
+        if clue in text:
+            return f"{text}\nTip: {tip}."
+    return text
+
+
 def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool = False, errors=None) -> list:
     """
     Load the `key` entries from every YAML file in a directory, in filename order.
@@ -52,7 +71,7 @@ def load_yaml_files_from_dir(directory: str, key: str, suppress_warnings: bool =
             if errors is not None:
                 errors[filepath] = str(e)
             if not suppress_warnings:
-                click.echo(f"Warning: Cannot load {filepath}: {e}", err=True)
+                click.echo(f"Warning: Cannot load {filepath}: {yaml_error_text(e)}", err=True)
 
     return items
 
@@ -164,6 +183,15 @@ def check_name(name, kind="task"):
     if not is_valid_name(name):
         raise ConfigurationError(f"Invalid {kind} name {name!r}: {NAME_RULE}")
     return name
+
+
+def did_you_mean(name, candidates):
+    """' Did you mean 'x'?' for the closest name in candidates, or '' if none is close."""
+    import difflib
+
+    names = [c for c in candidates if isinstance(c, str)]
+    close = difflib.get_close_matches(str(name), names, n=1, cutoff=0.6)
+    return f" Did you mean '{close[0]}'?" if close else ""
 
 
 # A valid environment variable name (POSIX shells accept only these)

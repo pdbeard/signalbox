@@ -71,7 +71,7 @@ def test_never_run_is_shown_but_not_counted():
     result = status(tasks=["a"], groups=[group])
     assert result["colour"] == "green"
     assert result["tooltip"] == "signalbox: nothing has run yet"
-    assert result["groups"][0][2] == "never run"
+    assert result["groups"][0][2] == "never run, next 10:15"  # a scheduled group also says when it runs next
 
 
 def test_failure_beats_overdue_and_tooltip_names_both():

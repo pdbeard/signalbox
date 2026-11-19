@@ -26,16 +26,16 @@ class ConfigurationError(SignalboxError):
 class TaskNotFoundError(SignalboxError):
     """Raised when a task is not found in configuration."""
 
-    def __init__(self, task_name):
-        message = f"Task '{task_name}' not found"
+    def __init__(self, task_name, hint=""):
+        message = f"Task '{task_name}' not found.{hint}" if hint else f"Task '{task_name}' not found"
         super().__init__(message, exit_code=3)
 
 
 class GroupNotFoundError(SignalboxError):
     """Raised when a group is not found in configuration."""
 
-    def __init__(self, group_name):
-        message = f"Group '{group_name}' not found"
+    def __init__(self, group_name, hint=""):
+        message = f"Group '{group_name}' not found.{hint}" if hint else f"Group '{group_name}' not found"
         super().__init__(message, exit_code=3)
 
 

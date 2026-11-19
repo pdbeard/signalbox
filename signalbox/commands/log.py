@@ -16,16 +16,14 @@ from .utils import handle_exceptions
 
 @click.group()
 def log():
-    """
-    View and manage execution logs.
+    """See the log of each run, and delete old logs.
 
     \b
-    Commands:
-      list [OPTIONS]     Show the logs of all tasks, with filters
-      show TASK          Show the latest log for a task
-      tail TASK          Show the latest log, then the log of each new run
-      history TASK       Show all the logs of a task
-      clear [OPTIONS]    Clear logs for tasks
+    Examples:
+      signalbox log show backup        output of the latest run
+      signalbox log list --failed      the latest failed runs of all tasks
+      signalbox log history backup     every run of one task
+      signalbox log tail backup        follow new runs as they happen
     """
     pass
 
@@ -64,27 +62,11 @@ def log_show(name):
 @log.command(name="history")
 @click.argument("name")
 @handle_exceptions
-def log_history_cmd(name):
-    """Show all the log files of a task."""
-    config = load_config()
-    find_task(name, config)
-
-    log_info, exists = log_manager.get_log_history(name)
-    if not exists:
-        click.echo("No history found")
-        return
-
-    # Use display settings from global config
-    include_paths = get_config_value("display.include_paths", False)
-    date_format = get_config_value("display.date_format", "%Y-%m-%d %H:%M:%S")
-
-    task_log_dir = log_manager.get_task_log_dir(name)
-    path_info = f" ({task_log_dir})" if include_paths else ""
-    click.echo(f"Log history for {name}{path_info}:")
-
-    for filename, mtime in log_info:
-        time_str = datetime.fromtimestamp(mtime).strftime(date_format)
-        click.echo(f"  {filename} - {time_str}")
+@click.pass_context
+def log_history_cmd(ctx, name):
+    """Show every run of a task: time, status and output preview (newest first)."""
+    find_task(name, load_config())
+    ctx.invoke(log_list_cmd, task=name, limit=None)
 
 
 @log.command(name="list")
@@ -178,7 +160,7 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
                         "task": log_entry["task"],
                         "status": log_entry["metadata"]["status"],
                         "timestamp": log_entry["timestamp"].strftime(date_format),
-                        "preview": log_entry["metadata"].get("stdout_preview", ""),
+                        "preview": log_entry["metadata"].get("preview", ""),
                     }
                 )
             except Exception as e:
@@ -188,7 +170,7 @@ def log_list_cmd(task, status, failed, success, since, until, today, limit, verb
     click.echo(f"Total: {len(filtered_logs)} log(s)")
 
 
-@log.command(name="tail")
+@log.command(name="tail", short_help="Follow the log of a task, also its new runs.")
 @click.argument("name")
 @click.option("-f/-F", "--follow/--no-follow", default=True, help="Keep following new runs (default: follow)")
 @click.option(
@@ -243,7 +225,7 @@ def log_tail_cmd(name, follow, lines):
         click.echo("\nStopped following log")
 
 
-@log.command(name="clear")
+@log.command(name="clear", short_help="Delete the logs of one task (--task) or all (--all).")
 @click.option("--task", "task_name", help="Clear logs for specific task")
 @click.option("--all", "clear_all", is_flag=True, help="Clear all logs for all tasks")
 @click.option("--yes", "-y", is_flag=True, help="Do not ask for confirmation")
